@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "caddy-supabase": {
+      "command": "node",
+      "args": ["mcp/supabase-server.js"],
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+} 
