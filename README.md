@@ -36,8 +36,8 @@ Une application web moderne pour la gestion intelligente des équipes et du plan
 
 ### 1. Cloner le projet
 ```bash
-git clone https://github.com/votre-username/application-caddy.git
-cd application-caddy
+git clone https://github.com/MaximeAzevedo/StemmCaddy.git
+cd StemmCaddy
 ```
 
 ### 2. Installer les dépendances
