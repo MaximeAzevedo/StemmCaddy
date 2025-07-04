@@ -27,6 +27,8 @@
     "eject": "react-scripts eject",
     "setup": "node scripts/quick-setup.js",
     "setup-db": "node scripts/setup-database.js",
+    "setup-cuisine": "node scripts/setup-cuisine.js",
+    "test-cuisine": "node scripts/test-cuisine-connection.js",
     "supabase": "node scripts/open-supabase.js",
     "auto": "node scripts/full-auto-setup.js",
     "mcp:start": "node mcp/supabase-server.js",

@@ -221,6 +221,6 @@ CREATE INDEX IF NOT EXISTS idx_planning_date ON planning(date);
 CREATE INDEX IF NOT EXISTS idx_planning_employee ON planning(employee_id);
 CREATE INDEX IF NOT EXISTS idx_planning_vehicle ON planning(vehicle_id);
 CREATE INDEX IF NOT EXISTS idx_competences_employee ON competences(employee_id);
-CREATE INDEX IF NOT EXISTS idx_competences_vehicle ON competences(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_competences_vehicle ON competences(vehicle_id); 
 CREATE INDEX IF NOT EXISTS idx_absences_employee ON absences(employee_id);
 CREATE INDEX IF NOT EXISTS idx_absences_dates ON absences(date_debut, date_fin); 

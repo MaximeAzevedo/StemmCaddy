@@ -7,7 +7,8 @@ import {
   TrendingUp, 
   UserMinus,
   Clock,
-  LogOut
+  LogOut,
+  ChefHatIcon
 } from 'lucide-react';
 
 const Dashboard = ({ user, onLogout }) => {
@@ -40,6 +41,13 @@ const Dashboard = ({ user, onLogout }) => {
       icon: UserMinus,
       color: 'from-red-500 to-red-600',
       path: '/absences'
+    },
+    {
+      title: 'Module Cuisine',
+      description: 'Gérer les équipes et planning cuisine',
+      icon: ChefHatIcon,
+      color: 'from-orange-500 to-red-600',
+      path: '/cuisine'
     }
   ];
 

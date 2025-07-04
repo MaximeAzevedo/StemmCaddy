@@ -3,10 +3,14 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import HomeLanding from './components/HomeLanding';
 import EmployeeManagement from './components/EmployeeManagement';
 import PlanningView from './components/PlanningView';
 import AIAssistant from './components/AIAssistant';
 import AbsenceManagement from './components/AbsenceManagement';
+import CuisineManagement from './components/CuisineManagement';
+import CuisinePlanningDisplay from './components/CuisinePlanningDisplay';
+import MainHeader from './components/MainHeader';
 import './index.css';
 
 function App() {
@@ -43,6 +47,7 @@ function App() {
   return (
     <div className="App tv-scale">
       <Router>
+        <MainHeader />
         <Routes>
           <Route 
             path="/login" 
@@ -52,13 +57,11 @@ function App() {
           />
           <Route 
             path="/" 
-            element={
-              user ? (
-                <Dashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
-            } 
+            element={user ? <HomeLanding /> : <Navigate to="/login" />}
+          />
+          <Route 
+            path="/logistique"
+            element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
           <Route 
             path="/employees" 
@@ -90,6 +93,17 @@ function App() {
               )
             } 
           />
+          <Route 
+            path="/cuisine" 
+            element={
+              user ? (
+                <CuisineManagement user={user} onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+          <Route path="/cuisine/tv" element={<CuisinePlanningDisplay tvMode={true} />} />
         </Routes>
         
         {/* Assistant IA flottant disponible partout */}
