@@ -1,28 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Calendar, 
   Plus, 
   Search, 
-  User,
-  CheckCircle,
-  XCircle,
+  ArrowLeft,
   Edit,
   Trash2,
+  AlertCircle,
+  CheckCircle,
+  Clock,
   Home,
-  AlertTriangle,
-  RefreshCw
+  ChefHat
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { supabaseAPI } from '../lib/supabase';
+import { supabaseCuisine } from '../lib/supabase-cuisine';
 
-const AbsenceManagement = ({ user, onLogout }) => {
+const AbsenceManagementCuisine = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const [absences, setAbsences] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [employeesCuisine, setEmployeesCuisine] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -43,59 +42,59 @@ const AbsenceManagement = ({ user, onLogout }) => {
       setLoading(true);
       setDataError(null);
       
-      // Charger employés et absences en parallèle avec les bonnes fonctions API
+      // Charger employés cuisine et absences en parallèle
       const [employeesResult, absencesResult] = await Promise.all([
-        supabaseAPI.getEmployees(),
-        supabaseAPI.getAbsences()
+        supabaseCuisine.getEmployeesCuisine(),
+        supabaseCuisine.getAbsencesCuisine()
       ]);
 
       // Vérifier les erreurs spécifiques
       if (employeesResult.error) {
-        console.error('Erreur employés:', employeesResult.error);
-        throw new Error(`Erreur lors du chargement des employés: ${employeesResult.error.message}`);
+        console.error('Erreur employés cuisine:', employeesResult.error);
+        throw new Error(`Erreur lors du chargement des employés cuisine: ${employeesResult.error.message}`);
       }
       
       if (absencesResult.error) {
-        // Si la table absences n'existe pas, c'est un cas spécial
+        // Si la table absences_cuisine n'existe pas, c'est un cas spécial
         if (absencesResult.error.code === '42P01') {
-          setDataError('La table des absences n\'existe pas encore. Veuillez exécuter le schéma SQL dans Supabase.');
-          console.warn('Table absences non trouvée - utilisation données de démo');
+          setDataError('La table des absences cuisine n\'existe pas encore. Veuillez exécuter le schéma SQL dans Supabase.');
+          console.warn('Table absences_cuisine non trouvée - utilisation données de démo');
           setAbsences([]);
         } else {
-          console.error('Erreur absences:', absencesResult.error);
+          console.error('Erreur absences cuisine:', absencesResult.error);
           throw new Error(`Erreur lors du chargement des absences: ${absencesResult.error.message}`);
         }
       } else {
         setAbsences(absencesResult.data || []);
       }
 
-      setEmployees(employeesResult.data || []);
+      // Extraire les employés de la structure employeesCuisine
+      const employees = (employeesResult.data || []).map(ec => ec.employee);
+      setEmployeesCuisine(employees);
       
       // Log pour debug
-      console.log('Employés chargés:', employeesResult.data?.length || 0);
-      console.log('Absences chargées:', absencesResult.data?.length || 0);
+      console.log('Employés cuisine chargés:', employees.length);
+      console.log('Absences cuisine chargées:', absencesResult.data?.length || 0);
 
     } catch (error) {
-      console.error('Erreur chargement données:', error);
+      console.error('Erreur chargement données cuisine:', error);
       setDataError(error.message);
       toast.error(`Erreur: ${error.message}`);
       
       // Données de démonstration en cas d'erreur
-      setEmployees([
-        { id: 1, nom: 'Martial', profil: 'Fort' },
-        { id: 2, nom: 'Margot', profil: 'Moyen' },
-        { id: 3, nom: 'Shadi', profil: 'Fort' },
-        { id: 4, nom: 'Ahmad', profil: 'Moyen' },
-        { id: 5, nom: 'Tamara', profil: 'Faible' },
-        { id: 6, nom: 'Anouar', profil: 'Moyen' },
-        { id: 7, nom: 'Fatima', profil: 'Fort' }
+      setEmployeesCuisine([
+        { id: 1, nom: 'Jean', prenom: 'Cuisinier', profil: 'Fort' },
+        { id: 2, nom: 'Marie', prenom: 'Pâtissière', profil: 'Moyen' },
+        { id: 3, nom: 'Pierre', prenom: 'Aide', profil: 'Faible' },
+        { id: 4, nom: 'Sophie', prenom: 'Chef', profil: 'Fort' },
+        { id: 5, nom: 'Paul', prenom: 'Plongeur', profil: 'Moyen' }
       ]);
       
       setAbsences([
         {
           id: 1,
           employee_id: 3,
-          employee_nom: 'Shadi',
+          employee_nom: 'Pierre',
           date_debut: format(new Date(), 'yyyy-MM-dd'),
           date_fin: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
           motif: 'Maladie',
@@ -140,13 +139,13 @@ const AbsenceManagement = ({ user, onLogout }) => {
       let result;
       
       if (selectedAbsence) {
-        // Modification via l'API
-        result = await supabaseAPI.updateAbsence(selectedAbsence.id, absenceData);
+        // Modification via l'API cuisine
+        result = await supabaseCuisine.updateAbsenceCuisine(selectedAbsence.id, absenceData);
         if (result.error) throw result.error;
         toast.success('Absence modifiée avec succès');
       } else {
-        // Création via l'API
-        result = await supabaseAPI.createAbsence(absenceData);
+        // Création via l'API cuisine
+        result = await supabaseCuisine.createAbsenceCuisine(absenceData);
         if (result.error) throw result.error;
         toast.success('Absence ajoutée avec succès');
       }
@@ -160,7 +159,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
       
       // Messages d'erreur spécifiques
       if (error.code === '42P01') {
-        toast.error('La table des absences n\'existe pas. Veuillez configurer la base de données.');
+        toast.error('La table des absences cuisine n\'existe pas. Veuillez configurer la base de données.');
         setDataError('Base de données non configurée');
       } else if (error.code === '23503') {
         toast.error('Employé invalide sélectionné');
@@ -176,7 +175,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette absence ?')) return;
     
     try {
-      const result = await supabaseAPI.deleteAbsence(id);
+      const result = await supabaseCuisine.deleteAbsenceCuisine(id);
       if (result.error) throw result.error;
       
       toast.success('Absence supprimée avec succès');
@@ -222,7 +221,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
 
   const filteredAbsences = absences.filter(absence => {
     const employeeName = absence.employee_nom || 
-                        employees.find(e => e.id === absence.employee_id)?.nom || 
+                        employeesCuisine.find(e => e.id === absence.employee_id)?.nom || 
                         'Inconnu';
     const matchesSearch = employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (absence.motif || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -232,7 +231,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
   const getEmployeesWithAbsences = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i));
     
-    return employees.map(employee => {
+    return employeesCuisine.map(employee => {
       const employeeAbsences = absences.filter(absence => 
         absence.employee_id === employee.id &&
         weekDays.some(day => 
@@ -262,16 +261,16 @@ const AbsenceManagement = ({ user, onLogout }) => {
   };
 
   const getEmployeeNameById = (id) => {
-    const employee = employees.find(e => e.id === id);
-    return employee ? employee.nom : 'Employé inconnu';
+    const employee = employeesCuisine.find(e => e.id === id);
+    return employee ? `${employee.nom} ${employee.prenom || ''}`.trim() : 'Employé inconnu';
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des absences...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement des absences cuisine...</p>
         </div>
       </div>
     );
@@ -285,14 +284,14 @@ const AbsenceManagement = ({ user, onLogout }) => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <button
-                onClick={() => navigate('/logistique')}
+                onClick={() => navigate('/cuisine')}
                 className="mr-4 p-2 hover:bg-gray-100 rounded-lg"
-                title="Retour au module logistique"
+                title="Retour au module cuisine"
               >
-                <Home className="w-5 h-5" />
+                <ArrowLeft className="w-5 h-5" />
               </button>
-              <Calendar className="w-8 h-8 text-primary-600 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Absences - Logistique</h1>
+              <ChefHat className="w-8 h-8 text-orange-600 mr-3" />
+              <h1 className="text-2xl font-bold text-gray-900">Gestion des Absences - Cuisine</h1>
             </div>
             <div className="flex items-center space-x-4">
               <button
@@ -300,9 +299,9 @@ const AbsenceManagement = ({ user, onLogout }) => {
                 className="p-2 text-gray-600 hover:text-gray-900 rounded-lg"
                 title="Actualiser"
               >
-                <RefreshCw className="w-5 h-5" />
+                <Home className="w-5 h-5" />
               </button>
-              <span className="text-gray-600">{user.name}</span>
+              <span className="text-gray-600">{user.email}</span>
               <button
                 onClick={onLogout}
                 className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 transition-colors"
@@ -320,13 +319,13 @@ const AbsenceManagement = ({ user, onLogout }) => {
         {dataError && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center">
-              <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
               <div>
                 <h3 className="font-medium text-red-900">Problème de configuration</h3>
                 <p className="text-red-700 text-sm mt-1">{dataError}</p>
                 {dataError.includes('table') && (
                   <p className="text-red-600 text-sm mt-2">
-                    💡 Solution : Exécutez le fichier <code>database/schema-absences.sql</code> dans votre Supabase SQL Editor.
+                    💡 Solution : Créez la table <code>absences_cuisine</code> dans votre Supabase SQL Editor.
                   </p>
                 )}
               </div>
@@ -344,7 +343,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                 placeholder="Rechercher par employé ou motif..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -352,8 +351,8 @@ const AbsenceManagement = ({ user, onLogout }) => {
           <div className="flex space-x-4">
             <button
               onClick={() => openModal()}
-              className="btn-primary flex items-center"
-              disabled={employees.length === 0}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg flex items-center"
+              disabled={employeesCuisine.length === 0}
             >
               <Plus className="w-5 h-5 mr-2" />
               Nouvelle absence
@@ -362,7 +361,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
         </div>
 
         {/* Vue calendrier hebdomadaire */}
-        <div className="card-premium p-6 mb-8">
+        <div className="bg-white shadow-lg rounded-xl p-6 mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-900">
               Vue hebdomadaire - Semaine du {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
@@ -387,7 +386,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="text-left p-2 font-medium text-gray-700">Employé</th>
+                  <th className="text-left p-2 font-medium text-gray-700">Employé Cuisine</th>
                   {Array.from({ length: 7 }, (_, i) => {
                     const day = addDays(currentWeek, i);
                     return (
@@ -402,12 +401,20 @@ const AbsenceManagement = ({ user, onLogout }) => {
               <tbody>
                 {getEmployeesWithAbsences().map(employee => (
                   <tr key={employee.id} className="border-t border-gray-200">
-                    <td className="p-2 font-medium">{employee.nom}</td>
+                    <td className="p-2 font-medium">
+                      <div className="flex items-center space-x-2">
+                        <ChefHat className="w-4 h-4 text-orange-600" />
+                        <span>{employee.nom} {employee.prenom}</span>
+                        <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800">
+                          {employee.profil}
+                        </span>
+                      </div>
+                    </td>
                     {employee.daysAbsent.map((day, i) => (
                       <td key={i} className="p-2 text-center">
                         {day.absent ? (
                           <div className="w-8 h-8 mx-auto rounded-full bg-red-100 flex items-center justify-center border border-red-200">
-                            <XCircle className="w-4 h-4 text-red-600" />
+                            <Clock className="w-4 h-4 text-red-600" />
                           </div>
                         ) : (
                           <div className="w-8 h-8 mx-auto rounded-full bg-green-100 flex items-center justify-center">
@@ -421,10 +428,10 @@ const AbsenceManagement = ({ user, onLogout }) => {
               </tbody>
             </table>
             
-            {employees.length === 0 && (
+            {employeesCuisine.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>Aucun employé trouvé</p>
+                <ChefHat className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>Aucun employé cuisine trouvé</p>
               </div>
             )}
           </div>
@@ -432,19 +439,19 @@ const AbsenceManagement = ({ user, onLogout }) => {
 
         {/* Stats rapides */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="card-premium p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{employees.length}</div>
-            <div className="text-sm text-gray-600">Employés total</div>
+          <div className="bg-white shadow-lg rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-orange-600">{employeesCuisine.length}</div>
+            <div className="text-sm text-gray-600">Employés cuisine</div>
           </div>
-          <div className="card-premium p-4 text-center">
+          <div className="bg-white shadow-lg rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-green-600">
-              {employees.length - filteredAbsences.filter(a => 
+              {employeesCuisine.length - filteredAbsences.filter(a => 
                 new Date() >= parseISO(a.date_debut) && new Date() <= parseISO(a.date_fin)
               ).length}
             </div>
             <div className="text-sm text-gray-600">Disponibles aujourd'hui</div>
           </div>
-          <div className="card-premium p-4 text-center">
+          <div className="bg-white shadow-lg rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-red-600">
               {filteredAbsences.filter(a => 
                 new Date() >= parseISO(a.date_debut) && new Date() <= parseISO(a.date_fin)
@@ -455,8 +462,8 @@ const AbsenceManagement = ({ user, onLogout }) => {
         </div>
 
         {/* Liste des absences */}
-        <div className="card-premium p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Liste des Absences</h2>
+        <div className="bg-white shadow-lg rounded-xl p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">Liste des Absences Cuisine</h2>
           
           <div className="space-y-4">
             {filteredAbsences.map(absence => (
@@ -468,8 +475,8 @@ const AbsenceManagement = ({ user, onLogout }) => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-red-100 to-red-200 rounded-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-red-600" />
+                    <div className="w-12 h-12 bg-gradient-to-r from-orange-100 to-red-200 rounded-full flex items-center justify-center">
+                      <ChefHat className="w-6 h-6 text-orange-600" />
                     </div>
                     
                     <div>
@@ -486,7 +493,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                       </div>
                     </div>
                     
-                    <div className="px-3 py-1 rounded-full text-sm font-medium border bg-red-100 text-red-800 border-red-200">
+                    <div className="px-3 py-1 rounded-full text-sm font-medium border bg-orange-100 text-orange-800 border-orange-200">
                       {absence.type_absence || 'Absent'}
                     </div>
                   </div>
@@ -494,7 +501,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => openModal(absence)}
-                      className="p-2 text-gray-400 hover:text-primary-600"
+                      className="p-2 text-gray-400 hover:text-orange-600"
                       title="Modifier"
                     >
                       <Edit className="w-4 h-4" />
@@ -528,7 +535,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* Modal formulaire amélioré */}
+      {/* Modal formulaire */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -544,22 +551,22 @@ const AbsenceManagement = ({ user, onLogout }) => {
               className="bg-white rounded-2xl p-6 w-full max-w-md"
             >
               <h3 className="text-xl font-bold text-gray-900 mb-6">
-                {selectedAbsence ? 'Modifier l\'absence' : 'Nouvelle absence'}
+                {selectedAbsence ? 'Modifier l\'absence' : 'Nouvelle absence cuisine'}
               </h3>
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Employé <span className="text-red-500">*</span>
+                    Employé Cuisine <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.employee_id}
                     onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="">Sélectionner un employé</option>
-                    {employees.map(employee => (
+                    {employeesCuisine.map(employee => (
                       <option key={employee.id} value={employee.id}>
                         {employee.nom} {employee.prenom ? `(${employee.prenom})` : ''}
                       </option>
@@ -577,7 +584,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                       value={formData.date_debut}
                       onChange={(e) => setFormData({...formData, date_debut: e.target.value})}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
                   
@@ -591,7 +598,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                       onChange={(e) => setFormData({...formData, date_fin: e.target.value})}
                       required
                       min={formData.date_debut}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
                 </div>
@@ -603,7 +610,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                     onChange={(e) => setFormData({...formData, motif: e.target.value})}
                     placeholder="Raison de l'absence (maladie, congés, formation...)"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
                 
@@ -618,7 +625,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 btn-primary disabled:opacity-50"
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
                     disabled={submitting}
                   >
                     {submitting ? 'Sauvegarde...' : (selectedAbsence ? 'Modifier' : 'Ajouter')}
@@ -633,4 +640,4 @@ const AbsenceManagement = ({ user, onLogout }) => {
   );
 };
 
-export default AbsenceManagement; 
+export default AbsenceManagementCuisine; 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, addDays, startOfWeek } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   PlusIcon,
@@ -9,10 +8,13 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   PhotoIcon,
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 import { ArrowLeft, Edit, Save, Star } from 'lucide-react';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { supabaseAPI } from '../lib/supabase';
 import CuisinePlanningInteractive from './CuisinePlanningInteractive';
+import AbsenceManagementCuisine from './AbsenceManagementCuisine';
 
 const CuisineManagement = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('planning');
@@ -22,47 +24,37 @@ const CuisineManagement = ({ user, onLogout }) => {
   // États principaux
   const [postes, setPostes] = useState([]);
   const [employeesCuisine, setEmployeesCuisine] = useState([]);
-  const [planning, setPlanining] = useState([]);
-  const [creneaux, setCreneaux] = useState([]);
 
   /* ===== Nouveaux états pour fiche employé ===== */
   const [competencesMap, setCompetencesMap] = useState({});
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [editMode, setEditMode] = useState(false);
+  const [editedEmployee, setEditedEmployee] = useState(null);
 
-  // Dates de la semaine courante
-  const [currentWeek, setCurrentWeek] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i));
+  // ===== Nouveaux états pour l'édition =====
+  const [editedEmployeeCuisine, setEditedEmployeeCuisine] = useState(null);
+  const [availableLanguages] = useState(['Français', 'Arabe', 'Anglais', 'Tigrinya', 'Perse', 'Turc', 'Yougoslave', 'Allemand', 'Créole', 'Luxembourgeois']);
+  const [availableProfiles] = useState(['Faible', 'Moyen', 'Fort']);
+  const [availableNiveauHygiene] = useState(['Base', 'Renforcé', 'Expert']);
+  const [availableNiveauCompetence] = useState(['Débutant', 'Confirmé', 'Expert']);
 
-  // Navigation semaine
-  const navigateWeek = (direction) => {
-    setCurrentWeek(prev => addDays(prev, direction * 7));
-  };
-
-  // Chargement des données
   const loadAllData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const [postesResult, employeesResult, planningResult, creneauxResult, competencesResult] = await Promise.all([
+      const [postesResult, employeesResult, competencesResult] = await Promise.all([
         supabaseCuisine.getPostes(),
         supabaseCuisine.getEmployeesCuisineWithCompetences(),
-        supabaseCuisine.getPlanningCuisine(),
-        supabaseCuisine.getCreneaux(),
         supabaseCuisine.getCompetencesCuisineSimple()
       ]);
 
       if (postesResult.error) throw postesResult.error;
       if (employeesResult.error) throw employeesResult.error;
-      if (planningResult.error) throw planningResult.error;
-      if (creneauxResult.error) throw creneauxResult.error;
       if (competencesResult.error) throw competencesResult.error;
 
       setPostes(postesResult.data || []);
       setEmployeesCuisine(employeesResult.data || []);
-      setPlanining(planningResult.data || []);
-      setCreneaux(creneauxResult.data || []);
 
       // Construction map compétences { employeeId: [competence, ...] }
       const compMap = {};
@@ -79,14 +71,6 @@ const CuisineManagement = ({ user, onLogout }) => {
       setLoading(false);
     }
   }, []);
-
-  // Utilitaires pour le planning
-  const getPlanningForDateAndCreneau = (date, creneau) => {
-    return planning.filter(p => 
-      p.date === format(date, 'yyyy-MM-dd') && 
-      p.creneau === creneau.nom
-    );
-  };
 
   /* ====== Utilitaires fiche employé ====== */
   const getProfileColor = (profil) => {
@@ -119,9 +103,180 @@ const CuisineManagement = ({ user, onLogout }) => {
     return comp || null;
   };
 
-  const saveEmployee = () => {
+  useEffect(() => {
+    // Quand on sélectionne un employé, initialiser l'état d'édition
+    if (selectedEmployee) {
+      setEditedEmployee({ ...selectedEmployee });
+      // Trouver l'employé cuisine correspondant
+      const empCuisine = employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id);
+      if (empCuisine) {
+        setEditedEmployeeCuisine({ ...empCuisine });
+      }
+    }
+  }, [selectedEmployee, employeesCuisine]);
+
+  // ===== Fonctions d'édition =====
+  const handleEmployeeChange = (field, value) => {
+    if (editedEmployee) {
+      setEditedEmployee(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
+  };
+
+  const handleEmployeeCuisineChange = (field, value) => {
+    if (editedEmployeeCuisine) {
+      setEditedEmployeeCuisine(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
+  };
+
+  const handleLanguageToggle = (langue) => {
+    if (editedEmployee) {
+      const currentLangues = editedEmployee.langues || [];
+      const newLangues = currentLangues.includes(langue)
+        ? currentLangues.filter(l => l !== langue)
+        : [...currentLangues, langue];
+      
+      setEditedEmployee(prev => ({
+        ...prev,
+        langues: newLangues
+      }));
+    }
+  };
+
+  const updateCompetencePoste = async (employeeId, posteId, niveau) => {
+    try {
+      // Trouver la compétence existante
+      const currentCompetences = competencesMap[employeeId] || [];
+      const existingCompetence = currentCompetences.find(c => c.poste_id === posteId);
+
+      if (niveau === null || niveau === 'Aucun') {
+        // Supprimer la compétence
+        if (existingCompetence) {
+          const result = await supabaseCuisine.deleteCompetenceCuisine(existingCompetence.id);
+          if (result.error) {
+            console.warn('⚠️ Erreur suppression compétence:', result.error);
+            toast.warning('Compétence mise à jour localement (problème sauvegarde)');
+          } else {
+            toast.success('Compétence supprimée avec succès !');
+          }
+        }
+        
+        // Mise à jour locale
+        setCompetencesMap(prev => ({
+          ...prev,
+          [employeeId]: currentCompetences.filter(c => c.poste_id !== posteId)
+        }));
+      } else {
+        // Créer ou mettre à jour la compétence
+        const competenceData = {
+          employee_id: employeeId,
+          poste_id: posteId,
+          niveau: niveau,
+          date_validation: new Date().toISOString().split('T')[0],
+          formateur_id: user.id || 1 // Utilisateur actuel comme formateur
+        };
+
+        let result;
+        if (existingCompetence) {
+          result = await supabaseCuisine.updateCompetenceCuisine(existingCompetence.id, competenceData);
+        } else {
+          result = await supabaseCuisine.createCompetenceCuisine(competenceData);
+        }
+
+        if (result.error) {
+          console.warn('⚠️ Erreur sauvegarde compétence:', result.error);
+          toast.warning('Compétence mise à jour localement (problème sauvegarde)');
+        } else {
+          toast.success('Compétence mise à jour avec succès !');
+        }
+
+        // Mise à jour locale
+        setCompetencesMap(prev => {
+          const newMap = { ...prev };
+          const updatedCompetence = {
+            ...competenceData,
+            id: result.data?.id || existingCompetence?.id || Date.now()
+          };
+
+          if (!newMap[employeeId]) {
+            newMap[employeeId] = [];
+          }
+
+          const competenceIndex = newMap[employeeId].findIndex(c => c.poste_id === posteId);
+          if (competenceIndex >= 0) {
+            newMap[employeeId][competenceIndex] = updatedCompetence;
+          } else {
+            newMap[employeeId].push(updatedCompetence);
+          }
+
+          return newMap;
+        });
+      }
+    } catch (error) {
+      console.error('❌ Erreur updateCompetencePoste:', error);
+      toast.error('Erreur lors de la mise à jour de la compétence');
+    }
+  };
+
+  const saveEmployee = async () => {
+    if (!editedEmployee || !editedEmployeeCuisine) {
+      toast.error('Données manquantes pour la sauvegarde');
+      return;
+    }
+
+    try {
+      // Sauvegarder les informations générales de l'employé
+      const employeeResult = await supabaseAPI.updateEmployee(editedEmployee.id, {
+        nom: editedEmployee.nom,
+        prenom: editedEmployee.prenom,
+        profil: editedEmployee.profil,
+        langues: editedEmployee.langues || []
+      });
+
+      // Sauvegarder les informations spécifiques cuisine
+      const cuisineResult = await supabaseCuisine.updateEmployeeCuisine(editedEmployee.id, {
+        niveau_hygiene: editedEmployeeCuisine.niveau_hygiene,
+        service: editedEmployeeCuisine.service
+      });
+
+      if (employeeResult.error || cuisineResult.error) {
+        console.warn('⚠️ Erreurs sauvegarde:', { employeeResult, cuisineResult });
+        toast.warning('Employé mis à jour localement (problème sauvegarde)');
+      } else {
+        toast.success('Employé sauvegardé avec succès !');
+      }
+
+      // Mettre à jour les états locaux
+      setSelectedEmployee(editedEmployee);
+      setEmployeesCuisine(prev => 
+        prev.map(ec => 
+          ec.employee.id === editedEmployee.id 
+            ? { ...editedEmployeeCuisine, employee: editedEmployee }
+            : ec
+        )
+      );
+
+      setEditMode(false);
+    } catch (error) {
+      console.error('❌ Erreur saveEmployee:', error);
+      toast.error('Erreur lors de la sauvegarde');
+    }
+  };
+
+  const cancelEdit = () => {
+    if (selectedEmployee) {
+      setEditedEmployee({ ...selectedEmployee });
+      const empCuisine = employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id);
+      if (empCuisine) {
+        setEditedEmployeeCuisine({ ...empCuisine });
+      }
+    }
     setEditMode(false);
-    toast.success('Employé mis à jour avec succès (à implémenter)');
   };
 
   // Chargement initial
@@ -208,6 +363,7 @@ const CuisineManagement = ({ user, onLogout }) => {
               { id: 'planning', name: 'Planning', icon: ClockIcon },
               { id: 'employees', name: 'Employés', icon: UserGroupIcon },
               { id: 'competences', name: 'Compétences', icon: ChartBarIcon },
+              { id: 'absences', name: 'Absences', icon: CalendarDaysIcon },
               { id: 'postes', name: 'Postes', icon: Cog6ToothIcon }
             ].map((tab) => {
               const Icon = tab.icon;
@@ -349,21 +505,30 @@ const CuisineManagement = ({ user, onLogout }) => {
                     </button>
                     <h1 className="text-2xl font-bold">Fiche Employé Cuisine</h1>
                   </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setEditMode(!editMode)}
-                      className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg flex items-center"
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      {editMode ? 'Annuler' : 'Modifier'}
-                    </button>
-                    {editMode && (
+                  <div className="flex items-center space-x-2">
+                    {editMode ? (
+                      <>
+                        <button
+                          onClick={saveEmployee}
+                          className="flex items-center space-x-2 bg-white text-orange-600 px-4 py-2 rounded-lg hover:bg-orange-50 transition-colors font-medium"
+                        >
+                          <Save className="w-5 h-5" />
+                          <span>Sauvegarder</span>
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="flex items-center space-x-2 bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"
+                        >
+                          <span>Annuler</span>
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        onClick={saveEmployee}
-                        className="px-4 py-2 bg-white text-orange-600 hover:bg-gray-100 rounded-lg flex items-center"
+                        onClick={() => setEditMode(true)}
+                        className="flex items-center space-x-2 bg-white text-orange-600 px-4 py-2 rounded-lg hover:bg-orange-50 transition-colors font-medium"
                       >
-                        <Save className="w-4 h-4 mr-2" />
-                        Sauvegarder
+                        <Edit className="w-5 h-5" />
+                        <span>Modifier</span>
                       </button>
                     )}
                   </div>
@@ -380,11 +545,11 @@ const CuisineManagement = ({ user, onLogout }) => {
                       {/* Photo */}
                       <div className="text-center mb-6">
                         <div className="w-32 h-32 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4">
-                          {selectedEmployee.photo_url ? (
-                            <img src={selectedEmployee.photo_url} alt={selectedEmployee.nom} className="w-32 h-32 rounded-full object-cover" />
+                          {(editedEmployee?.photo_url || selectedEmployee?.photo_url) ? (
+                            <img src={editedEmployee?.photo_url || selectedEmployee?.photo_url} alt={editedEmployee?.nom || selectedEmployee?.nom} className="w-32 h-32 rounded-full object-cover" />
                           ) : (
                             <span className="text-4xl font-bold text-orange-600">
-                              {selectedEmployee.nom?.charAt(0)}
+                              {(editedEmployee?.nom || selectedEmployee?.nom)?.charAt(0)}
                             </span>
                           )}
                         </div>
@@ -394,36 +559,101 @@ const CuisineManagement = ({ user, onLogout }) => {
                       <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
                         {editMode ? (
-                          <input type="text" value={selectedEmployee.nom} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                          <input 
+                            type="text" 
+                            value={editedEmployee?.nom || ''} 
+                            onChange={(e) => handleEmployeeChange('nom', e.target.value)} 
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                            placeholder="Nom de l'employé"
+                          />
                         ) : (
-                          <p className="text-lg font-semibold">{selectedEmployee.nom} {selectedEmployee.prenom}</p>
+                          <p className="text-lg font-semibold">{editedEmployee?.nom || selectedEmployee?.nom}</p>
+                        )}
+                      </div>
+
+                      {/* Prénom */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
+                        {editMode ? (
+                          <input 
+                            type="text" 
+                            value={editedEmployee?.prenom || ''} 
+                            onChange={(e) => handleEmployeeChange('prenom', e.target.value)} 
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                            placeholder="Prénom de l'employé"
+                          />
+                        ) : (
+                          <p className="text-lg font-semibold">{editedEmployee?.prenom || selectedEmployee?.prenom}</p>
                         )}
                       </div>
 
                       {/* Profil */}
                       <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Profil</label>
-                        <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${getProfileColor(selectedEmployee.profil)}`}>
-                          {selectedEmployee.profil}
-                        </div>
+                        {editMode ? (
+                          <select
+                            value={editedEmployee?.profil || ''}
+                            onChange={(e) => handleEmployeeChange('profil', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          >
+                            {availableProfiles.map(profil => (
+                              <option key={profil} value={profil}>{profil}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${getProfileColor(editedEmployee?.profil || selectedEmployee?.profil)}`}>
+                            {editedEmployee?.profil || selectedEmployee?.profil}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Hygiène */}
+                      {/* Niveau Hygiène */}
                       <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Niveau Hygiène</label>
-                        <p>{employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id)?.niveau_hygiene || 'Base'}</p>
+                        {editMode ? (
+                          <select
+                            value={editedEmployeeCuisine?.niveau_hygiene || 'Base'}
+                            onChange={(e) => handleEmployeeCuisineChange('niveau_hygiene', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          >
+                            {availableNiveauHygiene.map(niveau => (
+                              <option key={niveau} value={niveau}>{niveau}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-sm">{editedEmployeeCuisine?.niveau_hygiene || employeesCuisine.find(ec => ec.employee.id === (editedEmployee?.id || selectedEmployee?.id))?.niveau_hygiene || 'Base'}</p>
+                        )}
                       </div>
 
                       {/* Langues */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Langues parlées</label>
-                        <div className="flex flex-wrap gap-2">
-                          {(selectedEmployee.langues || []).map((langue, idx) => (
-                            <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                              {langue}
-                            </span>
-                          ))}
-                        </div>
+                        {editMode ? (
+                          <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                            {availableLanguages.map(langue => (
+                              <label key={langue} className="flex items-center cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={(editedEmployee?.langues || []).includes(langue)}
+                                  onChange={() => handleLanguageToggle(langue)}
+                                  className="mr-3 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                                />
+                                <span className="text-sm">{langue}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {((editedEmployee?.langues || selectedEmployee?.langues) || []).map((langue, idx) => (
+                              <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                                {langue}
+                              </span>
+                            ))}
+                            {((editedEmployee?.langues || selectedEmployee?.langues) || []).length === 0 && (
+                              <span className="text-gray-400 text-sm italic">Aucune langue renseignée</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -437,23 +667,82 @@ const CuisineManagement = ({ user, onLogout }) => {
                         {postes.map(poste => {
                           const competence = getEmployeeCompetence(selectedEmployee.id, poste.id);
                           return (
-                            <div key={poste.id} className="border border-gray-200 rounded-lg p-4">
+                            <div key={poste.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                  <span>{poste.icone}</span>
-                                  <h3 className="font-semibold text-lg" style={{ color: poste.couleur }}>{poste.nom}</h3>
+                                <div className="flex items-center space-x-3">
+                                  <span className="text-2xl">{poste.icone}</span>
+                                  <div>
+                                    <h3 className="font-semibold text-lg" style={{ color: poste.couleur }}>{poste.nom}</h3>
+                                    <p className="text-sm text-gray-500">{poste.description || 'Poste de cuisine'}</p>
+                                  </div>
                                 </div>
+                                
                                 <div className="flex items-center space-x-4">
-                                  {competence ? (
-                                    <div className="flex items-center space-x-1">{renderStars(competence.niveau)}</div>
+                                  {editMode ? (
+                                    <div className="flex items-center space-x-3">
+                                      <select
+                                        value={competence?.niveau || 'Aucun'}
+                                        onChange={(e) => updateCompetencePoste(selectedEmployee.id, poste.id, e.target.value === 'Aucun' ? null : e.target.value)}
+                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                                      >
+                                        <option value="Aucun">Non formé</option>
+                                        {availableNiveauCompetence.map(niveau => (
+                                          <option key={niveau} value={niveau}>{niveau}</option>
+                                        ))}
+                                      </select>
+                                      
+                                      {/* Affichage visuel des étoiles */}
+                                      <div className="flex items-center space-x-1">
+                                        {renderStars(competence?.niveau || 'Aucun')}
+                                      </div>
+                                    </div>
                                   ) : (
-                                    <span className="text-gray-400 text-sm">Non formé</span>
+                                    <div className="flex items-center space-x-2">
+                                      {competence ? (
+                                        <>
+                                          <div className="flex items-center space-x-1">{renderStars(competence.niveau)}</div>
+                                          <span className="text-sm text-gray-600">({competence.niveau})</span>
+                                          {competence.date_validation && (
+                                            <span className="text-xs text-gray-400">
+                                              Validé le {new Date(competence.date_validation).toLocaleDateString('fr-FR')}
+                                            </span>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <span className="text-gray-400 text-sm">Non formé</span>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
+                              
+                              {/* Informations supplémentaires en mode lecture */}
+                              {!editMode && competence?.formateur_id && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Formateur: {competence.formateur?.nom || 'Non spécifié'}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
+                      </div>
+
+                      {/* Résumé des compétences */}
+                      <div className="mt-6 pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">Total des compétences:</span>
+                          <span className="font-medium">
+                            {(competencesMap[selectedEmployee.id] || []).length} / {postes.length} postes
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                          <div 
+                            className="bg-orange-500 h-2 rounded-full transition-all duration-300" 
+                            style={{ 
+                              width: `${((competencesMap[selectedEmployee.id] || []).length / postes.length) * 100}%` 
+                            }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -478,6 +767,18 @@ const CuisineManagement = ({ user, onLogout }) => {
                 </h3>
                 <p>Cette section sera développée prochainement...</p>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'absences' && (
+            <motion.div
+              key="absences"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <AbsenceManagementCuisine user={user} onLogout={onLogout} />
             </motion.div>
           )}
         </AnimatePresence>

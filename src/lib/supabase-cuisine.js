@@ -59,11 +59,35 @@ export const supabaseCuisine = {
           *,
           employee:employees(*)
         `)
-        .eq('employees.statut', 'Actif');
+        .eq('employees.statut', 'Actif')
+        .in('service', ['Cuisine', 'Mixte']);
       
-      return { data, error };
+      if (error) {
+        console.error('❌ Erreur getEmployeesCuisine:', error);
+        // Fallback : récupérer tous et filtrer localement
+        const { data: allData, error: allError } = await supabase
+          .from('employees_cuisine')
+          .select(`
+            *,
+            employee:employees(*)
+          `)
+          .eq('employees.statut', 'Actif');
+        
+        if (allError) throw allError;
+        
+        console.log('🔄 Fallback: filtrage local des employés de cuisine');
+        return { 
+          data: allData.filter(ec => 
+            ec.service === 'Cuisine' || ec.service === 'Mixte'
+          ), 
+          error: null 
+        };
+      } else {
+        console.log('✅ Employés de cuisine récupérés:', data?.length || 0);
+        return { data, error };
+      }
     } catch (error) {
-      console.error('Erreur getEmployeesCuisine:', error);
+      console.error('❌ Erreur critique getEmployeesCuisine:', error);
       return { data: null, error };
     }
   },
@@ -76,11 +100,35 @@ export const supabaseCuisine = {
           *,
           employee:employees(*)
         `)
-        .eq('employees.statut', 'Actif');
+        .eq('employees.statut', 'Actif')
+        .in('service', ['Cuisine', 'Mixte']);
       
-      return { data, error };
+      if (error) {
+        console.error('❌ Erreur getEmployeesCuisineWithCompetences:', error);
+        // Fallback : récupérer tous et filtrer localement
+        const { data: allData, error: allError } = await supabase
+          .from('employees_cuisine')
+          .select(`
+            *,
+            employee:employees(*)
+          `)
+          .eq('employees.statut', 'Actif');
+        
+        if (allError) throw allError;
+        
+        console.log('🔄 Fallback: filtrage local des employés de cuisine avec compétences');
+        return { 
+          data: allData.filter(ec => 
+            ec.service === 'Cuisine' || ec.service === 'Mixte'
+          ), 
+          error: null 
+        };
+      } else {
+        console.log('✅ Employés de cuisine avec compétences récupérés:', data?.length || 0);
+        return { data, error };
+      }
     } catch (error) {
-      console.error('Erreur getEmployeesCuisineWithCompetences:', error);
+      console.error('❌ Erreur critique getEmployeesCuisineWithCompetences:', error);
       return { data: null, error };
     }
   },
@@ -347,14 +395,14 @@ export const supabaseCuisine = {
   async isEmployeeAvailableCuisine(employeeId, date) {
     try {
       // Vérifier les absences
-      const { data: absences, error: absError } = await supabase
+      const { data: absences, error } = await supabase
         .from('absences')
         .select('id')
         .eq('employee_id', employeeId)
         .lte('date_debut', date)
         .gte('date_fin', date);
       
-      if (absError) throw absError;
+      if (error) throw error;
       
       const available = absences.length === 0;
       return { available, error: null };
@@ -433,6 +481,224 @@ export const supabaseCuisine = {
     } catch (error) {
       console.error('Erreur suggestReplacementCuisine:', error);
       return { data: null, error };
+    }
+  },
+
+  // ==================== GESTION DES ABSENCES CUISINE ====================
+  
+  async getAbsencesCuisine(dateDebut = null, dateFin = null) {
+    try {
+      console.log('🔍 Récupération des absences cuisine...', { dateDebut, dateFin });
+      
+      let query = supabase
+        .from('absences_cuisine')
+        .select(`
+          *,
+          employee:employees!absences_cuisine_employee_id_fkey(nom, prenom, profil)
+        `)
+        .order('date_debut', { ascending: false });
+
+      // Filtrer par période si spécifié
+      if (dateDebut && dateFin) {
+        query = query.or(`date_debut.lte.${dateFin},date_fin.gte.${dateDebut}`);
+      }
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('❌ Erreur getAbsencesCuisine avec jointure:', error);
+        
+        // Fallback : récupération simple sans jointure
+        console.log('🔄 Tentative sans jointure...');
+        let simpleQuery = supabase
+          .from('absences_cuisine')
+          .select('*')
+          .order('date_debut', { ascending: false });
+        
+        if (dateDebut && dateFin) {
+          simpleQuery = simpleQuery.or(`date_debut.lte.${dateFin},date_fin.gte.${dateDebut}`);
+        }
+        
+        const { data: simpleData, error: simpleError } = await simpleQuery;
+        
+        if (simpleError) {
+          console.error('❌ Erreur simple getAbsencesCuisine:', simpleError);
+          return { data: [], error: simpleError };
+        }
+        
+        console.log('✅ Absences cuisine récupérées (mode simple):', simpleData?.length || 0);
+        return { data: simpleData || [], error: null };
+      }
+      
+      console.log('✅ Absences cuisine récupérées avec jointure:', data?.length || 0);
+      return { data: data || [], error: null };
+
+    } catch (err) {
+      console.error('❌ Erreur critique getAbsencesCuisine:', err);
+      return { data: [], error: err };
+    }
+  },
+
+  async createAbsenceCuisine(absenceData) {
+    try {
+      console.log('➕ Création absence cuisine:', absenceData);
+      
+      const { data, error } = await supabase
+        .from('absences_cuisine')
+        .insert([{
+          ...absenceData,
+          created_at: new Date().toISOString()
+        }])
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur createAbsenceCuisine:', error);
+      } else {
+        console.log('✅ Absence cuisine créée:', data);
+      }
+      
+      return { data, error };
+    } catch (err) {
+      console.error('❌ Erreur critique createAbsenceCuisine:', err);
+      return { data: null, error: err };
+    }
+  },
+
+  async updateAbsenceCuisine(id, updates) {
+    try {
+      const { data, error } = await supabase
+        .from('absences_cuisine')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      return { data, error };
+    } catch (err) {
+      console.error('Erreur updateAbsenceCuisine:', err);
+      return { data: null, error: err };
+    }
+  },
+
+  async deleteAbsenceCuisine(id) {
+    try {
+      const { data, error } = await supabase
+        .from('absences_cuisine')
+        .delete()
+        .eq('id', id);
+
+      return { data, error };
+    } catch (err) {
+      console.error('Erreur deleteAbsenceCuisine:', err);
+      return { data: null, error: err };
+    }
+  },
+
+  // Statistiques d'absence cuisine
+  async getAbsenceStatsCuisine(dateDebut, dateFin) {
+    try {
+      const { data: absences, error } = await this.getAbsencesCuisine(dateDebut, dateFin);
+      if (error) throw error;
+
+      const { data: employeesCuisine, error: empError } = await this.getEmployeesCuisine();
+      if (empError) throw empError;
+
+      const stats = {
+        total: absences.length,
+        parType: {},
+        parStatut: {},
+        parEmploye: {},
+        dureesMoyennes: {},
+        tendances: []
+      };
+
+      absences.forEach(absence => {
+        // Par type
+        stats.parType[absence.type_absence] = (stats.parType[absence.type_absence] || 0) + 1;
+        
+        // Par statut
+        stats.parStatut[absence.statut] = (stats.parStatut[absence.statut] || 0) + 1;
+        
+        // Par employé
+        const employeeCuisine = employeesCuisine.find(ec => ec.employee_id === absence.employee_id);
+        const employeeName = employeeCuisine?.employee?.nom || 'Inconnu';
+        stats.parEmploye[employeeName] = (stats.parEmploye[employeeName] || 0) + 1;
+        
+        // Durées
+        const debut = new Date(absence.date_debut);
+        const fin = new Date(absence.date_fin);
+        const duree = Math.ceil((fin - debut) / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (!stats.dureesMoyennes[absence.type_absence]) {
+          stats.dureesMoyennes[absence.type_absence] = [];
+        }
+        stats.dureesMoyennes[absence.type_absence].push(duree);
+      });
+
+      // Calculer les moyennes
+      Object.keys(stats.dureesMoyennes).forEach(type => {
+        const durees = stats.dureesMoyennes[type];
+        stats.dureesMoyennes[type] = {
+          moyenne: durees.reduce((a, b) => a + b, 0) / durees.length,
+          total: durees.length
+        };
+      });
+
+      return { data: stats, error: null };
+
+    } catch (error) {
+      console.error('Erreur getAbsenceStatsCuisine:', error);
+      return { data: null, error };
+    }
+  },
+
+  // Fonction pour le planning intelligent intégrant les absences cuisine
+  async getPlanningCuisineWithAvailability(dateDebut, dateFin) {
+    try {
+      // Récupérer planning, absences et employés en parallèle
+      const [planningResult, absencesResult, employeesResult] = await Promise.all([
+        this.getPlanningCuisine(dateDebut, dateFin),
+        this.getAbsencesCuisine(dateDebut, dateFin),
+        this.getEmployeesCuisine()
+      ]);
+
+      if (planningResult.error) throw planningResult.error;
+      if (absencesResult.error) throw absencesResult.error;
+      if (employeesResult.error) throw employeesResult.error;
+
+      const planning = planningResult.data || [];
+      const absences = absencesResult.data || [];
+      const employeesCuisine = employeesResult.data || [];
+
+      // Enrichir le planning avec les informations d'absence
+      const enrichedPlanning = planning.map(planItem => {
+        const employeeCuisine = employeesCuisine.find(ec => ec.employee_id === planItem.employee_id);
+        const employeeAbsences = absences.filter(a => 
+          a.employee_id === planItem.employee_id &&
+          a.statut === 'Confirmée' &&
+          planItem.date >= a.date_debut &&
+          planItem.date <= a.date_fin
+        );
+
+        return {
+          ...planItem,
+          employeeCuisine,
+          isAbsent: employeeAbsences.length > 0,
+          absenceInfo: employeeAbsences[0] || null,
+          needsReplacement: employeeAbsences.length > 0
+        };
+      });
+
+      return { 
+        data: enrichedPlanning,
+        conflicts: enrichedPlanning.filter(p => p.isAbsent),
+        error: null 
+      };
+
+    } catch (error) {
+      console.error('Erreur getPlanningCuisineWithAvailability:', error);
+      return { data: null, conflicts: [], error };
     }
   }
 };

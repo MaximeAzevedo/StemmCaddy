@@ -8,6 +8,7 @@ import EmployeeManagement from './components/EmployeeManagement';
 import PlanningView from './components/PlanningView';
 import AIAssistant from './components/AIAssistant';
 import AbsenceManagement from './components/AbsenceManagement';
+import AbsenceManagementCuisine from './components/AbsenceManagementCuisine';
 import CuisineManagement from './components/CuisineManagement';
 import CuisinePlanningDisplay from './components/CuisinePlanningDisplay';
 import MainHeader from './components/MainHeader';
@@ -98,6 +99,16 @@ function App() {
             element={
               user ? (
                 <CuisineManagement user={user} onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+          <Route 
+            path="/cuisine/absences" 
+            element={
+              user ? (
+                <AbsenceManagementCuisine user={user} onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" />
               )
