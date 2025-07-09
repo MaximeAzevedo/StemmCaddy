@@ -13,6 +13,7 @@ import {
 import { supabaseCuisine } from '../lib/supabase-cuisine';
 
 const CuisinePlanningDisplay = ({ tvMode = false }) => {
+  // eslint-disable-next-line no-unused-vars
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentSession, setCurrentSession] = useState('matin'); // 'matin' ou 'apres-midi'
   const [autoMode, setAutoMode] = useState(tvMode ? true : true);

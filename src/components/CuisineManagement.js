@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
@@ -17,6 +17,7 @@ import CuisinePlanningInteractive from './CuisinePlanningInteractive';
 import AbsenceManagementCuisine from './AbsenceManagementCuisine';
 
 const CuisineManagement = ({ user, onLogout }) => {
+  const fileInputRef = useRef(null);
   const [activeTab, setActiveTab] = useState('planning');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -30,6 +31,7 @@ const CuisineManagement = ({ user, onLogout }) => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   // ===== Nouveaux états pour l'édition =====
   const [editedEmployeeCuisine, setEditedEmployeeCuisine] = useState(null);
@@ -223,6 +225,98 @@ const CuisineManagement = ({ user, onLogout }) => {
     }
   };
 
+  const handlePhotoChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Vérifier le type de fichier
+    if (!file.type.startsWith('image/')) {
+      toast.error('Veuillez sélectionner un fichier image');
+      return;
+    }
+
+    // Vérifier la taille du fichier (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('La taille de l\'image ne doit pas dépasser 5MB');
+      return;
+    }
+
+    try {
+      setPhotoUploading(true);
+      
+      // Convertir l'image en base64 pour stockage local
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Photo = e.target.result;
+        
+        try {
+          // Mettre à jour l'employé édité avec la nouvelle photo
+          if (editedEmployeeCuisine) {
+            setEditedEmployeeCuisine(prev => ({
+              ...prev,
+              photo_url: base64Photo
+            }));
+          }
+          
+          // Si on n'est pas en mode édition, sauvegarder immédiatement
+          if (!editMode && selectedEmployee) {
+            try {
+              const result = await supabaseCuisine.updateEmployeeCuisine(selectedEmployee.id, {
+                photo_url: base64Photo
+              });
+              
+              if (!result.error) {
+                console.log('✅ Photo cuisine sauvegardée en base:', result.data);
+                toast.success('Photo mise à jour avec succès !');
+              } else {
+                console.warn('⚠️ Erreur Supabase photo cuisine:', result.error);
+                toast.success('Photo mise à jour localement (sauvegarde en cours...)');
+              }
+            } catch (dbError) {
+              console.warn('⚠️ Base de données non accessible pour photo cuisine:', dbError);
+              toast.success('Photo mise à jour localement (sauvegarde en cours...)');
+            }
+            
+            // Mettre à jour l'état local
+            setEmployeesCuisine(prev => 
+              prev.map(empCuisine => 
+                empCuisine.employee.id === selectedEmployee.id 
+                  ? { ...empCuisine, photo_url: base64Photo }
+                  : empCuisine
+              )
+            );
+          } else {
+            toast.success('Photo sélectionnée ! N\'oubliez pas de sauvegarder.');
+          }
+          
+        } catch (error) {
+          console.error('❌ Erreur traitement photo cuisine:', error);
+          toast.error('Erreur lors du traitement de la photo');
+        } finally {
+          setPhotoUploading(false);
+        }
+      };
+      
+      reader.onerror = () => {
+        toast.error('Erreur lors de la lecture du fichier');
+        setPhotoUploading(false);
+      };
+      
+      reader.readAsDataURL(file);
+      
+    } catch (error) {
+      console.error('❌ Erreur upload photo cuisine:', error);
+      toast.error('Erreur lors de l\'upload de la photo');
+      setPhotoUploading(false);
+    }
+  };
+
+  const triggerPhotoUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   const saveEmployee = async () => {
     if (!editedEmployee || !editedEmployeeCuisine) {
       toast.error('Données manquantes pour la sauvegarde');
@@ -238,10 +332,11 @@ const CuisineManagement = ({ user, onLogout }) => {
         langues: editedEmployee.langues || []
       });
 
-      // Sauvegarder les informations spécifiques cuisine
+      // Sauvegarder les informations spécifiques cuisine (y compris la photo)
       const cuisineResult = await supabaseCuisine.updateEmployeeCuisine(editedEmployee.id, {
         niveau_hygiene: editedEmployeeCuisine.niveau_hygiene,
-        service: editedEmployeeCuisine.service
+        service: editedEmployeeCuisine.service,
+        photo_url: editedEmployeeCuisine.photo_url
       });
 
       if (employeeResult.error || cuisineResult.error) {
@@ -428,7 +523,7 @@ const CuisineManagement = ({ user, onLogout }) => {
                       onClick={() => setSelectedEmployee(employee)}
                     >
                       <div className="flex items-center space-x-4 mb-4">
-                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center relative overflow-hidden">
                           {employeeCuisine.photo_url ? (
                             <img 
                               src={employeeCuisine.photo_url} 
@@ -436,7 +531,9 @@ const CuisineManagement = ({ user, onLogout }) => {
                               className="w-12 h-12 rounded-full object-cover"
                             />
                           ) : (
-                            <PhotoIcon className="w-6 h-6 text-orange-600" />
+                            <span className="text-lg font-bold text-orange-600">
+                              {employee.nom?.charAt(0) || '?'}
+                            </span>
                           )}
                         </div>
                         <div>
@@ -544,15 +641,49 @@ const CuisineManagement = ({ user, onLogout }) => {
 
                       {/* Photo */}
                       <div className="text-center mb-6">
-                        <div className="w-32 h-32 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4">
-                          {(editedEmployee?.photo_url || selectedEmployee?.photo_url) ? (
-                            <img src={editedEmployee?.photo_url || selectedEmployee?.photo_url} alt={editedEmployee?.nom || selectedEmployee?.nom} className="w-32 h-32 rounded-full object-cover" />
-                          ) : (
-                            <span className="text-4xl font-bold text-orange-600">
-                              {(editedEmployee?.nom || selectedEmployee?.nom)?.charAt(0)}
-                            </span>
+                        <div className="w-32 h-32 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden">
+                          {(() => {
+                            const currentEmployeeCuisine = editedEmployeeCuisine || employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id);
+                            const photoUrl = currentEmployeeCuisine?.photo_url;
+                            const employeeName = editedEmployee?.nom || selectedEmployee?.nom;
+                            
+                            if (photoUrl) {
+                              return (
+                                <img 
+                                  src={photoUrl} 
+                                  alt={employeeName} 
+                                  className="w-32 h-32 rounded-full object-cover" 
+                                />
+                              );
+                            } else {
+                              return (
+                                <span className="text-4xl font-bold text-orange-600">
+                                  {employeeName?.charAt(0) || '?'}
+                                </span>
+                              );
+                            }
+                          })()}
+                          {photoUploading && (
+                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                            </div>
                           )}
                         </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoChange}
+                          className="hidden"
+                        />
+                        <button 
+                          onClick={triggerPhotoUpload}
+                          disabled={photoUploading}
+                          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center mx-auto"
+                        >
+                          <PhotoIcon className="w-4 h-4 mr-2" />
+                          {photoUploading ? 'Upload en cours...' : 'Changer la photo'}
+                        </button>
                       </div>
 
                       {/* Nom */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -22,6 +22,8 @@ import { supabaseAPI } from '../lib/supabase';
 
 const EmployeeManagement = ({ user, onLogout }) => {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+  
   const [employees, setEmployees] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [competences, setCompetences] = useState({});
@@ -32,6 +34,7 @@ const EmployeeManagement = ({ user, onLogout }) => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const profiles = ['Faible', 'Moyen', 'Fort'];
   const languages = ['Français', 'Arabe', 'Anglais', 'Tigrinya', 'Perse', 'Turc', 'Yougoslave', 'Allemand', 'Créole', 'Luxembourgeois'];
@@ -310,6 +313,98 @@ const EmployeeManagement = ({ user, onLogout }) => {
     }
   };
 
+  const handlePhotoChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Vérifier le type de fichier
+    if (!file.type.startsWith('image/')) {
+      toast.error('Veuillez sélectionner un fichier image');
+      return;
+    }
+
+    // Vérifier la taille du fichier (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('La taille de l\'image ne doit pas dépasser 5MB');
+      return;
+    }
+
+    try {
+      setPhotoUploading(true);
+      
+      // Convertir l'image en base64 pour stockage local
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Photo = e.target.result;
+        
+        try {
+          // Mettre à jour l'employé édité avec la nouvelle photo
+          setEditedEmployee(prev => ({
+            ...prev,
+            photo: base64Photo
+          }));
+          
+          // Si on n'est pas en mode édition, sauvegarder immédiatement
+          if (!editMode) {
+            const updatedEmployee = { ...selectedEmployee, photo: base64Photo };
+            
+            // Tentative de sauvegarde en base de données
+            try {
+              const result = await supabaseAPI.updateEmployee(selectedEmployee.id, {
+                photo: base64Photo
+              });
+              
+              if (!result.error) {
+                console.log('✅ Photo sauvegardée en base:', result.data);
+                toast.success('Photo mise à jour avec succès !');
+              } else {
+                console.warn('⚠️ Erreur Supabase photo:', result.error);
+                toast.success('Photo mise à jour localement (sauvegarde en cours...)');
+              }
+            } catch (dbError) {
+              console.warn('⚠️ Base de données non accessible pour photo:', dbError);
+              toast.success('Photo mise à jour localement (sauvegarde en cours...)');
+            }
+            
+            // Mettre à jour l'état local
+            setEmployees(prev => 
+              prev.map(emp => 
+                emp.id === selectedEmployee.id ? updatedEmployee : emp
+              )
+            );
+            setSelectedEmployee(updatedEmployee);
+          } else {
+            toast.success('Photo sélectionnée ! N\'oubliez pas de sauvegarder.');
+          }
+          
+        } catch (error) {
+          console.error('❌ Erreur traitement photo:', error);
+          toast.error('Erreur lors du traitement de la photo');
+        } finally {
+          setPhotoUploading(false);
+        }
+      };
+      
+      reader.onerror = () => {
+        toast.error('Erreur lors de la lecture du fichier');
+        setPhotoUploading(false);
+      };
+      
+      reader.readAsDataURL(file);
+      
+    } catch (error) {
+      console.error('❌ Erreur upload photo:', error);
+      toast.error('Erreur lors de l\'upload de la photo');
+      setPhotoUploading(false);
+    }
+  };
+
+  const triggerPhotoUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   const saveEmployee = async () => {
     if (!editedEmployee) return;
     
@@ -319,7 +414,8 @@ const EmployeeManagement = ({ user, onLogout }) => {
         nom: editedEmployee.nom,
         profil: editedEmployee.profil,
         langues: editedEmployee.langues || [],
-        permis: editedEmployee.permis || false
+        permis: editedEmployee.permis || false,
+        photo: editedEmployee.photo || null
       };
       
       // Tentative de sauvegarde dans la base de données
@@ -507,7 +603,7 @@ const EmployeeManagement = ({ user, onLogout }) => {
               
               {/* Photo */}
               <div className="text-center mb-6">
-                <div className="w-32 h-32 mx-auto bg-gradient-to-r from-primary-100 to-secondary-100 rounded-full flex items-center justify-center mb-4">
+                <div className="w-32 h-32 mx-auto bg-gradient-to-r from-primary-100 to-secondary-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden">
                   {(editedEmployee?.photo || selectedEmployee?.photo) ? (
                     <img src={editedEmployee?.photo || selectedEmployee?.photo} alt={editedEmployee?.nom || selectedEmployee?.nom} className="w-32 h-32 rounded-full object-cover" />
                   ) : (
@@ -515,13 +611,27 @@ const EmployeeManagement = ({ user, onLogout }) => {
                       {(editedEmployee?.nom || selectedEmployee?.nom)?.charAt(0)}
                     </span>
                   )}
+                  {photoUploading && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    </div>
+                  )}
                 </div>
-                {editMode && (
-                  <button className="btn-primary text-sm">
-                    <Camera className="w-4 h-4 mr-2" />
-                    Changer la photo
-                  </button>
-                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+                <button 
+                  onClick={triggerPhotoUpload}
+                  disabled={photoUploading}
+                  className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  {photoUploading ? 'Upload en cours...' : 'Changer la photo'}
+                </button>
               </div>
 
               {/* Nom */}

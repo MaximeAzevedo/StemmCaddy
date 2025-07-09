@@ -37,9 +37,8 @@ const PlanningView = ({ user, onLogout }) => {
     { id: 'caddy', name: 'Reste Caddy', capacity: 10, color: 'bg-gray-500' }
   ];
 
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
-
   const initializePlanning = useCallback(() => {
+    const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
     const newPlanning = {};
     
     weekDays.forEach(day => {
@@ -67,7 +66,10 @@ const PlanningView = ({ user, onLogout }) => {
     });
     
     setPlanning(newPlanning);
-  }, [weekDays]);
+  }, [currentWeek]);
+
+  // Calculer weekDays au niveau du composant pour l'affichage
+  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
 
   useEffect(() => {
     // Initialiser le planning avec des données de démonstration
@@ -79,6 +81,7 @@ const PlanningView = ({ user, onLogout }) => {
     
     // Simulation de l'IA qui génère un planning optimal
     setTimeout(() => {
+      const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
       const optimizedPlanning = {};
       
       weekDays.forEach(day => {
@@ -144,12 +147,50 @@ const PlanningView = ({ user, onLogout }) => {
     
     const newPlanning = { ...planning };
     
+    // Vérifier si les objets existent avant d'y accéder
+    if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceVehicle]) {
+      console.error('❌ Source invalide:', { sourceDate, sourceVehicle });
+      toast.error('Erreur: Source de déplacement invalide');
+      return;
+    }
+    
+    if (!newPlanning[destDate]) {
+      newPlanning[destDate] = {};
+    }
+    
+    if (!newPlanning[destDate][destVehicle]) {
+      newPlanning[destDate][destVehicle] = [];
+    }
+    
+    // Vérifier si l'index source est valide
+    if (source.index >= newPlanning[sourceDate][sourceVehicle].length) {
+      console.error('❌ Index source invalide:', { sourceIndex: source.index, arrayLength: newPlanning[sourceDate][sourceVehicle].length });
+      toast.error('Erreur: Index de déplacement invalide');
+      return;
+    }
+    
     // Retirer de la source
     const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
+    if (!draggedEmployee) {
+      console.error('❌ Employé non trouvé à l\'index:', source.index);
+      toast.error('Erreur: Employé non trouvé');
+      return;
+    }
+    
     newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
     
+    // Vérifier la capacité du véhicule de destination
+    const destVehicleInfo = vehicles.find(v => v.id === destVehicle);
+    if (destVehicleInfo && newPlanning[destDate][destVehicle].length >= destVehicleInfo.capacity) {
+      toast.error(`Le véhicule ${destVehicleInfo.name} est à pleine capacité (${destVehicleInfo.capacity})`);
+      // Remettre l'employé à sa place
+      newPlanning[sourceDate][sourceVehicle].splice(source.index, 0, draggedEmployee);
+      return;
+    }
+    
     // Ajouter à la destination
-    newPlanning[destDate][destVehicle].splice(destination.index, 0, draggedEmployee);
+    const destIndex = Math.min(destination.index, newPlanning[destDate][destVehicle].length);
+    newPlanning[destDate][destVehicle].splice(destIndex, 0, draggedEmployee);
     
     setPlanning(newPlanning);
     toast.success('Planning mis à jour');
