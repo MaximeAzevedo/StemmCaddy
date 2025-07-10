@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS employees_cuisine (
   UNIQUE(employee_id)
 );
 
+-- Ajouter le champ photo dans la table employees principale si manquant
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo TEXT;
+
 -- 3. Table des compétences cuisine (équivalent des compétences véhicules)
 CREATE TABLE IF NOT EXISTS competences_cuisine (
   id SERIAL PRIMARY KEY,

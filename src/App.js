@@ -6,11 +6,11 @@ import Dashboard from './components/Dashboard';
 import HomeLanding from './components/HomeLanding';
 import EmployeeManagement from './components/EmployeeManagement';
 import PlanningView from './components/PlanningView';
-import AIAssistant from './components/AIAssistant';
 import AbsenceManagement from './components/AbsenceManagement';
 import AbsenceManagementCuisine from './components/AbsenceManagementCuisine';
-import CuisineManagement from './components/CuisineManagement';
+import DashboardCuisine from './components/DashboardCuisine';
 import CuisinePlanningDisplay from './components/CuisinePlanningDisplay';
+import SecretariatManagement from './components/SecretariatManagement';
 import MainHeader from './components/MainHeader';
 import './index.css';
 
@@ -98,7 +98,17 @@ function App() {
             path="/cuisine" 
             element={
               user ? (
-                <CuisineManagement user={user} onLogout={handleLogout} />
+                <DashboardCuisine user={user} onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+          <Route 
+            path="/secretariat" 
+            element={
+              user ? (
+                <SecretariatManagement user={user} onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" />
               )
@@ -118,14 +128,13 @@ function App() {
         </Routes>
         
         {/* Assistant IA flottant disponible partout */}
-        {user && <AIAssistant />}
         
         {/* Notifications */}
         <Toaster 
-          position="top-right"
+          position="bottom-right"
           toastOptions={{
             className: 'tv-scale',
-            duration: 4000,
+            duration: 3000,
             style: {
               background: '#fff',
               color: '#1f2937',

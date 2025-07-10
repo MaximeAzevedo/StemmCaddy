@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TruckIcon } from '@heroicons/react/24/solid';
 import { FireIcon } from '@heroicons/react/24/solid';
+import { DocumentTextIcon } from '@heroicons/react/24/solid';
 
 const Card = ({ title, icon: Icon, color, onClick }) => (
   <button
@@ -34,6 +35,12 @@ const HomeLanding = () => {
           icon={FireIcon}
           color="from-orange-500 to-red-500"
           onClick={() => navigate('/cuisine')}
+        />
+        <Card
+          title="Secrétariat"
+          icon={DocumentTextIcon}
+          color="from-green-500 to-emerald-600"
+          onClick={() => navigate('/secretariat')}
         />
       </div>
 

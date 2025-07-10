@@ -22,6 +22,7 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
   const [postes, setPostes] = useState([]);
   const [employeesCuisine, setEmployeesCuisine] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [superTvMode, setSuperTvMode] = useState(tvMode ? true : false); // Force super mode pour TV
 
   // Configuration des postes par session
   const postesMatin = ['Cuisine chaude', 'Sandwichs', 'Pain', 'Jus de fruits', 'Vaisselle', 'Légumerie'];
@@ -89,6 +90,33 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
     return () => clearInterval(interval);
   }, [autoMode]);
 
+  // NOUVEAU: Raccourcis clavier étendus
+  useEffect(() => {
+    const handleKeyPress = (event) => {
+      // Toggle Super TV Mode (seulement en mode normal)
+      if (event.key.toLowerCase() === 't' && !tvMode) {
+        setSuperTvMode(prev => !prev);
+      }
+      
+      // Pause/Play avec barre d'espace
+      if (event.code === 'Space') {
+        event.preventDefault();
+        setAutoMode(prev => !prev);
+      }
+      
+      // Navigation avec flèches
+      if (event.key === 'ArrowLeft') {
+        setCurrentSession('matin');
+      }
+      if (event.key === 'ArrowRight') {
+        setCurrentSession('apres-midi');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [tvMode]);
+
   // Obtenir les employés affectés pour un poste et une session
   const getEmployeesForPosteAndSession = (posteName, sessions) => {
     const poste = postes.find(p => p.nom === posteName);
@@ -114,6 +142,15 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
     const config = sessionsConfig[currentSession];
     const employees = getEmployeesForPosteAndSession(posteName, config.sessions);
 
+    // Tailles beaucoup plus grandes
+    const photoSize = superTvMode ? 'w-40 h-40' : 'w-32 h-32'; // 160px en super, 128px normal
+    const minHeight = superTvMode ? 'min-h-[220px]' : 'min-h-[180px]';
+    const textSize = superTvMode ? 'text-lg' : 'text-base';
+    const nameSize = superTvMode ? 'text-base' : 'text-sm';
+    const initialSize = superTvMode ? 'text-4xl' : 'text-2xl';
+    const headerSize = superTvMode ? 'text-xl' : 'text-lg';
+    const badgeSize = superTvMode ? 'text-base' : 'text-sm';
+
     return (
       <motion.div
         key={`${posteName}-${currentSession}`}
@@ -124,31 +161,31 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
         className="relative bg-white rounded-xl shadow-lg p-6 border-2"
         style={{ borderColor: poste.couleur }}
       >
-        {/* Header du poste */}
+        {/* Header du poste - AGRANDI */}
         <div className="flex items-center justify-center mb-4">
           <div 
             className="flex items-center space-x-3 px-4 py-2 rounded-full text-white font-bold"
             style={{ backgroundColor: poste.couleur }}
           >
-            <span className="text-2xl">{poste.icone}</span>
-            <span className="text-lg">{poste.nom}</span>
+            <span className={headerSize}>{poste.icone}</span>
+            <span className={badgeSize}>{poste.nom}</span>
           </div>
         </div>
 
-        {/* Sessions actives */}
+        {/* Sessions actives - AGRANDI */}
         <div className="flex justify-center space-x-2 mb-4">
           {config.sessions.map(session => (
             <span 
               key={session}
-              className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700"
+              className={`px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700 ${superTvMode ? 'text-base px-4 py-2' : ''}`}
             >
               {session}
             </span>
           ))}
         </div>
 
-        {/* Employés affectés */}
-        <div className="grid grid-cols-2 gap-4 min-h-[120px]">
+        {/* Employés affectés - PHOTOS GÉANTES */}
+        <div className={`grid grid-cols-2 gap-4 ${minHeight}`}>
           {employees.map((emp, index) => (
             <motion.div
               key={`${emp.employee?.id}-${index}`}
@@ -157,7 +194,7 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
               transition={{ delay: index * 0.1 }}
               className="flex flex-col items-center"
             >
-              <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-200 border-4 border-white shadow-lg">
+              <div className={`${photoSize} rounded-full overflow-hidden bg-gray-200 border-4 border-white shadow-lg`}>
                 {emp.photo_url ? (
                   <img 
                     src={emp.photo_url} 
@@ -166,14 +203,17 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">
+                    <span className={`text-white font-bold ${initialSize}`}>
                       {emp.employee?.prenom?.[0]}{emp.employee?.nom?.[0]}
                     </span>
                   </div>
                 )}
               </div>
-              <span className="text-xs text-gray-600 mt-1 font-medium">
+              <span className={`${textSize} text-gray-700 mt-3 font-bold`}>
                 {emp.creneau}
+              </span>
+              <span className={`${nameSize} text-gray-600 text-center leading-tight font-medium`}>
+                {emp.employee?.prenom} {emp.employee?.nom}
               </span>
             </motion.div>
           ))}
@@ -181,8 +221,8 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
 
         {/* Indicator si aucun employé */}
         {employees.length === 0 && (
-          <div className="flex items-center justify-center h-24 text-gray-400">
-            <span className="text-sm italic">Aucun employé assigné</span>
+          <div className={`flex items-center justify-center ${minHeight.replace('min-h-', 'h-')} text-gray-400`}>
+            <span className={superTvMode ? 'text-lg italic' : 'text-sm italic'}>Aucun employé assigné</span>
           </div>
         )}
       </motion.div>
@@ -236,49 +276,106 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
                 </div>
               )}
 
-              {/* Si pas en mode TV, afficher les boutons */}
-              {!tvMode && (
-                <>
-                <button
-                  onClick={() => setAutoMode(!autoMode)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                    autoMode 
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {autoMode ? (
-                    <><PauseIcon className="w-4 h-4" /><span>Mode Auto</span></>
-                  ) : (
-                    <><PlayIcon className="w-4 h-4" /><span>Mode Manuel</span></>
-                  )}
-                </button>
+              {/* Contrôles Mode TV */}
+              {tvMode ? (
+                <div className="flex items-center space-x-3">
+                  {/* Pause/Play */}
+                  <button
+                    onClick={() => setAutoMode(!autoMode)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-bold text-lg transition-colors ${
+                      autoMode 
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200' 
+                        : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    }`}
+                  >
+                    {autoMode ? (
+                      <><PauseIcon className="w-6 h-6" /><span>PAUSE</span></>
+                    ) : (
+                      <><PlayIcon className="w-6 h-6" /><span>PLAY</span></>
+                    )}
+                  </button>
 
-                {/* Navigation manuelle */}
-                {!autoMode && (
+                  {/* Navigation sessions */}
                   <div className="flex space-x-2">
                     <button
                       onClick={() => setCurrentSession('matin')}
-                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-lg font-bold text-lg transition-colors ${
                         currentSession === 'matin'
-                          ? 'bg-yellow-100 text-yellow-700'
+                          ? 'bg-yellow-200 text-yellow-800 shadow-lg'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      <SunIcon className="w-4 h-4" />
+                      <SunIcon className="w-6 h-6" />
                     </button>
                     <button
                       onClick={() => setCurrentSession('apres-midi')}
-                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-lg font-bold text-lg transition-colors ${
                         currentSession === 'apres-midi'
-                          ? 'bg-blue-100 text-blue-700'
+                          ? 'bg-blue-200 text-blue-800 shadow-lg'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      <MoonIcon className="w-4 h-4" />
+                      <MoonIcon className="w-6 h-6" />
                     </button>
                   </div>
-                )}
+                </div>
+              ) : (
+                /* Contrôles Mode Normal */
+                <>
+                  {/* Toggle Super TV Mode - seulement en mode normal */}
+                  <button
+                    onClick={() => setSuperTvMode(!superTvMode)}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg font-medium transition-colors ${
+                      superTvMode 
+                        ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                    title={superTvMode ? 'Mode normal' : 'Mode Super TV (photos géantes)'}
+                  >
+                    <span className="text-lg">📺</span>
+                    <span className="text-sm">{superTvMode ? 'Grande' : 'Normale'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setAutoMode(!autoMode)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                      autoMode 
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {autoMode ? (
+                      <><PauseIcon className="w-4 h-4" /><span>Mode Auto</span></>
+                    ) : (
+                      <><PlayIcon className="w-4 h-4" /><span>Mode Manuel</span></>
+                    )}
+                  </button>
+
+                  {/* Navigation manuelle */}
+                  {!autoMode && (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setCurrentSession('matin')}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                          currentSession === 'matin'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <SunIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setCurrentSession('apres-midi')}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                          currentSession === 'apres-midi'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <MoonIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -295,7 +392,11 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.4 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            className={`grid gap-6 ${
+              tvMode || superTvMode 
+                ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4' 
+                : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+            }`}
           >
             {config.postes.map(posteName => renderPoste(posteName))}
           </motion.div>
@@ -310,9 +411,26 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
               <span>
                 Sessions {currentSession === 'matin' ? 'Matin' : 'Après-midi'}: {config.sessions.join(', ')}
               </span>
-              <span>
-                {employeesCuisine.length} employés • {config.postes.length} postes actifs
-              </span>
+              <div className="flex items-center space-x-4">
+                <span>
+                  {employeesCuisine.length} employés • {config.postes.length} postes actifs
+                </span>
+                {tvMode ? (
+                  <div className="flex items-center space-x-4 text-xs bg-gray-100 px-3 py-1 rounded">
+                    <span>
+                      <kbd className="font-mono font-bold">ESPACE</kbd> pause
+                    </span>
+                    <span>
+                      <kbd className="font-mono font-bold">←→</kbd> sessions
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                    <kbd className="font-mono font-bold">T</kbd> pour {superTvMode ? 'réduire' : 'agrandir'} • 
+                    <kbd className="font-mono font-bold">ESPACE</kbd> pause
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>

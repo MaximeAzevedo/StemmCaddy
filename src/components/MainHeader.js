@@ -1,11 +1,11 @@
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { HomeIcon } from '@heroicons/react/24/outline';
 
 const MainHeader = () => {
   const location = useLocation();
   const isCuisine = location.pathname.startsWith('/cuisine');
   const isLogistique = location.pathname.startsWith('/logistique');
+  const isSecretariat = location.pathname.startsWith('/secretariat');
   const navigate = useNavigate();
 
   const linkClass = (active) =>
@@ -19,12 +19,15 @@ const MainHeader = () => {
     <header className="bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         {/* Logo */}
-        <div className="flex items-center space-x-2">
+        <button 
+          onClick={() => navigate('/')}
+          className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold">C</span>
           </div>
           <span className="text-lg font-bold text-gray-800 select-none">Caddy</span>
-        </div>
+        </button>
 
         {/* Services */}
         <nav className="flex items-center space-x-2">
@@ -34,13 +37,9 @@ const MainHeader = () => {
           <NavLink to="/cuisine" className={({ isActive }) => linkClass(isCuisine && isActive)}>
             Cuisine
           </NavLink>
-          <button
-            onClick={() => navigate('/')}
-            className="ml-4 p-2 rounded-lg hover:bg-gray-100 text-gray-600"
-            title="Accueil"
-          >
-            <HomeIcon className="w-5 h-5" />
-          </button>
+          <NavLink to="/secretariat" className={({ isActive }) => linkClass(isSecretariat && isActive)}>
+            Secrétariat
+          </NavLink>
         </nav>
       </div>
     </header>

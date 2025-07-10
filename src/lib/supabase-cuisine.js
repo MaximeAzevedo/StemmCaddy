@@ -285,6 +285,21 @@ export const supabaseCuisine = {
     }
   },
 
+  async getPlanningCuisineRange(startDate, endDate) {
+    try {
+      const { data, error } = await supabase
+        .from('planning_cuisine')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate);
+
+      return { data, error };
+    } catch (error) {
+      console.error('Erreur getPlanningCuisineRange:', error);
+      return { data: null, error };
+    }
+  },
+
   async createPlanningCuisine(planningData) {
     try {
       const { data, error } = await supabase
@@ -539,6 +554,21 @@ export const supabaseCuisine = {
     }
   },
 
+  async getAbsencesCuisineRange(startDate, endDate) {
+    try {
+      const { data, error } = await supabase
+        .from('absences_cuisine')
+        .select('*')
+        .gte('date_debut', startDate)
+        .lte('date_fin', endDate);
+
+      return { data, error };
+    } catch (error) {
+      console.error('Erreur getAbsencesCuisineRange:', error);
+      return { data: null, error };
+    }
+  },
+
   async createAbsenceCuisine(absenceData) {
     try {
       console.log('➕ Création absence cuisine:', absenceData);
@@ -581,6 +611,21 @@ export const supabaseCuisine = {
     }
   },
 
+  async updateAbsenceCuisineRange(startDate, endDate, updates) {
+    try {
+      const { data, error } = await supabase
+        .from('absences_cuisine')
+        .update(updates)
+        .gte('date_debut', startDate)
+        .lte('date_fin', endDate);
+
+      return { data, error };
+    } catch (err) {
+      console.error('Erreur updateAbsenceCuisineRange:', err);
+      return { data: null, error: err };
+    }
+  },
+
   async deleteAbsenceCuisine(id) {
     try {
       const { data, error } = await supabase
@@ -591,6 +636,21 @@ export const supabaseCuisine = {
       return { data, error };
     } catch (err) {
       console.error('Erreur deleteAbsenceCuisine:', err);
+      return { data: null, error: err };
+    }
+  },
+
+  async deleteAbsenceCuisineRange(startDate, endDate) {
+    try {
+      const { data, error } = await supabase
+        .from('absences_cuisine')
+        .delete()
+        .gte('date_debut', startDate)
+        .lte('date_fin', endDate);
+
+      return { data, error };
+    } catch (err) {
+      console.error('Erreur deleteAbsenceCuisineRange:', err);
       return { data: null, error: err };
     }
   },

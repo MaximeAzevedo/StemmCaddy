@@ -43,16 +43,16 @@ const AbsenceManagement = ({ user, onLogout }) => {
       setLoading(true);
       setDataError(null);
       
-      // Charger employés et absences en parallèle avec les bonnes fonctions API
+      // Charger employés de LOGISTIQUE UNIQUEMENT et absences en parallèle
       const [employeesResult, absencesResult] = await Promise.all([
-        supabaseAPI.getEmployees(),
+        supabaseAPI.getEmployeesLogistique(), // ✅ Correction : utiliser getEmployeesLogistique()
         supabaseAPI.getAbsences()
       ]);
 
       // Vérifier les erreurs spécifiques
       if (employeesResult.error) {
-        console.error('Erreur employés:', employeesResult.error);
-        throw new Error(`Erreur lors du chargement des employés: ${employeesResult.error.message}`);
+        console.error('Erreur employés logistique:', employeesResult.error);
+        throw new Error(`Erreur lors du chargement des employés de logistique: ${employeesResult.error.message}`);
       }
       
       if (absencesResult.error) {
@@ -72,7 +72,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
       setEmployees(employeesResult.data || []);
       
       // Log pour debug
-      console.log('Employés chargés:', employeesResult.data?.length || 0);
+      console.log('Employés de logistique chargés:', employeesResult.data?.length || 0);
       console.log('Absences chargées:', absencesResult.data?.length || 0);
 
     } catch (error) {
@@ -80,7 +80,7 @@ const AbsenceManagement = ({ user, onLogout }) => {
       setDataError(error.message);
       toast.error(`Erreur: ${error.message}`);
       
-      // Données de démonstration en cas d'erreur
+      // Données de démonstration LOGISTIQUE SEULEMENT en cas d'erreur
       setEmployees([
         { id: 1, nom: 'Martial', profil: 'Fort' },
         { id: 2, nom: 'Margot', profil: 'Moyen' },

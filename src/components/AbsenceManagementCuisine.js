@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, parseISO, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
+import CuisineAIAssistant from './CuisineAIAssistant';
 
 const AbsenceManagementCuisine = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -636,6 +637,9 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Assistant IA spécialisé Cuisine */}
+      <CuisineAIAssistant onDataRefresh={loadData} />
     </div>
   );
 };

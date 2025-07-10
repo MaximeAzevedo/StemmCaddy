@@ -2,23 +2,21 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
-  PlusIcon,
   UserGroupIcon,
   ClockIcon,
-  ChartBarIcon,
-  Cog6ToothIcon,
   PhotoIcon,
   CalendarDaysIcon
 } from '@heroicons/react/24/outline';
-import { ArrowLeft, Edit, Save, Star } from 'lucide-react';
+import { ArrowLeft, Edit, Save } from 'lucide-react';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
 import { supabaseAPI } from '../lib/supabase';
 import CuisinePlanningInteractive from './CuisinePlanningInteractive';
 import AbsenceManagementCuisine from './AbsenceManagementCuisine';
+import CuisineAIAssistant from './CuisineAIAssistant';
 
-const CuisineManagement = ({ user, onLogout }) => {
+const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   const fileInputRef = useRef(null);
-  const [activeTab, setActiveTab] = useState('planning');
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -37,9 +35,8 @@ const CuisineManagement = ({ user, onLogout }) => {
   const [editedEmployeeCuisine, setEditedEmployeeCuisine] = useState(null);
   const [availableLanguages] = useState(['Français', 'Arabe', 'Anglais', 'Tigrinya', 'Perse', 'Turc', 'Yougoslave', 'Allemand', 'Créole', 'Luxembourgeois']);
   const [availableProfiles] = useState(['Faible', 'Moyen', 'Fort']);
-  const [availableNiveauHygiene] = useState(['Base', 'Renforcé', 'Expert']);
-  const [availableNiveauCompetence] = useState(['Débutant', 'Confirmé', 'Expert']);
 
+  // Définition de loadAllData AVANT le useEffect
   const loadAllData = useCallback(async () => {
     try {
       setLoading(true);
@@ -74,39 +71,13 @@ const CuisineManagement = ({ user, onLogout }) => {
     }
   }, []);
 
-  /* ====== Utilitaires fiche employé ====== */
-  const getProfileColor = (profil) => {
-    switch (profil) {
-      case 'Faible': return 'bg-red-50 border-red-200 text-red-700';
-      case 'Moyen': return 'bg-yellow-50 border-yellow-200 text-yellow-700';
-      case 'Fort': return 'bg-green-50 border-green-200 text-green-700';
-      default: return 'bg-gray-50 border-gray-200 text-gray-700';
-    }
-  };
-
-  const renderStars = (niveau) => {
-    // Niveau: Débutant (1), Confirmé (2), Expert (3)
-    const mapping = { 'Débutant': 1, 'Confirmé': 2, 'Expert': 3 };
-    const count = mapping[niveau] || 0;
-    const stars = [];
-    for (let i = 0; i < 3; i++) {
-      if (i < count) {
-        stars.push(<Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />);
-      } else {
-        stars.push(<Star key={i} className="w-4 h-4 text-gray-300" />);
-      }
-    }
-    return stars;
-  };
-
-  const getEmployeeCompetence = (employeeId, posteId) => {
-    const comps = competencesMap[employeeId] || [];
-    const comp = comps.find(c => c.poste_id === posteId);
-    return comp || null;
-  };
-
+  // Chargement initial
   useEffect(() => {
-    // Quand on sélectionne un employé, initialiser l'état d'édition
+    loadAllData();
+  }, [loadAllData]);
+
+  // NOUVEAU: Initialiser les données d'édition quand on sélectionne un employé
+  useEffect(() => {
     if (selectedEmployee) {
       setEditedEmployee({ ...selectedEmployee });
       // Trouver l'employé cuisine correspondant
@@ -117,19 +88,38 @@ const CuisineManagement = ({ user, onLogout }) => {
     }
   }, [selectedEmployee, employeesCuisine]);
 
+  /* ====== Utilitaires fiche employé ====== */
+  const getProfileColor = (profil) => {
+    switch (profil) {
+      case 'Faible': return 'bg-red-50 border-red-200 text-red-700';
+      case 'Moyen': return 'bg-yellow-50 border-yellow-200 text-yellow-700';
+      case 'Fort': return 'bg-green-50 border-green-200 text-green-700';
+      default: return 'bg-gray-50 border-gray-200 text-gray-700';
+    }
+  };
+
+  const getEmployeeCompetence = (employeeId, posteId) => {
+    const comps = competencesMap[employeeId] || [];
+    const comp = comps.find(c => c.poste_id === posteId);
+    return comp || null;
+  };
+
+  // useEffect(() => {
+  //   // Quand on sélectionne un employé, initialiser l'état d'édition
+  //   if (selectedEmployee) {
+  //     setEditedEmployee({ ...selectedEmployee });
+  //     // Trouver l'employé cuisine correspondant
+  //     const empCuisine = employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id);
+  //     if (empCuisine) {
+  //       setEditedEmployeeCuisine({ ...empCuisine });
+  //     }
+  //   }
+  // }, [selectedEmployee, employeesCuisine]);
+
   // ===== Fonctions d'édition =====
   const handleEmployeeChange = (field, value) => {
     if (editedEmployee) {
       setEditedEmployee(prev => ({
-        ...prev,
-        [field]: value
-      }));
-    }
-  };
-
-  const handleEmployeeCuisineChange = (field, value) => {
-    if (editedEmployeeCuisine) {
-      setEditedEmployeeCuisine(prev => ({
         ...prev,
         [field]: value
       }));
@@ -150,35 +140,37 @@ const CuisineManagement = ({ user, onLogout }) => {
     }
   };
 
-  const updateCompetencePoste = async (employeeId, posteId, niveau) => {
+  const updateCompetencePoste = async (employeeId, posteId, isFormé) => {
     try {
       // Trouver la compétence existante
       const currentCompetences = competencesMap[employeeId] || [];
       const existingCompetence = currentCompetences.find(c => c.poste_id === posteId);
 
-      if (niveau === null || niveau === 'Aucun') {
+      if (!isFormé) {
         // Supprimer la compétence
         if (existingCompetence) {
           const result = await supabaseCuisine.deleteCompetenceCuisine(existingCompetence.id);
           if (result.error) {
-            console.warn('⚠️ Erreur suppression compétence:', result.error);
-            toast.warning('Compétence mise à jour localement (problème sauvegarde)');
+            console.warn('⚠️ Erreur suppression compétence (base de données):', result.error);
+            // Ne pas afficher d'erreur si la mise à jour locale fonctionne
           } else {
-            toast.success('Compétence supprimée avec succès !');
+            console.log('✅ Compétence supprimée en base de données');
           }
         }
         
-        // Mise à jour locale
+        // Mise à jour locale (toujours effectuée)
         setCompetencesMap(prev => ({
           ...prev,
           [employeeId]: currentCompetences.filter(c => c.poste_id !== posteId)
         }));
+        
+        toast.success('Compétence supprimée');
       } else {
         // Créer ou mettre à jour la compétence
         const competenceData = {
           employee_id: employeeId,
           poste_id: posteId,
-          niveau: niveau,
+          niveau: 'Formé',
           date_validation: new Date().toISOString().split('T')[0],
           formateur_id: user.id || 1 // Utilisateur actuel comme formateur
         };
@@ -191,13 +183,13 @@ const CuisineManagement = ({ user, onLogout }) => {
         }
 
         if (result.error) {
-          console.warn('⚠️ Erreur sauvegarde compétence:', result.error);
-          toast.warning('Compétence mise à jour localement (problème sauvegarde)');
+          console.warn('⚠️ Erreur sauvegarde compétence (base de données):', result.error);
+          // Ne pas afficher d'erreur si la mise à jour locale fonctionne
         } else {
-          toast.success('Compétence mise à jour avec succès !');
+          console.log('✅ Compétence sauvegardée en base de données');
         }
 
-        // Mise à jour locale
+        // Mise à jour locale (toujours effectuée)
         setCompetencesMap(prev => {
           const newMap = { ...prev };
           const updatedCompetence = {
@@ -218,10 +210,13 @@ const CuisineManagement = ({ user, onLogout }) => {
 
           return newMap;
         });
+        
+        toast.success('Employé formé sur ce poste');
       }
     } catch (error) {
       console.error('❌ Erreur updateCompetencePoste:', error);
-      toast.error('Erreur lors de la mise à jour de la compétence');
+      // Seulement afficher une erreur si quelque chose de vraiment grave s'est passé
+      toast.error('Erreur technique - contactez l\'administrateur');
     }
   };
 
@@ -229,84 +224,135 @@ const CuisineManagement = ({ user, onLogout }) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Vérifier le type de fichier
-    if (!file.type.startsWith('image/')) {
-      toast.error('Veuillez sélectionner un fichier image');
+    console.log('📸 Début sélection photo:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      maxSize: 5 * 1024 * 1024
+    });
+
+    // Types de fichiers acceptés
+    const acceptedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!acceptedTypes.includes(file.type.toLowerCase())) {
+      toast.error('Format non supporté. Utilisez JPG, PNG, GIF ou WebP');
       return;
     }
 
-    // Vérifier la taille du fichier (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('La taille de l\'image ne doit pas dépasser 5MB');
+    // Vérifier la taille du fichier (max 10MB au lieu de 5MB)
+    const maxSizeBytes = 10 * 1024 * 1024; // 10MB au lieu de 5MB
+    const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+    const maxSizeMB = (maxSizeBytes / 1024 / 1024).toFixed(2);
+    
+    console.log('🔍 Validation taille:', {
+      'Taille fichier (bytes)': file.size,
+      'Taille fichier (MB)': fileSizeMB,
+      'Limite max (bytes)': maxSizeBytes,
+      'Limite max (MB)': maxSizeMB,
+      'Valide': file.size <= maxSizeBytes
+    });
+    
+    if (file.size > maxSizeBytes) {
+      const errorMsg = `Fichier trop volumineux: ${fileSizeMB}MB > ${maxSizeMB}MB autorisés`;
+      console.error('❌ Validation taille échouée:', errorMsg);
+      toast.error(errorMsg);
       return;
     }
 
     try {
       setPhotoUploading(true);
       
-      // Convertir l'image en base64 pour stockage local
+      // Recadrage automatique simple et rapide
       const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64Photo = e.target.result;
-        
-        try {
-          // Mettre à jour l'employé édité avec la nouvelle photo
-          if (editedEmployeeCuisine) {
-            setEditedEmployeeCuisine(prev => ({
-              ...prev,
-              photo_url: base64Photo
-            }));
-          }
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Canvas pour recadrage automatique centré
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
           
-          // Si on n'est pas en mode édition, sauvegarder immédiatement
-          if (!editMode && selectedEmployee) {
-            try {
-              const result = await supabaseCuisine.updateEmployeeCuisine(selectedEmployee.id, {
-                photo_url: base64Photo
-              });
-              
-              if (!result.error) {
-                console.log('✅ Photo cuisine sauvegardée en base:', result.data);
-                toast.success('Photo mise à jour avec succès !');
-              } else {
-                console.warn('⚠️ Erreur Supabase photo cuisine:', result.error);
-                toast.success('Photo mise à jour localement (sauvegarde en cours...)');
-              }
-            } catch (dbError) {
-              console.warn('⚠️ Base de données non accessible pour photo cuisine:', dbError);
-              toast.success('Photo mise à jour localement (sauvegarde en cours...)');
-            }
-            
-            // Mettre à jour l'état local
-            setEmployeesCuisine(prev => 
-              prev.map(empCuisine => 
-                empCuisine.employee.id === selectedEmployee.id 
-                  ? { ...empCuisine, photo_url: base64Photo }
-                  : empCuisine
-              )
-            );
-          } else {
-            toast.success('Photo sélectionnée ! N\'oubliez pas de sauvegarder.');
-          }
+          // Taille finale fixe
+          canvas.width = 200;
+          canvas.height = 200;
           
-        } catch (error) {
-          console.error('❌ Erreur traitement photo cuisine:', error);
-          toast.error('Erreur lors du traitement de la photo');
-        } finally {
-          setPhotoUploading(false);
-        }
+          // Calculer le recadrage centré
+          const minDimension = Math.min(img.width, img.height);
+          const cropX = (img.width - minDimension) / 2;
+          const cropY = (img.height - minDimension) / 2;
+          
+          // Dessiner l'image recadrée
+          ctx.drawImage(
+            img,
+            cropX, cropY, minDimension, minDimension,
+            0, 0, 200, 200
+          );
+          
+          // Convertir en base64
+          const croppedBase64 = canvas.toDataURL('image/png', 0.9);
+          
+          // Sauvegarder directement
+          saveEditedPhoto(croppedBase64);
+        };
+        img.src = e.target.result;
       };
-      
-      reader.onerror = () => {
-        toast.error('Erreur lors de la lecture du fichier');
-        setPhotoUploading(false);
-      };
-      
       reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('❌ Erreur traitement photo:', error);
+      toast.error('Erreur lors du traitement de la photo');
+      setPhotoUploading(false);
+    }
+  };
+
+  // Fonction pour sauvegarder la photo éditée
+  const saveEditedPhoto = async (base64Photo) => {
+    try {
+      setPhotoUploading(true);
+      console.log('💾 Sauvegarde photo éditée...');
+      
+      // Mettre à jour l'employé édité avec la nouvelle photo
+      if (editedEmployeeCuisine) {
+        setEditedEmployeeCuisine(prev => ({
+          ...prev,
+          photo_url: base64Photo
+        }));
+      }
+      
+      // Si on n'est pas en mode édition, sauvegarder immédiatement
+      if (!editMode && selectedEmployee) {
+        try {
+          const result = await supabaseCuisine.updateEmployeeCuisine(selectedEmployee.id, {
+            photo_url: base64Photo
+          });
+          
+          if (!result.error) {
+            console.log('✅ Photo cuisine sauvegardée en base');
+            toast.success('Photo mise à jour avec succès !');
+          } else {
+            console.warn('⚠️ Erreur Supabase photo cuisine:', result.error);
+            toast.success('Photo mise à jour localement');
+          }
+        } catch (dbError) {
+          console.warn('⚠️ Base de données non accessible pour photo cuisine:', dbError);
+          toast.success('Photo mise à jour localement');
+        }
+        
+        // Mettre à jour l'état local
+        setEmployeesCuisine(prev => 
+          prev.map(empCuisine => 
+            empCuisine.employee.id === selectedEmployee.id 
+              ? { ...empCuisine, photo_url: base64Photo }
+              : empCuisine
+          )
+        );
+      } else {
+        toast.success('Photo éditée ! N\'oubliez pas de sauvegarder.');
+      }
+      
+      // Fermer l'éditeur
       
     } catch (error) {
-      console.error('❌ Erreur upload photo cuisine:', error);
-      toast.error('Erreur lors de l\'upload de la photo');
+      console.error('❌ Erreur sauvegarde photo éditée:', error);
+      toast.error('Erreur lors de la sauvegarde');
+    } finally {
       setPhotoUploading(false);
     }
   };
@@ -332,16 +378,15 @@ const CuisineManagement = ({ user, onLogout }) => {
         langues: editedEmployee.langues || []
       });
 
-      // Sauvegarder les informations spécifiques cuisine (y compris la photo)
+      // Sauvegarder les informations spécifiques cuisine (photo uniquement)
       const cuisineResult = await supabaseCuisine.updateEmployeeCuisine(editedEmployee.id, {
-        niveau_hygiene: editedEmployeeCuisine.niveau_hygiene,
         service: editedEmployeeCuisine.service,
         photo_url: editedEmployeeCuisine.photo_url
       });
 
       if (employeeResult.error || cuisineResult.error) {
         console.warn('⚠️ Erreurs sauvegarde:', { employeeResult, cuisineResult });
-        toast.warning('Employé mis à jour localement (problème sauvegarde)');
+        toast.error('Employé mis à jour localement (problème sauvegarde)');
       } else {
         toast.success('Employé sauvegardé avec succès !');
       }
@@ -373,11 +418,6 @@ const CuisineManagement = ({ user, onLogout }) => {
     }
     setEditMode(false);
   };
-
-  // Chargement initial
-  useEffect(() => {
-    loadAllData();
-  }, [loadAllData]);
 
   if (loading) {
     return (
@@ -411,45 +451,6 @@ const CuisineManagement = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">🍽️</span>
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900">Gestion Cuisine</h1>
-              </div>
-              <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
-                <UserGroupIcon className="w-4 h-4" />
-                <span>{employeesCuisine.length} employés</span>
-                <span className="text-gray-400">•</span>
-                <ChartBarIcon className="w-4 h-4" />
-                <span>{postes.length} postes</span>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <span>Connecté : {user?.email}</span>
-              </div>
-              <button
-                onClick={onLogout}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              >
-                Déconnexion
-              </button>
-              <button
-                onClick={() => window.open('/cuisine/tv','_blank')}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >Mode TV</button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Tabs Navigation */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -457,9 +458,7 @@ const CuisineManagement = ({ user, onLogout }) => {
             {[
               { id: 'planning', name: 'Planning', icon: ClockIcon },
               { id: 'employees', name: 'Employés', icon: UserGroupIcon },
-              { id: 'competences', name: 'Compétences', icon: ChartBarIcon },
-              { id: 'absences', name: 'Absences', icon: CalendarDaysIcon },
-              { id: 'postes', name: 'Postes', icon: Cog6ToothIcon }
+              { id: 'absences', name: 'Absences', icon: CalendarDaysIcon }
             ].map((tab) => {
               const Icon = tab.icon;
               return (
@@ -499,97 +498,191 @@ const CuisineManagement = ({ user, onLogout }) => {
           {activeTab === 'employees' && (
             <motion.div
               key="employees"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {/* Composant employés cuisine au lieu d'EmployeeManagement */}
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-3xl font-bold text-gray-900">Gestion des Employés Cuisine</h1>
+                  <div className="text-sm text-gray-500">
+                    👨‍🍳 {employeesCuisine.length} employés cuisine
+                  </div>
+                </div>
+
+                {/* Statistiques */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
+                    <div className="text-3xl font-bold text-blue-600">{employeesCuisine.length}</div>
+                    <div className="text-sm text-gray-600">Total employés cuisine</div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
+                    <div className="text-3xl font-bold text-green-600">
+                      {employeesCuisine.filter(ec => ec.employee.profil === 'Fort').length}
+                    </div>
+                    <div className="text-sm text-gray-600">Profils forts</div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
+                    <div className="text-3xl font-bold text-yellow-600">
+                      {employeesCuisine.filter(ec => ec.employee.profil === 'Moyen').length}
+                    </div>
+                    <div className="text-sm text-gray-600">Profils moyens</div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
+                    <div className="text-3xl font-bold text-red-600">
+                      {employeesCuisine.filter(ec => ec.employee.profil === 'Faible').length}
+                    </div>
+                    <div className="text-sm text-gray-600">Profils faibles</div>
+                  </div>
+                </div>
+
+                {/* Grille des employés cuisine */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <AnimatePresence>
+                    {employeesCuisine.map(employeeCuisine => {
+                      const employee = employeeCuisine.employee;
+                      const competences = competencesMap[employee.id] || [];
+                      
+                      return (
+                        <motion.div
+                          key={employee.id}
+                          layout
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          className="bg-white rounded-lg shadow-md border border-gray-200 p-6 cursor-pointer hover:shadow-lg transition-shadow"
+                          onClick={() => setSelectedEmployee(employee)}
+                        >
+                          {/* Photo et infos principales */}
+                          <div className="flex items-start space-x-4 mb-4">
+                            <div className="w-16 h-16 bg-gradient-to-r from-orange-100 to-red-100 rounded-full flex items-center justify-center overflow-hidden">
+                              {employeeCuisine.photo_url ? (
+                                <img 
+                                  src={employeeCuisine.photo_url} 
+                                  alt={employee.nom} 
+                                  className="w-16 h-16 rounded-full object-cover" 
+                                />
+                              ) : (
+                                <span className="text-2xl font-bold text-orange-600">
+                                  {employee.prenom?.[0]}{employee.nom?.[0]}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {employee.prenom} {employee.nom}
+                              </h3>
+                              <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${getProfileColor(employee.profil)}`}>
+                                {employee.profil}
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1">
+                                🍳 Service: {employeeCuisine.service}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Langues */}
+                          <div className="mb-4">
+                            <div className="text-sm text-gray-700 mb-2">🗣️ Langues:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {(employee.langues || []).slice(0, 3).map((langue, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                                  {langue}
+                                </span>
+                              ))}
+                              {(employee.langues || []).length > 3 && (
+                                <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                                  +{(employee.langues || []).length - 3}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Compétences */}
+                          <div className="mb-4">
+                            <div className="text-sm text-gray-700 mb-2">⚡ Compétences:</div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex space-x-1">
+                                {postes.slice(0, 4).map(poste => {
+                                  const hasCompetence = competences.some(c => c.poste_id === poste.id);
+                                  return (
+                                    <div
+                                      key={poste.id}
+                                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                                        hasCompetence 
+                                          ? 'bg-green-100 text-green-700 border border-green-300' 
+                                          : 'bg-gray-100 text-gray-400'
+                                      }`}
+                                      title={poste.nom}
+                                    >
+                                      {poste.icone}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <span className="text-xs text-gray-500 font-medium">
+                                {competences.length}/{postes.length}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Barre de progression */}
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-orange-500 h-2 rounded-full transition-all duration-300" 
+                              style={{ 
+                                width: `${(competences.length / postes.length) * 100}%` 
+                              }}
+                            ></div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
+
+                {employeesCuisine.length === 0 && (
+                  <div className="text-center py-12">
+                    <UserGroupIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun employé cuisine</h3>
+                    <p className="text-gray-500">Les employés cuisine apparaîtront ici une fois ajoutés.</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Autres onglets à développer */}
+          {activeTab === 'absences' && (
+            <motion.div
+              key="absences"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">Employés Cuisine</h2>
-                <button
-                  onClick={() => toast.info('Fonctionnalité en développement')}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  <span>Ajouter employé</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {employeesCuisine.map(employeeCuisine => {
-                  const employee = employeeCuisine.employee;
-                  return (
-                    <div key={employee.id} className="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg transition"
-                      onClick={() => setSelectedEmployee(employee)}
-                    >
-                      <div className="flex items-center space-x-4 mb-4">
-                        <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center relative overflow-hidden">
-                          {employeeCuisine.photo_url ? (
-                            <img 
-                              src={employeeCuisine.photo_url} 
-                              alt={employee.nom}
-                              className="w-12 h-12 rounded-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-lg font-bold text-orange-600">
-                              {employee.nom?.charAt(0) || '?'}
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {employee.nom} {employee.prenom}
-                          </h3>
-                          <div className="flex items-center space-x-2">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              employee.profil === 'Fort' ? 'bg-green-100 text-green-800' :
-                              employee.profil === 'Moyen' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {employee.profil}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {employee.langues?.join(', ')}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Service:</span>
-                          <span className="text-sm font-medium">{employeeCuisine.service}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Hygiène:</span>
-                          <span className="text-sm font-medium">{employeeCuisine.niveau_hygiene}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Compétences:</span>
-                          <span className="text-sm font-medium">
-                            {employeeCuisine.competences_cuisine?.length || 0} postes
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 text-sm text-right text-orange-600">Clique pour voir la fiche ➜</div>
-                    </div>
-                  );
-                })}
-              </div>
+              <AbsenceManagementCuisine user={user} onLogout={onLogout} />
             </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* ===== Fiche employé cuisine ===== */}
-          {selectedEmployee && (
-            <motion.div
-              key="employee-detail"
-              initial={{ opacity: 0, x: 300 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 300 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-white z-50 overflow-y-auto"
-            >
+        {/* Assistant IA spécialisé Cuisine */}
+        <CuisineAIAssistant onDataRefresh={loadAllData} />
+      </main>
+
+      {/* ===== Fiche employé cuisine (en dehors d'AnimatePresence) ===== */}
+      <AnimatePresence>
+        {selectedEmployee && (
+          <motion.div
+            key="employee-detail"
+            initial={{ opacity: 0, x: 300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 300 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-white z-50 overflow-y-auto"
+          >
               {/* Header */}
               <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-6">
                 <div className="flex items-center justify-between">
@@ -641,7 +734,7 @@ const CuisineManagement = ({ user, onLogout }) => {
 
                       {/* Photo */}
                       <div className="text-center mb-6">
-                        <div className="w-32 h-32 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden">
+                        <div className="w-32 h-32 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden border-4 border-white shadow-lg">
                           {(() => {
                             const currentEmployeeCuisine = editedEmployeeCuisine || employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id);
                             const photoUrl = currentEmployeeCuisine?.photo_url;
@@ -652,7 +745,11 @@ const CuisineManagement = ({ user, onLogout }) => {
                                 <img 
                                   src={photoUrl} 
                                   alt={employeeName} 
-                                  className="w-32 h-32 rounded-full object-cover" 
+                                  className="w-full h-full object-cover rounded-full"
+                                  style={{
+                                    objectPosition: 'center',
+                                    filter: 'brightness(1.05) contrast(1.05)'
+                                  }}
                                 />
                               );
                             } else {
@@ -664,7 +761,7 @@ const CuisineManagement = ({ user, onLogout }) => {
                             }
                           })()}
                           {photoUploading && (
-                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-full">
                               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
                             </div>
                           )}
@@ -679,11 +776,15 @@ const CuisineManagement = ({ user, onLogout }) => {
                         <button 
                           onClick={triggerPhotoUpload}
                           disabled={photoUploading}
-                          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center mx-auto"
+                          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center mx-auto transition-colors"
                         >
                           <PhotoIcon className="w-4 h-4 mr-2" />
                           {photoUploading ? 'Upload en cours...' : 'Changer la photo'}
                         </button>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Formats acceptés : JPG, PNG, GIF, WebP<br />
+                          Transparence préservée • Maximum : 10MB
+                        </p>
                       </div>
 
                       {/* Nom */}
@@ -738,24 +839,6 @@ const CuisineManagement = ({ user, onLogout }) => {
                         )}
                       </div>
 
-                      {/* Niveau Hygiène */}
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Niveau Hygiène</label>
-                        {editMode ? (
-                          <select
-                            value={editedEmployeeCuisine?.niveau_hygiene || 'Base'}
-                            onChange={(e) => handleEmployeeCuisineChange('niveau_hygiene', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                          >
-                            {availableNiveauHygiene.map(niveau => (
-                              <option key={niveau} value={niveau}>{niveau}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="text-sm">{editedEmployeeCuisine?.niveau_hygiene || employeesCuisine.find(ec => ec.employee.id === (editedEmployee?.id || selectedEmployee?.id))?.niveau_hygiene || 'Base'}</p>
-                        )}
-                      </div>
-
                       {/* Langues */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Langues parlées</label>
@@ -797,6 +880,7 @@ const CuisineManagement = ({ user, onLogout }) => {
                       <div className="space-y-6">
                         {postes.map(poste => {
                           const competence = getEmployeeCompetence(selectedEmployee.id, poste.id);
+                          const isFormé = competence !== null;
                           return (
                             <div key={poste.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                               <div className="flex items-center justify-between">
@@ -811,28 +895,25 @@ const CuisineManagement = ({ user, onLogout }) => {
                                 <div className="flex items-center space-x-4">
                                   {editMode ? (
                                     <div className="flex items-center space-x-3">
-                                      <select
-                                        value={competence?.niveau || 'Aucun'}
-                                        onChange={(e) => updateCompetencePoste(selectedEmployee.id, poste.id, e.target.value === 'Aucun' ? null : e.target.value)}
-                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                                      >
-                                        <option value="Aucun">Non formé</option>
-                                        {availableNiveauCompetence.map(niveau => (
-                                          <option key={niveau} value={niveau}>{niveau}</option>
-                                        ))}
-                                      </select>
-                                      
-                                      {/* Affichage visuel des étoiles */}
-                                      <div className="flex items-center space-x-1">
-                                        {renderStars(competence?.niveau || 'Aucun')}
-                                      </div>
+                                      <label className="flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={isFormé}
+                                          onChange={(e) => updateCompetencePoste(selectedEmployee.id, poste.id, e.target.checked)}
+                                          className="mr-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                                        />
+                                        <span className="text-sm font-medium">
+                                          {isFormé ? 'Formé' : 'Non formé'}
+                                        </span>
+                                      </label>
                                     </div>
                                   ) : (
                                     <div className="flex items-center space-x-2">
-                                      {competence ? (
+                                      {isFormé ? (
                                         <>
-                                          <div className="flex items-center space-x-1">{renderStars(competence.niveau)}</div>
-                                          <span className="text-sm text-gray-600">({competence.niveau})</span>
+                                          <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                                            Formé
+                                          </span>
                                           {competence.date_validation && (
                                             <span className="text-xs text-gray-400">
                                               Validé le {new Date(competence.date_validation).toLocaleDateString('fr-FR')}
@@ -840,7 +921,9 @@ const CuisineManagement = ({ user, onLogout }) => {
                                           )}
                                         </>
                                       ) : (
-                                        <span className="text-gray-400 text-sm">Non formé</span>
+                                        <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
+                                          Non formé
+                                        </span>
                                       )}
                                     </div>
                                   )}
@@ -881,41 +964,9 @@ const CuisineManagement = ({ user, onLogout }) => {
               </div>
             </motion.div>
           )}
-
-          {/* Autres onglets à développer */}
-          {(activeTab === 'competences' || activeTab === 'postes') && (
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="text-center py-12"
-            >
-              <div className="text-gray-500">
-                <h3 className="text-lg font-medium mb-2">
-                  {activeTab === 'competences' ? 'Gestion des Compétences' : 'Gestion des Postes'}
-                </h3>
-                <p>Cette section sera développée prochainement...</p>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'absences' && (
-            <motion.div
-              key="absences"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <AbsenceManagementCuisine user={user} onLogout={onLogout} />
-            </motion.div>
-          )}
         </AnimatePresence>
-      </main>
-    </div>
-  );
-};
+      </div>
+    );
+  };
 
-export default CuisineManagement; 
+  export default CuisineManagement; 
