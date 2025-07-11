@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -17,19 +17,30 @@ import {
 import toast from 'react-hot-toast';
 import CuisinePlanningInteractive from './CuisinePlanningInteractive';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { useSafeEmployee, useSafeLoading, useSafeError, useSafeArray, useSafeObject } from '../hooks/useSafeState';
 
 const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   const fileInputRef = useRef(null);
   
   const [activeTab, setActiveTab] = useState(defaultTab);
-  const [employees, setEmployees] = useState([]);
-  const [postesDispobibles, setPostesDisponibles] = useState([]);
-  const [competences, setCompetences] = useState({});
-  const [loading, setLoading] = useState(true);
+  
+  // Hooks sécurisés pour éviter les erreurs null/undefined
+  const { items: employees, setItems: setEmployees } = useSafeArray([]);
+  const { items: postesDispobibles, setItems: setPostesDisponibles } = useSafeArray([]);
+  const { data: competences, setData: setCompetences } = useSafeObject({});
+  const { loading, startLoading, stopLoading } = useSafeLoading(true);
+  const { handleError, clearError } = useSafeError();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterProfile, setFilterProfile] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  
+  // Hook sécurisé pour la gestion des employés sélectionnés
+  const { 
+    employee: selectedEmployee, 
+    selectEmployee, 
+    clearEmployee
+  } = useSafeEmployee();
+  
   const [editMode, setEditMode] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState(null);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -52,15 +63,10 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
     }
   ];
 
-  useEffect(() => {
-    if (activeTab === 'employees') {
-      loadData();
-    }
-  }, [activeTab]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      setLoading(true);
+      startLoading();
+      clearError(); // Nettoyer les erreurs précédentes
       
       const [employeesResult, postesResult, competencesResult] = await Promise.all([
         supabaseCuisine.getEmployeesCuisine(),
@@ -85,16 +91,16 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       setCompetences(competencesMap);
       
       console.log('📊 Données cuisine chargées:', {
-        employés: employeesResult.data?.length,
-        postes: postesResult.data?.length,
+        employés: employeesResult.data?.length || 0,
+        postes: postesResult.data?.length || 0,
         compétences: Object.keys(competencesMap).length
       });
       
     } catch (error) {
       console.error('❌ Erreur chargement données cuisine:', error);
-      toast.error('Erreur lors du chargement des données cuisine');
+      handleError(error, 'Chargement données cuisine');
       
-      // Données fallback pour développement
+      // Données fallback pour développement (sécurisées)
       setEmployees([
         {
           employee_id: 1,
@@ -130,9 +136,15 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
         { id: 7, nom: 'Self Midi' }
       ]);
     } finally {
-      setLoading(false);
+      stopLoading();
     }
-  };
+  }, [startLoading, stopLoading, clearError, handleError, setEmployees, setPostesDisponibles, setCompetences]);
+
+  useEffect(() => {
+    if (activeTab === 'employees') {
+      loadData();
+    }
+  }, [activeTab, loadData]);
 
   useEffect(() => {
     // Quand on sélectionne un employé, initialiser l'état d'édition
@@ -142,26 +154,44 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   }, [selectedEmployee]);
 
   const getEmployeeCompetence = (employeeId, posteId) => {
-    const empCompetences = competences[employeeId] || [];
-    const competence = empCompetences.find(c => c.poste_id === posteId);
-    
-    if (competence) {
-      return {
-        niveau: competence.niveau === 'Expert' ? 2 : 1,
-        valide: true
-      };
-    } else {
-      return { 
-        niveau: 0, 
-        valide: false 
-      };
+    try {
+      if (!employeeId || !posteId) {
+        return { niveau: 0, valide: false };
+      }
+
+      const empCompetences = competences[employeeId] || [];
+      const competence = empCompetences.find(c => c && c.poste_id === posteId);
+      
+      if (competence) {
+        return {
+          niveau: competence.niveau === 'Expert' ? 2 : 1,
+          valide: true
+        };
+      } else {
+        return { 
+          niveau: 0, 
+          valide: false 
+        };
+      }
+    } catch (error) {
+      console.warn('⚠️ Erreur getEmployeeCompetence:', error);
+      return { niveau: 0, valide: false };
     }
   };
 
   const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.employee.nom.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesProfile = !filterProfile || emp.employee.profil === filterProfile;
-    return matchesSearch && matchesProfile;
+    try {
+      if (!emp || !emp.employee || !emp.employee.nom) {
+        return false;
+      }
+      
+      const matchesSearch = emp.employee.nom.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesProfile = !filterProfile || emp.employee.profil === filterProfile;
+      return matchesSearch && matchesProfile;
+    } catch (error) {
+      console.warn('⚠️ Erreur filtrage employé:', error);
+      return false;
+    }
   });
 
   const getProfileColor = (profil) => {
@@ -292,31 +322,61 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   };
 
   const handleEmployeeChange = (field, value) => {
-    if (editedEmployee) {
-      setEditedEmployee(prev => ({
-        ...prev,
-        employee: {
-          ...prev.employee,
-          [field]: value
+    try {
+      if (!editedEmployee || !field) {
+        console.warn('⚠️ Employé ou champ manquant pour modification');
+        return;
+      }
+
+      setEditedEmployee(prev => {
+        if (!prev || !prev.employee) {
+          console.warn('⚠️ Structure employé invalide');
+          return prev;
         }
-      }));
+
+        return {
+          ...prev,
+          employee: {
+            ...prev.employee,
+            [field]: value
+          }
+        };
+      });
+    } catch (error) {
+      console.warn('⚠️ Erreur handleEmployeeChange:', error);
+      handleError(error, `Modification champ ${field}`);
     }
   };
 
   const handleLanguageToggle = (langue) => {
-    if (editedEmployee) {
-      const currentLangues = editedEmployee.employee.langues || [];
+    try {
+      if (!editedEmployee || !langue) {
+        console.warn('⚠️ Employé ou langue manquant');
+        return;
+      }
+
+      const currentLangues = editedEmployee.employee?.langues || [];
       const newLangues = currentLangues.includes(langue)
         ? currentLangues.filter(l => l !== langue)
         : [...currentLangues, langue];
       
-      setEditedEmployee(prev => ({
-        ...prev,
-        employee: {
-          ...prev.employee,
-          langues: newLangues
+      setEditedEmployee(prev => {
+        if (!prev || !prev.employee) {
+          console.warn('⚠️ Structure employé invalide pour langues');
+          return prev;
         }
-      }));
+
+        return {
+          ...prev,
+          employee: {
+            ...prev.employee,
+            langues: newLangues
+          }
+        };
+      });
+    } catch (error) {
+      console.warn('⚠️ Erreur handleLanguageToggle:', error);
+      handleError(error, `Toggle langue ${langue}`);
     }
   };
 
@@ -371,7 +431,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                 emp.employee_id === selectedEmployee.employee_id ? updatedEmployee : emp
               )
             );
-            setSelectedEmployee(updatedEmployee);
+            selectEmployee(updatedEmployee);
           } else {
             toast.success('Photo sélectionnée ! N\'oubliez pas de sauvegarder.');
           }
@@ -440,7 +500,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
         )
       );
       
-      setSelectedEmployee(prev => ({
+      selectEmployee(prev => ({
         ...prev,
         employee: { ...prev.employee, ...employeeData },
         photo_url: employeeData.photo_url
@@ -483,7 +543,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       className="bg-white rounded-xl shadow-lg p-6 cursor-pointer hover:shadow-xl transition-all duration-300 border border-orange-100"
-      onClick={() => setSelectedEmployee(employee)}
+      onClick={() => selectEmployee(employee)}
     >
       <div className="flex items-start space-x-4 mb-4">
         <div className="w-16 h-16 bg-gradient-to-r from-orange-100 to-red-100 rounded-full flex items-center justify-center">
@@ -568,7 +628,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
-              onClick={() => setSelectedEmployee(null)}
+              onClick={clearEmployee}
               className="p-2 hover:bg-white/20 rounded-lg"
             >
               <ArrowLeft className="w-6 h-6" />
