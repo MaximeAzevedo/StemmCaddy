@@ -450,37 +450,61 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Tabs Navigation */}
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <button
+                onClick={() => window.history.back()}
+                className="mr-4 p-2 hover:bg-gray-100 rounded-lg"
+                title="Retour"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <span className="text-2xl mr-3">🍽️</span>
+              <h1 className="text-2xl font-bold text-gray-900">Gestion Cuisine</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-600">{user.name}</span>
+              <button
+                onClick={onLogout}
+                className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                Déconnexion
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-8" aria-label="Tabs">
+          <nav className="flex space-x-8">
             {[
-              { id: 'planning', name: 'Planning', icon: ClockIcon },
+              { id: 'planning', name: 'Planning', icon: CalendarDaysIcon },
               { id: 'employees', name: 'Employés', icon: UserGroupIcon },
-              { id: 'absences', name: 'Absences', icon: CalendarDaysIcon }
-            ].map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`${
-                    activeTab === tab.id
-                      ? 'border-orange-500 text-orange-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{tab.name}</span>
-                </button>
-              );
-            })}
+              { id: 'competences', name: 'Compétences', icon: ClockIcon }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center px-3 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-orange-500 text-orange-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <tab.icon className="w-5 h-5 mr-2" />
+                {tab.name}
+              </button>
+            ))}
           </nav>
         </div>
       </div>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <AnimatePresence mode="wait">
           {activeTab === 'planning' && (
@@ -505,137 +529,105 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
             >
               {/* Composant employés cuisine au lieu d'EmployeeManagement */}
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h1 className="text-3xl font-bold text-gray-900">Gestion des Employés Cuisine</h1>
-                  <div className="text-sm text-gray-500">
-                    👨‍🍳 {employeesCuisine.length} employés cuisine
+                {/* En-tête */}
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Équipe de Cuisine</h2>
+                    <p className="text-gray-600">Gérez les employés cuisine et leurs compétences</p>
                   </div>
                 </div>
 
-                {/* Statistiques */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
-                    <div className="text-3xl font-bold text-blue-600">{employeesCuisine.length}</div>
-                    <div className="text-sm text-gray-600">Total employés cuisine</div>
-                  </div>
-                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
-                    <div className="text-3xl font-bold text-green-600">
-                      {employeesCuisine.filter(ec => ec.employee.profil === 'Fort').length}
-                    </div>
-                    <div className="text-sm text-gray-600">Profils forts</div>
-                  </div>
-                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
-                    <div className="text-3xl font-bold text-yellow-600">
-                      {employeesCuisine.filter(ec => ec.employee.profil === 'Moyen').length}
-                    </div>
-                    <div className="text-sm text-gray-600">Profils moyens</div>
-                  </div>
-                  <div className="bg-white rounded-lg shadow p-6 text-center border border-gray-200">
-                    <div className="text-3xl font-bold text-red-600">
-                      {employeesCuisine.filter(ec => ec.employee.profil === 'Faible').length}
-                    </div>
-                    <div className="text-sm text-gray-600">Profils faibles</div>
-                  </div>
-                </div>
-
-                {/* Grille des employés cuisine */}
+                {/* Cartes employés */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <AnimatePresence>
                     {employeesCuisine.map(employeeCuisine => {
                       const employee = employeeCuisine.employee;
+                      if (!employee) return null;
+
                       const competences = competencesMap[employee.id] || [];
                       
                       return (
                         <motion.div
                           key={employee.id}
-                          layout
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.9 }}
-                          className="bg-white rounded-lg shadow-md border border-gray-200 p-6 cursor-pointer hover:shadow-lg transition-shadow"
+                          className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
                           onClick={() => setSelectedEmployee(employee)}
                         >
-                          {/* Photo et infos principales */}
-                          <div className="flex items-start space-x-4 mb-4">
-                            <div className="w-16 h-16 bg-gradient-to-r from-orange-100 to-red-100 rounded-full flex items-center justify-center overflow-hidden">
-                              {employeeCuisine.photo_url ? (
-                                <img 
-                                  src={employeeCuisine.photo_url} 
-                                  alt={employee.nom} 
-                                  className="w-16 h-16 rounded-full object-cover" 
-                                />
-                              ) : (
-                                <span className="text-2xl font-bold text-orange-600">
-                                  {employee.prenom?.[0]}{employee.nom?.[0]}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="text-lg font-semibold text-gray-900">
-                                {employee.prenom} {employee.nom}
-                              </h3>
-                              <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${getProfileColor(employee.profil)}`}>
-                                {employee.profil}
+                          {/* Photo et infos de base */}
+                          <div className="p-6">
+                            <div className="flex items-center space-x-4 mb-4">
+                              <div className="w-16 h-16 bg-gradient-to-r from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
+                                {employee.photo_url ? (
+                                  <img 
+                                    src={employee.photo_url} 
+                                    alt={employee.nom}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  `${employee.nom?.charAt(0) || '?'}${employee.prenom?.charAt(0) || ''}`
+                                )}
                               </div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                🍳 Service: {employeeCuisine.service}
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  {employee.nom} {employee.prenom}
+                                </h3>
+                                <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getProfileColor(employee.profil)}`}>
+                                  {employee.profil}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Langues */}
-                          <div className="mb-4">
-                            <div className="text-sm text-gray-700 mb-2">🗣️ Langues:</div>
-                            <div className="flex flex-wrap gap-1">
-                              {(employee.langues || []).slice(0, 3).map((langue, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                                  {langue}
-                                </span>
-                              ))}
-                              {(employee.langues || []).length > 3 && (
-                                <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                                  +{(employee.langues || []).length - 3}
-                                </span>
-                              )}
+                            {/* Langues */}
+                            <div className="mb-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Langues</p>
+                              <div className="flex flex-wrap gap-1">
+                                {(employee.langues || []).slice(0, 3).map((langue, idx) => (
+                                  <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs">
+                                    {langue}
+                                  </span>
+                                ))}
+                                {(employee.langues || []).length > 3 && (
+                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs">
+                                    +{(employee.langues || []).length - 3}
+                                  </span>
+                                )}
+                                {!(employee.langues || []).length && (
+                                  <span className="text-xs text-gray-400 italic">Aucune langue</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Compétences */}
-                          <div className="mb-4">
-                            <div className="text-sm text-gray-700 mb-2">⚡ Compétences:</div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex space-x-1">
-                                {postes.slice(0, 4).map(poste => {
-                                  const hasCompetence = competences.some(c => c.poste_id === poste.id);
+                            {/* Compétences postes */}
+                            <div className="mb-4">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Compétences ({competences.length}/{postes.length})</p>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {competences.slice(0, 3).map((comp, idx) => {
+                                  const poste = postes.find(p => p.id === comp.poste_id);
                                   return (
-                                    <div
-                                      key={poste.id}
-                                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-                                        hasCompetence 
-                                          ? 'bg-green-100 text-green-700 border border-green-300' 
-                                          : 'bg-gray-100 text-gray-400'
-                                      }`}
-                                      title={poste.nom}
-                                    >
-                                      {poste.icone}
-                                    </div>
+                                    <span key={idx} className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs">
+                                      {poste?.icone} {poste?.nom}
+                                    </span>
                                   );
                                 })}
+                                {competences.length > 3 && (
+                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs">
+                                    +{competences.length - 3}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-xs text-gray-500 font-medium">
-                                {competences.length}/{postes.length}
-                              </span>
                             </div>
-                          </div>
 
-                          {/* Barre de progression */}
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-orange-500 h-2 rounded-full transition-all duration-300" 
-                              style={{ 
-                                width: `${(competences.length / postes.length) * 100}%` 
-                              }}
-                            ></div>
+                            {/* Barre de progression */}
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-orange-500 h-2 rounded-full transition-all duration-300" 
+                                style={{ 
+                                  width: `${(competences.length / postes.length) * 100}%` 
+                                }}
+                              ></div>
+                            </div>
                           </div>
                         </motion.div>
                       );
@@ -676,97 +668,94 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       <AnimatePresence>
         {selectedEmployee && (
           <motion.div
-            key="employee-detail"
-            initial={{ opacity: 0, x: 300 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 300 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-white z-50 overflow-y-auto"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => setSelectedEmployee(null)}
           >
-              {/* Header */}
-              <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-6">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header modal */}
+              <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <button
-                      onClick={() => { setSelectedEmployee(null); setEditMode(false); }}
-                      className="p-2 hover:bg-white/20 rounded-lg"
-                    >
-                      <ArrowLeft className="w-6 h-6" />
-                    </button>
-                    <h1 className="text-2xl font-bold">Fiche Employé Cuisine</h1>
+                    <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-2xl font-bold overflow-hidden">
+                      {selectedEmployee.photo_url ? (
+                        <img 
+                          src={selectedEmployee.photo_url} 
+                          alt={selectedEmployee.nom}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        `${selectedEmployee.nom?.charAt(0) || '?'}${selectedEmployee.prenom?.charAt(0) || ''}`
+                      )}
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold">{selectedEmployee.nom} {selectedEmployee.prenom}</h1>
+                      <p className="text-orange-100">Fiche employé cuisine</p>
+                    </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    {editMode ? (
-                      <>
-                        <button
-                          onClick={saveEmployee}
-                          className="flex items-center space-x-2 bg-white text-orange-600 px-4 py-2 rounded-lg hover:bg-orange-50 transition-colors font-medium"
-                        >
-                          <Save className="w-5 h-5" />
-                          <span>Sauvegarder</span>
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="flex items-center space-x-2 bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"
-                        >
-                          <span>Annuler</span>
-                        </button>
-                      </>
-                    ) : (
+                    <button
+                      onClick={() => {
+                        if (editMode) {
+                          saveEmployee();
+                        } else {
+                          setEditMode(true);
+                          setEditedEmployee({ ...selectedEmployee });
+                        }
+                      }}
+                      className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg flex items-center transition-colors"
+                    >
+                      {editMode ? <Save className="w-4 h-4 mr-2" /> : <Edit className="w-4 h-4 mr-2" />}
+                      {editMode ? 'Sauvegarder' : 'Modifier'}
+                    </button>
+                    {editMode && (
                       <button
-                        onClick={() => setEditMode(true)}
-                        className="flex items-center space-x-2 bg-white text-orange-600 px-4 py-2 rounded-lg hover:bg-orange-50 transition-colors font-medium"
+                        onClick={cancelEdit}
+                        className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition-colors"
                       >
-                        <Edit className="w-5 h-5" />
-                        <span>Modifier</span>
+                        Annuler
                       </button>
                     )}
+                    <button
+                      onClick={() => setSelectedEmployee(null)}
+                      className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-lg transition-colors"
+                    >
+                      ✕
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="max-w-4xl mx-auto p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Info générales */}
-                  <div className="lg:col-span-1">
+              {/* Contenu modal */}
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Informations personnelles */}
+                  <div>
                     <div className="bg-white border border-gray-200 rounded-lg p-6 shadow">
-                      <h2 className="text-xl font-bold text-gray-900 mb-6">Informations Générales</h2>
+                      <h2 className="text-xl font-bold text-gray-900 mb-6">Informations personnelles</h2>
 
                       {/* Photo */}
                       <div className="text-center mb-6">
-                        <div className="w-32 h-32 mx-auto bg-orange-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden border-4 border-white shadow-lg">
-                          {(() => {
-                            const currentEmployeeCuisine = editedEmployeeCuisine || employeesCuisine.find(ec => ec.employee.id === selectedEmployee.id);
-                            const photoUrl = currentEmployeeCuisine?.photo_url;
-                            const employeeName = editedEmployee?.nom || selectedEmployee?.nom;
-                            
-                            if (photoUrl) {
-                              return (
-                                <img 
-                                  src={photoUrl} 
-                                  alt={employeeName} 
-                                  className="w-full h-full object-cover rounded-full"
-                                  style={{
-                                    objectPosition: 'center',
-                                    filter: 'brightness(1.05) contrast(1.05)'
-                                  }}
-                                />
-                              );
-                            } else {
-                              return (
-                                <span className="text-4xl font-bold text-orange-600">
-                                  {employeeName?.charAt(0) || '?'}
-                                </span>
-                              );
-                            }
-                          })()}
-                          {photoUploading && (
-                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-full">
-                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                            </div>
+                        <div className="w-32 h-32 mx-auto bg-gradient-to-r from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white text-4xl font-bold mb-4 overflow-hidden">
+                          {(editedEmployee || selectedEmployee).photo_url ? (
+                            <img 
+                              src={(editedEmployee || selectedEmployee).photo_url} 
+                              alt={(editedEmployee || selectedEmployee).nom}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            `${(editedEmployee || selectedEmployee).nom?.charAt(0) || '?'}${(editedEmployee || selectedEmployee).prenom?.charAt(0) || ''}`
                           )}
                         </div>
-                        <input
+                        <input 
                           ref={fileInputRef}
                           type="file"
                           accept="image/*"
@@ -963,10 +952,11 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                 </div>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  };
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
-  export default CuisineManagement; 
+export default CuisineManagement; 

@@ -26,13 +26,14 @@ async function testCuisineConnection() {
     const { data: postes, error: postesError } = await supabase
       .from('postes_cuisine')
       .select('*')
-      .limit(5);
+      .eq('actif', true)
+      .order('ordre_affichage');
     
     if (postesError) {
       console.log('❌ Postes cuisine:', postesError.message);
     } else {
       console.log('✅ Postes cuisine:', postes?.length || 0, 'trouvés');
-      postes?.forEach(p => console.log(`   - ${p.nom} (${p.couleur})`));
+      postes?.forEach(p => console.log(`   - ${p.nom} (${p.couleur}) ${p.icone}`));
     }
   } catch (err) {
     console.log('❌ Erreur postes cuisine:', err.message);

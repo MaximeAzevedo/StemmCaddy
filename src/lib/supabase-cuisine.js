@@ -1,6 +1,9 @@
 import { supabase } from './supabase';
 
 export const supabaseCuisine = {
+  // Exposer le client Supabase pour les requêtes directes
+  supabase,
+  
   // ==================== POSTES DE CUISINE ====================
   
   async getPostes() {
@@ -30,6 +33,72 @@ export const supabaseCuisine = {
     } catch (error) {
       console.error('Erreur createPoste:', error);
       return { data: null, error };
+    }
+  },
+
+  // Fonction pour créer automatiquement les postes manquants
+  async ensureDefaultPostes() {
+    try {
+      console.log('🔧 Vérification des postes par défaut...');
+      
+      // Récupérer les postes existants
+      const { data: existingPostes, error } = await this.getPostes();
+      if (error) throw error;
+      
+      const existingNames = existingPostes.map(p => p.nom);
+      
+      // Définir les postes requis
+      const requiredPostes = [
+        {
+          nom: 'Self Midi',
+          couleur: '#FF6B35',
+          icone: '🍽️',
+          description: 'Service self du midi',
+          actif: true,
+          ordre_affichage: 7
+        },
+        {
+          nom: 'Equipe Pina et Saskia',
+          couleur: '#8B5CF6',
+          icone: '👥',
+          description: 'Équipe spécialisée Pina et Saskia',
+          actif: true,
+          ordre_affichage: 8
+        }
+      ];
+      
+      let createdCount = 0;
+      
+      // Créer les postes manquants
+      for (const posteData of requiredPostes) {
+        if (!existingNames.includes(posteData.nom)) {
+          console.log(`➕ Création du poste: ${posteData.nom}`);
+          const result = await this.createPoste(posteData);
+          
+          if (result.error) {
+            console.warn(`⚠️ Erreur création ${posteData.nom}:`, result.error);
+          } else {
+            console.log(`✅ Poste "${posteData.nom}" créé avec succès`);
+            createdCount++;
+          }
+        } else {
+          console.log(`✓ Poste "${posteData.nom}" existe déjà`);
+        }
+      }
+      
+      return { 
+        success: true, 
+        created: createdCount, 
+        message: `${createdCount} poste(s) créé(s)` 
+      };
+      
+    } catch (error) {
+      console.error('❌ Erreur ensureDefaultPostes:', error);
+      return { 
+        success: false, 
+        error, 
+        message: 'Erreur lors de la création des postes par défaut' 
+      };
     }
   },
 
@@ -341,6 +410,20 @@ export const supabaseCuisine = {
       return { data, error };
     } catch (error) {
       console.error('Erreur deletePlanningCuisine:', error);
+      return { data: null, error };
+    }
+  },
+
+  async clearPlanningForDate(date) {
+    try {
+      const { data, error } = await supabase
+        .from('planning_cuisine')
+        .delete()
+        .eq('date', date);
+      
+      return { data, error };
+    } catch (error) {
+      console.error('Erreur clearPlanningForDate:', error);
       return { data: null, error };
     }
   },

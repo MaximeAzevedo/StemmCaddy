@@ -17,23 +17,30 @@ import {
   ChefHat,
   Clock,
   Users,
-  Target
+  Target,
+  Star,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { aiChatbot } from '../lib/ai-chatbot';
+import IAActionEngine from '../lib/ia-action-engine';
 
 const CuisineAIAssistant = ({ onDataRefresh }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isCompact, setIsCompact] = useState(true);
   
+  // Initialiser le moteur d'actions IA
+  const [actionEngine] = useState(() => new IAActionEngine());
+  
   const [messages, setMessages] = useState([
     {
       id: 1,
       type: 'ai',
-      content: '👨‍🍳 **Assistant IA Cuisine** à votre service !\n\n🎯 **Spécialisé en gestion de cuisine :**\n• Planning automatique intelligent\n• Gestion des absences avec remplaçants\n• Formation des employés sur postes\n• Optimisation charge de travail\n• Analyse des compétences équipe\n\n💡 **Exemples de commandes avancées :**\n• "Analyse le planning de cette semaine"\n• "Qui peut remplacer Paul sur Cuisine chaude ?"\n• "Équilibrer la charge de travail"\n• "Former les nouveaux sur Pain"\n• "Statistiques de compétences de l\'équipe"\n\nParlez-moi naturellement ! 🗣️',
+      content: '👨‍🍳 **Assistant IA Cuisine Avancé** à votre service !\n\n🎯 **Nouvelles capacités intelligentes :**\n• **Actions directes** sur la base de données\n• **Gestion absences** avec remplaçants automatiques\n• **Modification compétences** en temps réel\n• **Génération planning** optimisé\n• **Analyse équipe** complète\n• **Apprentissage** de vos préférences\n\n💡 **Commandes naturelles :**\n• "Marie est absente lundi"\n• "Julie maîtrise maintenant la pâtisserie"\n• "Génère le planning de la semaine"\n• "Qui peut remplacer Paul ?"\n• "Analyse l\'équipe"\n\n🚀 **Je peux maintenant modifier vraiment vos données !**',
       timestamp: new Date(),
-      category: 'system'
+      category: 'system',
+      actionData: null
     }
   ]);
   
@@ -53,22 +60,24 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
     scrollToBottom();
   }, [messages]);
 
-  const addMessage = (type, content, category = 'general') => {
+  const addMessage = (type, content, category = 'general', actionData = null) => {
     const newMessage = {
       id: Date.now(),
       type,
       content,
       timestamp: new Date(),
-      category
+      category,
+      actionData
     };
     setMessages(prev => [...prev, newMessage]);
+    return newMessage.id;
   };
 
   const speak = (text) => {
     if ('speechSynthesis' in window) {
       const cleanText = text
         .replace(/\*\*/g, '')
-        .replace(/[📍✅❌⚠️🎯👤🤖💡⚡🗣️📊👨‍🍳🔍]/g, '')
+        .replace(/[📍✅❌⚠️🎯👤🤖💡⚡🗣️📊👨‍🍳🔍🚀]/g, '')
         .replace(/\n/g, ' ');
       
       const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -79,76 +88,157 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
     }
   };
 
+  const formatResponseData = (result) => {
+    if (!result.data || !result.formatType) return '';
+
+    switch (result.formatType) {
+      case 'replacement_suggestions':
+        let formatted = '\n\n📋 **Suggestions de remplaçants :**\n';
+        for (const [poste, remplacants] of Object.entries(result.data)) {
+          formatted += `\n**${poste} :**\n`;
+          for (let idx = 0; idx < remplacants.length; idx++) {
+            const emp = remplacants[idx];
+            const score = Math.round(emp.score_compatibilite * 100);
+            formatted += `${idx + 1}. ${emp.employe_nom} (${score}% compatible)\n`;
+          }
+        }
+        return formatted;
+
+      case 'team_analysis':
+        const data = result.data;
+        return `\n\n📊 **Analyse de l'équipe :**\n• **${data.totalEmployes}** employés\n• **${data.totalCompetences}** compétences différentes\n• **Répartition niveaux :** ${Object.entries(data.repartitionNiveaux).map(([niveau, count]) => `Niveau ${niveau}: ${count}`).join(', ')}\n• **Catégories :** ${Object.keys(data.repartitionCategories).join(', ')}`;
+
+      case 'planning_grid':
+        return `\n\n📅 **Planning généré avec succès !**\n• ${result.data?.length || 0} créneaux créés\n• Optimisation basée sur les compétences\n• Équilibrage automatique des charges\n\n▶️ Consultez le module Planning pour voir les détails.`;
+
+      case 'available_employees':
+        if (result.data && result.data.length > 0) {
+          return '\n\n✅ **Employés disponibles :**\n' + 
+            result.data.map(emp => `• ${emp.employe_nom}`).join('\n');
+        }
+        return '\n\nℹ️ Aucun employé disponible trouvé.';
+
+      case 'daily_schedule':
+        if (result.data && result.data.length > 0) {
+          return '\n\n👥 **Planning du jour :**\n' + 
+            result.data.map(p => `• ${p.employe_nom} - ${p.poste} (${p.heure_debut}-${p.heure_fin})`).join('\n');
+        }
+        return '\n\nℹ️ Aucun planning trouvé pour cette date.';
+
+      default:
+        return '';
+    }
+  };
+
   const handleVoiceInput = useCallback(async (transcript) => {
     addMessage('user', transcript);
     setIsProcessing(true);
     
-    // Simulation d'étapes de réflexion plus détaillées
+    // Étapes de traitement IA améliorées
     const thinkingStages = [
-      '🧠 Analyse de votre demande...',
+      '🧠 Analyse de l\'intention...',
       '🔍 Vérification des données...',
-      '⚡ Traitement intelligent...',
-      '🎯 Préparation de la réponse...'
+      '⚡ Exécution de l\'action...',
+      '🎯 Formatage de la réponse...'
     ];
     
     try {
-      // Simuler une réflexion plus poussée
+      // Simulation d'une réflexion plus poussée
       for (let i = 0; i < thinkingStages.length; i++) {
         setThinkingStage(thinkingStages[i]);
-        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+        await new Promise(resolve => setTimeout(resolve, 400 + Math.random() * 400));
       }
       
-      // Traiter avec notre chatbot IA amélioré
-      const response = await aiChatbot.processMessage(transcript);
+      // Utiliser notre nouveau moteur d'actions IA
+      const result = await actionEngine.executeAction(transcript);
       
+      // Formater le message de réponse
+      let responseMessage = result.message;
+      
+      // Ajouter les données formatées si disponibles
+      if (result.formatType && result.data) {
+        responseMessage += formatResponseData(result);
+      }
+      
+      // Ajouter des informations de debug en mode développement
+      if (process.env.NODE_ENV === 'development') {
+        responseMessage += `\n\n🔧 **Debug :** Intention: ${result.intent}, Confiance: ${(result.confidence * 100).toFixed(0)}%, Temps: ${result.executionTime}ms`;
+      }
+      
+      // Déterminer la catégorie du message
       let category = 'general';
-      if (response.success) {
-        if (response.message.includes('✅')) category = 'success';
-        else if (response.message.includes('ℹ️')) category = 'info';
-        else if (response.message.includes('📊')) category = 'analysis';
+      if (result.success) {
+        if (result.intent === 'ANALYSER_EQUIPE') category = 'analysis';
+        else if (result.intent === 'GENERER_PLANNING') category = 'success';
+        else if (result.intent === 'AJOUTER_ABSENCE') category = 'info';
+        else if (result.intent === 'MODIFIER_COMPETENCE') category = 'success';
+        else category = 'success';
       } else {
-        if (response.message.includes('❌')) category = 'error';
-        else if (response.message.includes('❓')) category = 'help';
+        category = 'error';
       }
       
-      addMessage('ai', response.message, category);
+      // Ajouter le message avec les données d'action
+      addMessage('ai', responseMessage, category, {
+        intent: result.intent,
+        confidence: result.confidence,
+        executionTime: result.executionTime,
+        actionData: result.data,
+        actions: result.actions
+      });
       
       // Synthèse vocale adaptée
-      const speakText = response.message.length > 200 
-        ? response.message.split('\n')[0] + '... Consultez les détails à l\'écran.'
-        : response.message;
+      const speakText = result.message.length > 150 
+        ? result.message.split('\n')[0] + '... Consultez les détails à l\'écran.'
+        : result.message.replace(/[📍✅❌⚠️🎯👤🤖💡⚡🗣️📊👨‍🍳🔍🚀]/g, '');
       
       speak(speakText);
       
-      // Feedback avec plus de variété
-      if (response.success) {
-        if (response.message.includes('généré') || response.message.includes('optimisé')) {
-          toast.success('🎯 Planning optimisé !');
-          onDataRefresh?.();
-        } else if (response.message.includes('formé') || response.message.includes('compétence')) {
-          toast.success('⚡ Compétence mise à jour !');
-          onDataRefresh?.();
-        } else if (response.message.includes('absent')) {
-          toast.success('📅 Absence gérée automatiquement !');
-          onDataRefresh?.();
-        } else if (response.message.includes('profil')) {
-          toast.success('👤 Profil employé modifié !');
-          onDataRefresh?.();
-        } else if (response.message.includes('assigné')) {
-          toast.success('✅ Assignation créée !');
-          onDataRefresh?.();
+      // Feedback toast amélioré selon le type d'action
+      if (result.success) {
+        switch (result.intent) {
+          case 'GENERER_PLANNING':
+            toast.success('🎯 Planning optimisé généré !');
+            onDataRefresh?.();
+            break;
+          case 'MODIFIER_COMPETENCE':
+            toast.success('⚡ Compétence mise à jour !');
+            onDataRefresh?.();
+            break;
+          case 'AJOUTER_ABSENCE':
+            toast.success('📅 Absence enregistrée !');
+            onDataRefresh?.();
+            break;
+          case 'ANALYSER_EQUIPE':
+            toast.success('📊 Analyse terminée !');
+            break;
+          case 'CHERCHER_REMPLACANT':
+            toast.success('🔍 Remplaçants trouvés !');
+            break;
+          default:
+            toast.success('✅ Action exécutée !');
         }
+      } else {
+        toast.error('❌ Action non comprise ou échouée');
       }
       
     } catch (error) {
       console.error('Erreur traitement IA:', error);
-      addMessage('ai', '❌ Problème technique rencontré. L\'équipe technique a été notifiée. Veuillez réessayer dans quelques instants.', 'error');
+      addMessage('ai', '❌ **Erreur technique rencontrée**\n\nL\'assistant IA a rencontré un problème. L\'équipe technique a été notifiée.\n\n🔄 **Solutions possibles :**\n• Vérifiez votre connexion\n• Reformulez votre demande\n• Contactez le support si le problème persiste', 'error');
       toast.error('🔧 Erreur technique');
     } finally {
       setIsProcessing(false);
       setThinkingStage('');
     }
-  }, [onDataRefresh]);
+  }, [onDataRefresh, actionEngine]);
+
+  const handleFeedback = async (messageId, rating) => {
+    try {
+      await actionEngine.submitFeedback(rating);
+      toast.success(rating >= 4 ? '⭐ Merci pour votre retour positif !' : '📝 Retour pris en compte');
+    } catch (error) {
+      console.error('Erreur feedback:', error);
+    }
+  };
 
   // Initialisation de la reconnaissance vocale
   useEffect(() => {
@@ -218,26 +308,26 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
     { 
       text: 'Planning Auto', 
       icon: Calendar,
-      action: () => handleVoiceInput('générer le planning cette semaine'),
+      action: () => handleVoiceInput('génère le planning de la semaine'),
       color: 'bg-blue-100 hover:bg-blue-200'
-    },
-    { 
-      text: 'Qui absent ?', 
-      icon: UserMinus,
-      action: () => handleVoiceInput('qui est absent aujourd\'hui'),
-      color: 'bg-red-100 hover:bg-red-200'
-    },
-    { 
-      text: 'Optimiser', 
-      icon: Target,
-      action: () => handleVoiceInput('optimiser le planning'),
-      color: 'bg-green-100 hover:bg-green-200'
     },
     { 
       text: 'Analyser équipe', 
       icon: Users,
-      action: () => handleVoiceInput('analyse des compétences de l\'équipe'),
+      action: () => handleVoiceInput('analyse les compétences de l\'équipe'),
       color: 'bg-purple-100 hover:bg-purple-200'
+    },
+    { 
+      text: 'Absence test', 
+      icon: UserMinus,
+      action: () => handleVoiceInput('Marie est absente demain'),
+      color: 'bg-red-100 hover:bg-red-200'
+    },
+    { 
+      text: 'Compétence test', 
+      icon: Target,
+      action: () => handleVoiceInput('Julie maîtrise la pâtisserie'),
+      color: 'bg-green-100 hover:bg-green-200'
     }
   ];
 
@@ -250,7 +340,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
 
   return (
     <>
-      {/* Bouton flottant spécialisé cuisine */}
+      {/* Bouton flottant spécialisé cuisine avec indicateur IA avancé */}
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
@@ -264,7 +354,9 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
           <div className="absolute inset-0 rounded-full border-3 border-white border-t-transparent animate-spin"></div>
         )}
         {!isProcessing && (
-          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse flex items-center justify-center">
+            <Star className="w-2 h-2 text-white" />
+          </div>
         )}
       </motion.button>
 
@@ -285,9 +377,12 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
                 <div className="flex items-center">
                   <ChefHat className="w-5 h-5 mr-2" />
                   <div>
-                    <h3 className="font-semibold text-sm">Assistant IA Cuisine</h3>
+                    <h3 className="font-semibold text-sm flex items-center">
+                      Assistant IA Cuisine
+                      <Star className="w-3 h-3 ml-1 text-yellow-300" />
+                    </h3>
                     <p className="text-xs opacity-90">
-                      {isProcessing ? `${thinkingStage}` : 'Spécialiste planning cuisine'}
+                      {isProcessing ? `${thinkingStage}` : 'Actions réelles • Base de données'}
                     </p>
                   </div>
                 </div>
@@ -324,9 +419,35 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
                     }`}
                   >
                     {message.type === 'ai' && (
-                      <div className="flex items-center mb-1">
-                        {getMessageIcon(message.category)}
-                        <span className="ml-1 font-semibold text-gray-700">Chef IA</span>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center">
+                          {getMessageIcon(message.category)}
+                          <span className="ml-1 font-semibold text-gray-700">Chef IA</span>
+                          {message.actionData?.intent && (
+                            <span className="ml-2 px-1 py-0.5 bg-orange-100 text-orange-700 text-xs rounded">
+                              {message.actionData.intent}
+                            </span>
+                          )}
+                        </div>
+                        {/* Boutons de feedback */}
+                        {message.actionData && (
+                          <div className="flex space-x-1">
+                            <button
+                              onClick={() => handleFeedback(message.id, 5)}
+                              className="text-gray-400 hover:text-green-500 transition-colors"
+                              title="Bonne réponse"
+                            >
+                              <ThumbsUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleFeedback(message.id, 1)}
+                              className="text-gray-400 hover:text-red-500 transition-colors"
+                              title="Mauvaise réponse"
+                            >
+                              <ThumbsDown className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="whitespace-pre-wrap break-words leading-relaxed">
@@ -334,12 +455,19 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
                         index % 2 === 0 ? part : <strong key={index} className="font-bold">{part}</strong>
                       )}
                     </div>
-                    <div className="text-xs opacity-70 mt-2 flex items-center">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {message.timestamp.toLocaleTimeString('fr-FR', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
+                    <div className="text-xs opacity-70 mt-2 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {message.timestamp.toLocaleTimeString('fr-FR', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </div>
+                      {message.actionData?.executionTime && (
+                        <span className="text-xs text-gray-500">
+                          {message.actionData.executionTime}ms
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -404,7 +532,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     disabled={isProcessing}
-                    placeholder={isListening ? "🎤 Dictée en cours..." : "Ex: Former Jean sur Pain, Optimiser planning..."}
+                    placeholder={isListening ? "🎤 Dictée en cours..." : "Ex: Marie est absente demain, Julie maîtrise la pâtisserie..."}
                     className="flex-1 px-3 py-2 border-2 border-orange-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-100 transition-all duration-200"
                   />
                   <button
@@ -419,7 +547,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
 
               {!isCompact && (
                 <div className="text-xs text-gray-600 bg-white rounded p-2 border border-orange-200">
-                  💡 <strong>Spécialités cuisine :</strong> "Équilibrer charge travail", "Analyser compétences équipe", "Suggestions d'amélioration"
+                  🚀 <strong>IA Avancée :</strong> Actions réelles • Base de données • Apprentissage automatique
                 </div>
               )}
             </div>

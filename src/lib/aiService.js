@@ -1,6 +1,6 @@
 import { supabaseAPI } from './supabase';
 import { supabaseCuisine } from './supabase-cuisine';
-import { openaiAPI } from './openai';
+import { azureOpenaiAPI as openaiAPI } from './azure-openai';
 
 // Journal des modifications IA pour traçabilité
 let aiModificationLog = [];

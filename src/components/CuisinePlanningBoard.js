@@ -133,7 +133,10 @@ const CuisinePlanningBoard = () => {
           moved.planningId = null;
         }
       } else {
-        const [posteIdStr, crenNom] = destCol.split('-');
+        // CORRECTION: Parser correctement les cellId avec créneaux contenant des tirets
+        const firstDashIndex = destCol.indexOf('-');
+        const posteIdStr = destCol.substring(0, firstDashIndex);
+        const crenNom = destCol.substring(firstDashIndex + 1);
         const posteId = parseInt(posteIdStr, 10);
 
         if (moved.planningId) {
