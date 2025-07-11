@@ -4,8 +4,7 @@ import {
   UserGroupIcon, 
   CalendarDaysIcon, 
   UserMinusIcon,
-  ClockIcon,
-  ChartBarIcon
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import CuisineManagement from './CuisineManagement';
 import AbsenceManagementCuisine from './AbsenceManagementCuisine';
@@ -35,13 +34,6 @@ const DashboardCuisine = ({ user, onLogout }) => {
       tab: 'employees'
     },
     {
-      title: 'Compétences & Postes',
-      description: 'Gérer les compétences par poste',
-      icon: ChartBarIcon,
-      color: 'from-green-500 to-green-600',
-      tab: 'competences'
-    },
-    {
       title: 'Gestion des Absences',
       description: 'Gérer les absences et indisponibilités',
       icon: UserMinusIcon,
@@ -59,7 +51,7 @@ const DashboardCuisine = ({ user, onLogout }) => {
   };
 
   // Si un onglet spécifique est actif, afficher le composant correspondant
-  if (activeTab === 'planning' || activeTab === 'employees' || activeTab === 'competences' || activeTab === 'postes') {
+  if (activeTab === 'planning' || activeTab === 'employees') {
     return <CuisineManagement user={user} onLogout={onLogout} defaultTab={activeTab} />;
   }
   
@@ -101,7 +93,7 @@ const DashboardCuisine = ({ user, onLogout }) => {
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex items-center">
               <div className="p-3 rounded-full bg-green-100">
-                <ChartBarIcon className="w-6 h-6 text-green-600" />
+                <CalendarDaysIcon className="w-6 h-6 text-green-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Postes cuisine</p>
