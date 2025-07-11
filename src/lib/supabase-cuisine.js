@@ -1,5 +1,74 @@
 import { supabase } from './supabase';
 
+// LOGIQUE CENTRALISÉE DES CRÉNEAUX - utilisée par planning principal ET mode TV
+export const getCreneauxForPoste = (posteName, sessionKey) => {
+  console.log(`🔍 getCreneauxForPoste centralisé: ${posteName}, session: ${sessionKey}`);
+  
+  if (sessionKey === 'matin') {
+    if (posteName === 'Vaisselle') {
+      return ['8h', '10h', 'midi'];
+    } else if (posteName === 'Self Midi') {
+      return ['11h-11h45', '11h45-12h45'];
+    } else if (posteName === 'Equipe Pina et Saskia') {
+      return ['Service'];
+    } else {
+      return ['Service'];
+    }
+  } else {
+    // Après-midi : pas de Self Midi
+    if (posteName === 'Vaisselle') {
+      return ['8h', '10h', 'midi'];
+    } else if (posteName === 'Equipe Pina et Saskia') {
+      return ['Service'];
+    } else {
+      return ['Service'];
+    }
+  }
+};
+
+// MAPPING DES ANCIENS CRÉNEAUX VERS LES NOUVEAUX
+export const mapOldCreneauToNew = (oldCreneau, posteName) => {
+  console.log(`🔄 Mapping: "${oldCreneau}" pour poste "${posteName}"`);
+  
+  // Pour Self Midi : mapper les anciens créneaux vers les nouveaux
+  if (posteName === 'Self Midi') {
+    if (oldCreneau === '11h' || oldCreneau === '11h-11h45') {
+      return '11h-11h45';
+    } else if (oldCreneau === '11h45' || oldCreneau === '11h45-12h45') {
+      return '11h45-12h45';
+    }
+  }
+  
+  // Pour les autres postes : tout mapper vers "Service"
+  if (posteName !== 'Vaisselle') {
+    if (oldCreneau === '11h' || oldCreneau === '11h45' || oldCreneau === 'Service') {
+      return 'Service';
+    }
+  }
+  
+  // Pour Vaisselle : garder les créneaux horaires
+  if (posteName === 'Vaisselle') {
+    if (oldCreneau === '8h' || oldCreneau === '10h' || oldCreneau === 'midi') {
+      return oldCreneau; // Garder tel quel
+    }
+  }
+  
+  // Par défaut, retourner le créneau original
+  console.log(`⚠️ Pas de mapping pour "${oldCreneau}" - poste "${posteName}"`);
+  return oldCreneau;
+};
+
+// VÉRIFIER SI UN CRÉNEAU EST VALIDE POUR UN POSTE
+export const isCreneauValidForPoste = (creneau, posteName, sessionKey) => {
+  const validCreneaux = getCreneauxForPoste(posteName, sessionKey);
+  const mappedCreneau = mapOldCreneauToNew(creneau, posteName);
+  
+  const isValid = validCreneaux.includes(mappedCreneau);
+  console.log(`✅ Créneau "${creneau}" (mappé: "${mappedCreneau}") valide pour "${posteName}" en "${sessionKey}": ${isValid}`);
+  
+  return isValid;
+};
+
 export const supabaseCuisine = {
   // Exposer le client Supabase pour les requêtes directes
   supabase,
@@ -163,7 +232,8 @@ export const supabaseCuisine = {
 
   async getEmployeesCuisineWithCompetences() {
     try {
-      const { data, error } = await supabase
+      // Récupérer employés cuisine avec leurs compétences
+      const { data: employeesCuisine, error: empError } = await supabase
         .from('employees_cuisine')
         .select(`
           *,
@@ -172,30 +242,39 @@ export const supabaseCuisine = {
         .eq('employees.statut', 'Actif')
         .in('service', ['Cuisine', 'Mixte']);
       
-      if (error) {
-        console.error('❌ Erreur getEmployeesCuisineWithCompetences:', error);
-        // Fallback : récupérer tous et filtrer localement
-        const { data: allData, error: allError } = await supabase
-          .from('employees_cuisine')
-          .select(`
-            *,
-            employee:employees(*)
-          `)
-          .eq('employees.statut', 'Actif');
-        
-        if (allError) throw allError;
-        
-        console.log('🔄 Fallback: filtrage local des employés de cuisine avec compétences');
-        return { 
-          data: allData.filter(ec => 
-            ec.service === 'Cuisine' || ec.service === 'Mixte'
-          ), 
-          error: null 
-        };
-      } else {
-        console.log('✅ Employés de cuisine avec compétences récupérés:', data?.length || 0);
-        return { data, error };
+      if (empError) {
+        console.error('❌ Erreur getEmployeesCuisineWithCompetences employés:', empError);
+        return { data: null, error: empError };
       }
+
+      // Récupérer toutes les compétences cuisine avec les détails des postes
+      const { data: competences, error: compError } = await supabase
+        .from('competences_cuisine')
+        .select(`
+          *,
+          poste:postes_cuisine(*)
+        `);
+      
+      if (compError) {
+        console.error('❌ Erreur getEmployeesCuisineWithCompetences compétences:', compError);
+        return { data: null, error: compError };
+      }
+
+      // Associer les compétences aux employés
+      const enrichedEmployees = employeesCuisine.map(empCuisine => {
+        const employeeCompetences = competences.filter(comp => 
+          comp.employee_id === empCuisine.employee.id
+        );
+        
+        return {
+          ...empCuisine,
+          competences_cuisine: employeeCompetences
+        };
+      });
+
+      console.log('✅ Employés cuisine avec compétences enrichis:', enrichedEmployees.length);
+      return { data: enrichedEmployees, error: null };
+      
     } catch (error) {
       console.error('❌ Erreur critique getEmployeesCuisineWithCompetences:', error);
       return { data: null, error };
@@ -592,7 +671,7 @@ export const supabaseCuisine = {
         .from('absences_cuisine')
         .select(`
           *,
-          employee:employees!absences_cuisine_employee_id_fkey(nom, prenom, profil)
+          employee:employees!absences_cuisine_employee_id_fkey(nom, profil)
         `)
         .order('date_debut', { ascending: false });
 

@@ -7,7 +7,7 @@ import {
   CalendarIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { supabaseCuisine, getCreneauxForPoste, mapOldCreneauToNew, isCreneauValidForPoste } from '../lib/supabase-cuisine';
 
 const CuisinePlanningDisplay = ({ tvMode = false }) => {
   // eslint-disable-next-line no-unused-vars
@@ -19,12 +19,10 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
   const [planning, setPlanning] = useState([]);
   const [postes, setPostes] = useState([]);
   const [employeesCuisine, setEmployeesCuisine] = useState([]);
+  const [absences, setAbsences] = useState([]); // AJOUT: Gestion des absences
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  // Le mode TV peut maintenant changer de date
-  // Suppression de la contrainte de date forcée
-  
   // Initialisation avec paramètres URL
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -62,49 +60,18 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
     }
   };
 
-  // Logique des créneaux avec ordre correct - SYNCHRONISÉE avec CuisinePlanningInteractive
-  const getCreneauxForPoste = (posteName, sessionKey) => {
-    console.log(`🔍 TV - getCreneauxForPoste: ${posteName}, session: ${sessionKey}`);
-    
-    if (sessionKey === 'matin') {
-      if (posteName === 'Vaisselle') {
-        console.log(`📋 TV - Vaisselle matin: ['8h', '10h', 'midi']`);
-        return ['8h', '10h', 'midi']; // Ordre correct
-      } else if (posteName === 'Self Midi') {
-        console.log(`📋 TV - Self Midi matin: ['11h-11h45', '11h45-12h45']`);
-        return ['11h-11h45', '11h45-12h45'];
-      } else if (posteName === 'Equipe Pina et Saskia') {
-        console.log(`📋 TV - Equipe Pina et Saskia matin: ['Service']`);
-        return ['Service'];
-      } else {
-        console.log(`📋 TV - ${posteName} matin: ['Service']`);
-        return ['Service'];
-      }
-    } else {
-      // Après-midi : pas de Self Midi
-      if (posteName === 'Vaisselle') {
-        console.log(`📋 TV - Vaisselle après-midi: ['8h', '10h', 'midi']`);
-        return ['8h', '10h', 'midi']; // Ordre correct
-      } else if (posteName === 'Equipe Pina et Saskia') {
-        console.log(`📋 TV - Equipe Pina et Saskia après-midi: ['Service']`);
-        return ['Service'];
-      } else {
-        console.log(`📋 TV - ${posteName} après-midi: ['Service']`);
-        return ['Service'];
-      }
-    }
-  };
-
-  // Charger les données
-  const loadPlanningData = useCallback(async () => {
+  // Charger les données - DÉPLACÉ AVANT forceCleanReload
+  const loadPlanningData = useCallback(async (isAutoRefresh = false) => {
     try {
       setLoading(true);
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      console.log(`📺 TV - Chargement données pour la date: ${dateStr}`);
+      
+      const loadType = isAutoRefresh ? 'RECHARGEMENT AUTO' : 'CHARGEMENT INITIAL';
+      console.log(`📺 TV - ${loadType} pour la date: ${dateStr}`);
       console.log(`📺 TV - Session courante: ${currentSession}`);
       
       // VÉRIFICATION DIRECTE DE LA BASE DE DONNÉES
-      console.log('🔍 TV - Vérification directe de la base de données...');
+      console.log(`🔍 TV - ${loadType} - Vérification directe de la base de données...`);
       
       // Vérifier les données brutes de planning_cuisine pour cette date
       const { data: rawPlanning, error: rawError } = await supabaseCuisine.supabase
@@ -112,30 +79,34 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
         .select('*')
         .eq('date', dateStr);
       
-      console.log('📊 TV - Données BRUTES planning_cuisine:', {
+      console.log(`📊 TV - ${loadType} - Données BRUTES planning_cuisine:`, {
         date: dateStr,
         count: rawPlanning?.length || 0,
-        data: rawPlanning
+        data: rawPlanning,
+        timestamp: new Date().toLocaleTimeString()
       });
       
       if (rawError) {
-        console.error('❌ TV - Erreur requête brute:', rawError);
+        console.error(`❌ TV - ${loadType} - Erreur requête brute:`, rawError);
       }
       
-      const [postesResult, employeesResult, planningResult] = await Promise.all([
+      // AJOUT: Charger aussi les absences comme le planning principal
+      const [postesResult, employeesResult, planningResult, absencesResult] = await Promise.all([
         supabaseCuisine.getPostes(),
         supabaseCuisine.getEmployeesCuisine(),
-        supabaseCuisine.getPlanningCuisine(dateStr)
+        supabaseCuisine.getPlanningCuisine(dateStr),
+        supabaseCuisine.getAbsencesCuisine(dateStr, dateStr) // AJOUT
       ]);
 
-      console.log('📺 TV - Postes chargés:', postesResult.data?.length || 0);
-      console.log('📺 TV - Employés chargés:', employeesResult.data?.length || 0);
-      console.log('📺 TV - Planning chargé (avec jointures):', planningResult.data?.length || 0, 'entrées');
-      console.log('📺 TV - Détail planning pour', dateStr, ':', planningResult.data);
+      console.log(`📺 TV - ${loadType} - Postes chargés:`, postesResult.data?.length || 0);
+      console.log(`📺 TV - ${loadType} - Employés chargés:`, employeesResult.data?.length || 0);
+      console.log(`📺 TV - ${loadType} - Planning chargé (avec jointures):`, planningResult.data?.length || 0, 'entrées');
+      console.log(`📺 TV - ${loadType} - Absences chargées:`, absencesResult.data?.length || 0, 'entrées'); // AJOUT
+      console.log(`📺 TV - ${loadType} - Détail planning pour`, dateStr, ':', planningResult.data);
       
       // Comparer les données brutes vs avec jointures
       if (rawPlanning?.length !== planningResult.data?.length) {
-        console.warn('⚠️ TV - DIFFÉRENCE entre données brutes et jointures!', {
+        console.warn(`⚠️ TV - ${loadType} - DIFFÉRENCE entre données brutes et jointures!`, {
           brutes: rawPlanning?.length || 0,
           jointures: planningResult.data?.length || 0
         });
@@ -146,28 +117,30 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
           const jointureIds = planningResult.data.map(p => p.id);
           const missing = bruteIds.filter(id => !jointureIds.includes(id));
           if (missing.length > 0) {
-            console.warn('⚠️ TV - IDs manquants dans les jointures:', missing);
+            console.warn(`⚠️ TV - ${loadType} - IDs manquants dans les jointures:`, missing);
           }
         }
       } else {
-        console.log('✅ TV - Cohérence entre données brutes et jointures');
+        console.log(`✅ TV - ${loadType} - Cohérence entre données brutes et jointures`);
       }
 
       if (postesResult.data) setPostes(postesResult.data);
       if (employeesResult.data) setEmployeesCuisine(employeesResult.data);
+      if (absencesResult.data) setAbsences(absencesResult.data); // AJOUT
       if (planningResult.data) {
         setPlanning(planningResult.data);
-        console.log('📺 TV - Planning setState terminé avec', planningResult.data.length, 'entrées');
+        console.log(`📺 TV - ${loadType} - Planning setState terminé avec`, planningResult.data.length, 'entrées');
       }
       
       setLastRefresh(new Date());
     } catch (error) {
-      console.error('❌ TV - Erreur chargement planning:', error);
+      console.error(`❌ TV - Erreur ${isAutoRefresh ? 'rechargement' : 'chargement'}:`, error);
     } finally {
       setLoading(false);
     }
   }, [selectedDate, currentSession]);
 
+  // RAJOUT: useEffect pour charger les données au démarrage et lors des changements
   useEffect(() => {
     loadPlanningData();
   }, [loadPlanningData]);
@@ -176,7 +149,7 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
   useEffect(() => {
     const dataRefreshInterval = setInterval(() => {
       console.log('🔄 Rechargement automatique des données TV...');
-      loadPlanningData();
+      loadPlanningData(true); // true = rechargement automatique
     }, 30000); // 30 secondes
 
     return () => clearInterval(dataRefreshInterval);
@@ -225,13 +198,14 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  // Obtenir les employés pour un poste et un créneau spécifique
+  // Obtenir les employés pour un poste et un créneau spécifique - MODIFIÉ avec gestion des absences
   const getEmployeesForPosteCreneau = (posteName, creneau) => {
     console.log(`📺 TV - Recherche employés pour ${posteName} - ${creneau}`);
     console.log(`📺 TV - Date sélectionnée: ${format(selectedDate, 'yyyy-MM-dd')}`);
     console.log(`📺 TV - Session courante: ${currentSession}`);
     console.log(`📺 TV - Postes disponibles:`, postes.map(p => `${p.nom} (ID: ${p.id})`));
     console.log(`📺 TV - Planning total:`, planning.length, 'entrées');
+    console.log(`📺 TV - Absences total:`, absences.length, 'entrées'); // AJOUT
     
     // Tous les postes existent maintenant en base de données
     const poste = postes.find(p => p.nom === posteName);
@@ -243,11 +217,40 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
 
     console.log(`✅ TV - Poste trouvé: ${poste.nom} (ID: ${poste.id})`);
     
+    // AJOUT: Filtrer les employés absents comme dans le planning principal
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const absentEmployeeIds = absences
+      .filter(abs => abs.statut === 'Confirmée' && dateStr >= abs.date_debut && dateStr <= abs.date_fin)
+      .map(abs => abs.employee_id);
+    
+    console.log(`📺 TV - Employés absents pour ${dateStr}:`, absentEmployeeIds);
+    
+    // NOUVELLE LOGIQUE SYNCHRONISÉE : Filtrer avec mapping automatique
     const filteredPlanning = planning.filter(p => {
-      const match = p.poste_id === poste.id && p.creneau === creneau;
-      console.log(`📋 TV - Vérification planning ID ${p.id}: poste_id=${p.poste_id}, creneau="${p.creneau}", employee_id=${p.employee_id}, match=${match}`);
-      return match;
+      // Vérifier que c'est le bon poste
+      if (p.poste_id !== poste.id) return false;
+      
+      // AJOUT: Vérifier que l'employé n'est pas absent
+      if (absentEmployeeIds.includes(p.employee_id)) {
+        console.log(`⚠️ TV - Employé ${p.employee_id} est absent, filtré`);
+        return false;
+      }
+      
+      // Vérifier que le créneau est valide avec mapping
+      if (!isCreneauValidForPoste(p.creneau, poste.nom, currentSession)) {
+        console.log(`⚠️ TV - Créneau "${p.creneau}" invalide pour poste "${poste.nom}"`);
+        return false;
+      }
+      
+      // Mapper le créneau et vérifier s'il correspond
+      const mappedCreneau = mapOldCreneauToNew(p.creneau, poste.nom);
+      const matches = mappedCreneau === creneau;
+      
+      console.log(`📋 TV - Planning ID ${p.id}: poste_id=${p.poste_id}, creneau="${p.creneau}" → mappé:"${mappedCreneau}", cherché:"${creneau}", match=${matches}`);
+      
+      return matches;
     });
+    
     console.log(`📋 TV - Planning filtré pour ${posteName}-${creneau}:`, filteredPlanning);
 
     const result = filteredPlanning.map(p => {
@@ -430,25 +433,6 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
                 )}
               </button>
 
-              {/* Bouton rechargement manuel */}
-              <button
-                onClick={() => {
-                  console.log('🔄 Rechargement manuel des données TV...');
-                  loadPlanningData();
-                }}
-                disabled={loading}
-                className="flex items-center space-x-1 px-2 py-1 rounded-lg font-medium text-xs transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 disabled:opacity-50"
-              >
-                {loading ? (
-                  <div className="animate-spin rounded-full h-3 w-3 border border-gray-600 border-t-transparent" />
-                ) : (
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                )}
-                <span className="hidden sm:inline">{loading ? 'Chargement...' : 'Actualiser'}</span>
-              </button>
-              
               {/* Indicateur dernière actualisation */}
               {lastRefresh && (
                 <div className="flex items-center space-x-1 px-2 py-1 bg-green-50 rounded-lg border border-green-200 text-green-700">
@@ -458,32 +442,6 @@ const CuisinePlanningDisplay = ({ tvMode = false }) => {
                   </span>
                 </div>
               )}
-              
-              {/* Synchronisation forcée */}
-              <button
-                onClick={() => {
-                  console.log('🔄 TV - Synchronisation forcée...');
-                  // Forcer le rechargement en supprimant le cache
-                  const urlParams = new URLSearchParams(window.location.search);
-                  const syncDate = urlParams.get('date');
-                  const syncSession = urlParams.get('session');
-                  if (syncDate) {
-                    setSelectedDate(new Date(syncDate));
-                    console.log('🔄 TV - Date synchronisée:', syncDate);
-                  }
-                  if (syncSession) {
-                    setCurrentSession(syncSession);
-                    console.log('🔄 TV - Session synchronisée:', syncSession);
-                  }
-                  loadPlanningData();
-                }}
-                className="flex items-center space-x-1 px-2 py-1 rounded-lg font-medium text-xs transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-300"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-                <span className="hidden sm:inline">Sync</span>
-              </button>
 
               {/* Navigation groupes - Compacte */}
               <div className="flex space-x-1">

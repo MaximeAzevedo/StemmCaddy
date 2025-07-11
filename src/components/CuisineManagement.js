@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CuisinePlanningInteractive from './CuisinePlanningInteractive';
+import CuisineAIAssistant from './CuisineAIAssistant';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
 import { useSafeEmployee, useSafeLoading, useSafeError, useSafeArray, useSafeObject } from '../hooks/useSafeState';
 
@@ -63,10 +64,14 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
     }
   ];
 
+  // Chargement initial des données avec hooks sécurisés
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const loadData = useCallback(async () => {
     try {
       startLoading();
       clearError(); // Nettoyer les erreurs précédentes
+      
+      console.log('📊 Chargement données cuisine - DEBUT');
       
       const [employeesResult, postesResult, competencesResult] = await Promise.all([
         supabaseCuisine.getEmployeesCuisine(),
@@ -90,7 +95,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       setPostesDisponibles(postesResult.data || []);
       setCompetences(competencesMap);
       
-      console.log('📊 Données cuisine chargées:', {
+      console.log('✅ Données cuisine chargées avec succès:', {
         employés: employeesResult.data?.length || 0,
         postes: postesResult.data?.length || 0,
         compétences: Object.keys(competencesMap).length
@@ -138,14 +143,36 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
     } finally {
       stopLoading();
     }
-  }, [startLoading, stopLoading, clearError, handleError, setEmployees, setPostesDisponibles, setCompetences]);
+  }, [clearError, handleError, setCompetences, setEmployees, setPostesDisponibles, startLoading, stopLoading]); // 🔧 TOUTES les dépendances ajoutées
 
+  // 🛠️ CORRECTION : Un seul useEffect pour le chargement initial
   useEffect(() => {
     if (activeTab === 'employees') {
+      console.log('📋 Onglet employés activé - chargement des données...');
       loadData();
     }
-  }, [activeTab, loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]); // 🔥 SEULE DÉPENDANCE : activeTab, loadData volontairement exclu
 
+  // 🛠️ MEMOIZATION pour éviter les recalculs constants
+  const filteredEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      try {
+        if (!emp || !emp.employee || !emp.employee.nom) {
+          return false;
+        }
+        
+        const matchesSearch = emp.employee.nom.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesProfile = !filterProfile || emp.employee.profil === filterProfile;
+        return matchesSearch && matchesProfile;
+      } catch (error) {
+        console.warn('⚠️ Erreur filtrage employé:', error);
+        return false;
+      }
+    });
+  }, [employees, searchTerm, filterProfile]);
+
+  // 🛠️ CORRECTION : useEffect simplifié pour l'employé sélectionné
   useEffect(() => {
     // Quand on sélectionne un employé, initialiser l'état d'édition
     if (selectedEmployee) {
@@ -178,21 +205,6 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       return { niveau: 0, valide: false };
     }
   };
-
-  const filteredEmployees = employees.filter(emp => {
-    try {
-      if (!emp || !emp.employee || !emp.employee.nom) {
-        return false;
-      }
-      
-      const matchesSearch = emp.employee.nom.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesProfile = !filterProfile || emp.employee.profil === filterProfile;
-      return matchesSearch && matchesProfile;
-    } catch (error) {
-      console.warn('⚠️ Erreur filtrage employé:', error);
-      return false;
-    }
-  });
 
   const getProfileColor = (profil) => {
     switch (profil) {
@@ -974,6 +986,9 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
           {activeTab === 'employees' && renderEmployeeManagement()}
         </div>
       </div>
+      
+      {/* Assistant IA disponible dans toutes les fenêtres cuisine */}
+      <CuisineAIAssistant onDataRefresh={loadData} />
     </div>
   );
 };

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { supabaseCuisine, getCreneauxForPoste, mapOldCreneauToNew, isCreneauValidForPoste } from '../lib/supabase-cuisine';
 import { SunIcon, MoonIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import CuisineAIAssistant from './CuisineAIAssistant';
 
 const MAX_PER_CELL = 10;
 
@@ -21,37 +22,6 @@ const sessionsConfig = {
     color: 'from-blue-400 to-indigo-600',
     postesActifs: ['Cuisine chaude', 'Sandwichs', 'Pain', 'Jus de fruits', 'Vaisselle', 'Légumerie', 'Equipe Pina et Saskia'],
     creneaux: ['8h', '10h', 'midi']
-  }
-};
-
-// Logique simplifiée des créneaux par poste
-const getCreneauxForPoste = (posteName, sessionKey) => {
-  if (sessionKey === 'matin') {
-    if (posteName === 'Vaisselle') {
-      // Vaisselle : créneaux 8h, 10h et midi
-      return ['8h', '10h', 'midi'];
-    } else if (posteName === 'Self Midi') {
-      // Self Midi : créneaux spécifiques 11h-11h45 et 11h45-12h45
-      return ['11h-11h45', '11h45-12h45'];
-    } else if (posteName === 'Equipe Pina et Saskia') {
-      // Equipe Pina et Saskia : créneaux spécifiques matin
-      return ['Service'];
-    } else {
-      // Autres services : créneau unifié "Service"
-      return ['Service'];
-    }
-  } else {
-    // Après-midi : pas de Self Midi
-    if (posteName === 'Vaisselle') {
-      // Vaisselle : créneaux 8h, 10h et midi
-      return ['8h', '10h', 'midi'];
-    } else if (posteName === 'Equipe Pina et Saskia') {
-      // Equipe Pina et Saskia : disponible aussi l'après-midi
-      return ['Service'];
-    } else {
-      // Autres services : créneau unifié "Service"
-      return ['Service'];
-    }
   }
 };
 
@@ -92,16 +62,33 @@ const CuisinePlanningInteractive = () => {
     // Remplir avec le planning existant
     planningRows.forEach(row => {
       const poste = allPostes.find(p => p.id === row.poste_id);
-      if (!poste || !conf.postesActifs.includes(poste.nom)) return;
+      if (!poste || !conf.postesActifs.includes(poste.nom)) {
+        console.log(`⚠️ buildSmartBoard: Poste ${row.poste_id} non trouvé ou inactif pour session ${currentSession}`);
+        return;
+      }
       
-      const creneauxValidesForPoste = getCreneauxForPoste(poste.nom, currentSession);
-      if (!creneauxValidesForPoste.includes(row.creneau)) return;
+      // NOUVELLE LOGIQUE : Utiliser isCreneauValidForPoste avec mapping automatique
+      if (!isCreneauValidForPoste(row.creneau, poste.nom, currentSession)) {
+        console.log(`⚠️ buildSmartBoard: Créneau "${row.creneau}" pas valide pour poste "${poste.nom}" en session "${currentSession}"`);
+        return;
+      }
       
-      const cellId = `${row.poste_id}-${row.creneau}`;
+      // Mapper le créneau de l'ancien vers le nouveau format
+      const mappedCreneau = mapOldCreneauToNew(row.creneau, poste.nom);
+      const cellId = `${row.poste_id}-${mappedCreneau}`;
+      
       const ec = presentEmployees.find(e => e.employee_id === row.employee_id);
-      if (!ec) return;
+      if (!ec) {
+        console.log(`⚠️ buildSmartBoard: Employé ${row.employee_id} non trouvé ou absent`);
+        return;
+      }
       
-      if (!boardObj[cellId]) return;
+      if (!boardObj[cellId]) {
+        console.log(`⚠️ buildSmartBoard: Cellule ${cellId} n'existe pas`);
+        return;
+      }
+      
+      console.log(`✅ buildSmartBoard: Assignation ${ec.employee.nom} → ${poste.nom}-${mappedCreneau} (original: ${row.creneau})`);
       
       boardObj[cellId].push({
         draggableId: `plan-${row.id}`,
@@ -743,161 +730,6 @@ const CuisinePlanningInteractive = () => {
     toast.success('📺 Mode TV ouvert avec la date et session actuelles');
   };
 
-  /* ---------------------- Diagnostic de synchronisation ---------------------- */
-  const runDatabaseDiagnostic = async () => {
-    try {
-      console.log('🔍 DIAGNOSTIC : POURQUOI LE PLANNING PRINCIPAL EST VIDE ? - DÉBUT');
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      
-      console.log(`📅 Date sélectionnée: ${dateStr}`);
-      console.log(`⏰ Session courante: ${currentSession}`);
-      
-      // ÉTAPE 1: Vérifier les données brutes en base
-      const { data: rawData, error: rawError } = await supabaseCuisine.supabase
-        .from('planning_cuisine')
-        .select('*')
-        .eq('date', dateStr);
-      
-      console.log('📊 ÉTAPE 1 - Données BRUTES en base:', {
-        date: dateStr,
-        count: rawData?.length || 0,
-        error: rawError,
-        données: rawData
-      });
-      
-      if (!rawData || rawData.length === 0) {
-        console.log('❌ CAUSE TROUVÉE: Aucune donnée en base pour cette date !');
-        toast.error(`Aucune donnée trouvée en base pour ${dateStr}`);
-        return;
-      }
-      
-      // ÉTAPE 2: Vérifier ce que récupère getPlanningCuisine
-      const { data: planningData, error: planningError } = await supabaseCuisine.getPlanningCuisine(dateStr);
-      
-      console.log('📊 ÉTAPE 2 - getPlanningCuisine():', {
-        count: planningData?.length || 0,
-        error: planningError,
-        données: planningData
-      });
-      
-      if (planningData?.length !== rawData?.length) {
-        console.warn('⚠️ PROBLÈME: getPlanningCuisine ne retourne pas toutes les données !');
-        console.log('Différence entre données brutes et getPlanningCuisine');
-      }
-      
-      // ÉTAPE 3: Simuler buildSmartBoard
-      console.log('📊 ÉTAPE 3 - Simulation buildSmartBoard...');
-      
-      const [postesRes, employeesRes, absencesRes] = await Promise.all([
-        supabaseCuisine.getPostes(),
-        supabaseCuisine.getEmployeesCuisine(),
-        supabaseCuisine.getAbsencesCuisine(dateStr, dateStr)
-      ]);
-      
-      console.log('📊 Données auxiliaires:', {
-        postes: postesRes.data?.length || 0,
-        employees: employeesRes.data?.length || 0,
-        absences: absencesRes.data?.length || 0
-      });
-      
-      // Simulation exacte de buildSmartBoard
-      const conf = sessionsConfig[currentSession];
-      const boardSimulation = { unassigned: [] };
-      
-      // Filtrer les employés présents (simulation)
-      const absentEmployeeIds = absencesRes.data
-        ?.filter(abs => abs.statut === 'Confirmée' && dateStr >= abs.date_debut && dateStr <= abs.date_fin)
-        ?.map(abs => abs.employee_id) || [];
-      
-      const presentEmployees = employeesRes.data?.filter(ec => !absentEmployeeIds.includes(ec.employee.id)) || [];
-      
-      console.log('📊 Employés présents (non absents):', presentEmployees.length);
-      
-      // Postes actifs pour la session
-      const postesActifs = postesRes.data?.filter(p => conf.postesActifs.includes(p.nom)) || [];
-      console.log('📊 Postes actifs pour', currentSession, ':', postesActifs.map(p => p.nom));
-      
-      // Initialiser les cellules
-      postesActifs.forEach(poste => {
-        const creneauxForPoste = getCreneauxForPoste(poste.nom, currentSession);
-        creneauxForPoste.forEach(creneau => {
-          boardSimulation[`${poste.id}-${creneau}`] = [];
-        });
-      });
-      
-      console.log('📊 Cellules créées:', Object.keys(boardSimulation).filter(k => k !== 'unassigned'));
-      
-      // Remplir avec le planning existant (simulation)
-      let assignedCount = 0;
-      planningData?.forEach(row => {
-        const poste = postesRes.data?.find(p => p.id === row.poste_id);
-        if (!poste) {
-          console.warn(`⚠️ Poste ID ${row.poste_id} non trouvé pour planning ID ${row.id}`);
-          return;
-        }
-        
-        if (!conf.postesActifs.includes(poste.nom)) {
-          console.warn(`⚠️ Poste "${poste.nom}" pas actif pour session "${currentSession}"`);
-          return;
-        }
-        
-        const creneauxValidesForPoste = getCreneauxForPoste(poste.nom, currentSession);
-        if (!creneauxValidesForPoste.includes(row.creneau)) {
-          console.warn(`⚠️ Créneau "${row.creneau}" pas valide pour poste "${poste.nom}" en session "${currentSession}"`);
-          return;
-        }
-        
-        const cellId = `${row.poste_id}-${row.creneau}`;
-        const ec = presentEmployees.find(e => e.employee_id === row.employee_id);
-        if (!ec) {
-          console.warn(`⚠️ Employé ID ${row.employee_id} non trouvé ou absent`);
-          return;
-        }
-        
-        if (!boardSimulation[cellId]) {
-          console.warn(`⚠️ Cellule ${cellId} n'existe pas`);
-          return;
-        }
-        
-        boardSimulation[cellId].push({
-          planningId: row.id,
-          employeeId: row.employee_id,
-          employee: ec.employee,
-        });
-        
-        assignedCount++;
-        console.log(`✅ Assigné: ${ec.employee.nom} → ${poste.nom}-${row.creneau}`);
-      });
-      
-      console.log('📊 RÉSUMÉ buildSmartBoard:');
-      console.log(`- ${assignedCount} assignations traitées`);
-      console.log(`- ${Object.keys(boardSimulation).length - 1} cellules créées`);
-      
-      // Comparer avec le board actuel
-      console.log('📊 ÉTAPE 4 - Comparaison avec board actuel:');
-      const currentAssignments = Object.keys(board)
-        .filter(k => k !== 'unassigned')
-        .reduce((total, cellId) => total + (board[cellId]?.length || 0), 0);
-      
-      console.log(`Board actuel: ${currentAssignments} assignations`);
-      console.log(`Board simulé: ${assignedCount} assignations`);
-      
-      if (currentAssignments === 0 && assignedCount > 0) {
-        console.error('❌ PROBLÈME IDENTIFIÉ: buildSmartBoard devrait créer des assignations mais le board est vide !');
-        console.log('Possible cause: buildSmartBoard ne s\'exécute pas correctement');
-      } else if (currentAssignments === assignedCount) {
-        console.log('✅ Board cohérent avec les données');
-      }
-      
-      console.log('🔍 DIAGNOSTIC TERMINÉ');
-      toast.success('Diagnostic terminé - Voir la console pour l\'analyse', { duration: 3000 });
-      
-    } catch (error) {
-      console.error('❌ DIAGNOSTIC ÉCHOUÉ:', error);
-      toast.error('Erreur lors du diagnostic');
-    }
-  };
-
   /* ---------------------- Rendu des employés ULTRA SIMPLIFIÉ ---------------------- */
   const renderEmployeeCard = (item, index, isAvailable = false) => (
     <Draggable draggableId={item.draggableId} index={index} key={item.draggableId}>
@@ -906,10 +738,10 @@ const CuisinePlanningInteractive = () => {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`w-16 h-20 rounded-lg overflow-hidden bg-white border-2 cursor-pointer ${
+          className={`w-16 h-20 rounded-lg overflow-hidden bg-white border-2 cursor-pointer transition-all ${
             snapshot.isDragging 
-              ? 'border-blue-400 shadow-lg' 
-              : 'border-gray-300'
+              ? 'border-orange-400 shadow-lg transform scale-105' 
+              : 'border-orange-200 hover:border-orange-300'
           }`}
         >
           {item.photo_url ? (
@@ -919,7 +751,7 @@ const CuisinePlanningInteractive = () => {
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full bg-blue-500 flex items-center justify-center">
+            <div className="w-full h-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center">
               <span className="text-white font-bold text-xs">
                 {item.employee.nom?.[0]}{item.employee.nom?.[1] || ''}
               </span>
@@ -932,10 +764,10 @@ const CuisinePlanningInteractive = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-xl p-8 text-center border border-gray-100">
-          <div className="animate-spin rounded-full h-12 w-12 border-3 border-gray-200 border-t-blue-600 mx-auto mb-6"></div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Chargement du planning cuisine</h3>
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center border border-orange-100">
+          <div className="animate-spin rounded-full h-12 w-12 border-3 border-orange-200 border-t-orange-500 mx-auto mb-6"></div>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">Chargement du planning cuisine</h3>
           <p className="text-gray-600">Préparation de l'interface...</p>
         </div>
       </div>
@@ -946,9 +778,9 @@ const CuisinePlanningInteractive = () => {
   const postesActifs = postes.filter(p => conf.postesActifs.includes(p.nom));
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header Simplifié */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 p-6">
+      {/* Header Harmonisé */}
+      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           {/* Section Date et Sessions */}
           <div className="flex items-center gap-4">
@@ -956,7 +788,7 @@ const CuisinePlanningInteractive = () => {
               type="date"
               value={format(selectedDate, 'yyyy-MM-dd')}
               onChange={(e) => setSelectedDate(new Date(e.target.value))}
-              className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              className="border border-orange-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 bg-white shadow-sm"
             />
             
             {Object.keys(sessionsConfig).map((key) => {
@@ -965,10 +797,10 @@ const CuisinePlanningInteractive = () => {
                 <button
                   key={key}
                   onClick={() => handleSessionChange(key)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                     currentSession === key 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-orange-500 text-white shadow-md' 
+                      : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -983,7 +815,7 @@ const CuisinePlanningInteractive = () => {
             <button
               onClick={saveAllPlanning}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white font-medium text-sm hover:bg-emerald-700 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-white font-medium text-sm hover:bg-emerald-600 disabled:opacity-50 shadow-md transition-all"
             >
               {saving ? (
                 <>
@@ -1000,28 +832,28 @@ const CuisinePlanningInteractive = () => {
               )}
             </button>
             
-            {/* Menu IA Simplifié */}
+            {/* Menu IA Harmonisé */}
             <div className="relative ai-menu-container">
               <button
                 onClick={() => setShowAIMenu(!showAIMenu)}
                 disabled={aiLoading}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white font-medium text-sm hover:bg-purple-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500 text-white font-medium text-sm hover:bg-purple-600 disabled:opacity-50 shadow-md transition-all"
               >
                 <SparklesIcon className="w-4 h-4" />
                 <span>{aiLoading ? 'IA en cours...' : 'IA Auto'}</span>
               </button>
               
               {showAIMenu && (
-                <div className="absolute top-full mt-2 left-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
+                <div className="absolute top-full mt-2 left-0 bg-white border border-orange-100 rounded-lg shadow-lg z-50 min-w-[200px]">
                   <button
                     onClick={() => handleAIAction('new')}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
+                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-orange-50 border-b border-orange-100 transition-colors"
                   >
                     ✨ Nouveau Planning
                   </button>
                   <button
                     onClick={() => handleAIAction('optimize')}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-orange-50 transition-colors"
                   >
                     ⚡ Optimiser Existant
                   </button>
@@ -1031,28 +863,18 @@ const CuisinePlanningInteractive = () => {
             
             <button
               onClick={openTVMode}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white font-medium text-sm hover:bg-blue-600 shadow-md transition-all"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
               <span>Mode TV</span>
             </button>
-            
-            <button
-              onClick={runDatabaseDiagnostic}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-600 text-white font-medium text-sm hover:bg-gray-700"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Diagnostic</span>
-            </button>
 
           </div>
         </div>
         
-        {/* Indicateur de sauvegarde */}
+        {/* Indicateur de sauvegarde harmonisé */}
         {lastSaved && (
           <div className="mt-4 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-lg text-emerald-700 text-sm border border-emerald-200">
@@ -1064,25 +886,25 @@ const CuisinePlanningInteractive = () => {
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        {/* Section Employés Disponibles SIMPLIFIÉE */}
+        {/* Section Employés Disponibles Harmonisée */}
         <div className="mb-6">
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200">
-            <div className="bg-blue-600 p-4 rounded-t-xl">
-              <h2 className="text-lg font-bold text-white">
+          <div className="bg-white rounded-xl shadow-sm border border-orange-100">
+            <div className="bg-gradient-to-r from-orange-500 to-red-500 p-4 rounded-t-xl">
+              <h2 className="text-lg font-semibold text-white">
                 👥 Équipe Disponible ({availableEmployees.length} personnes)
               </h2>
             </div>
-            <div className="p-4">
+            <div className="p-6">
               <Droppable droppableId="unassigned" key="unassigned">
                 {(provided, snapshot) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`grid grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-16 2xl:grid-cols-20 gap-4 min-h-[140px] p-4 rounded-lg ${
-                        snapshot.isDraggingOver 
-                          ? 'bg-blue-100 border-2 border-blue-400' 
-                          : 'bg-gray-50 border border-gray-200'
-                      }`}
+                    className={`grid grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-16 2xl:grid-cols-20 gap-4 min-h-[140px] p-4 rounded-lg transition-all ${
+                      snapshot.isDraggingOver 
+                          ? 'bg-orange-100 border-2 border-orange-300' 
+                          : 'bg-orange-50 border border-orange-200'
+                    }`}
                   >
                     {availableEmployees.map((item, idx) => renderEmployeeCard(item, idx, true))}
                     {provided.placeholder}
@@ -1093,7 +915,7 @@ const CuisinePlanningInteractive = () => {
           </div>
         </div>
 
-        {/* Section Services SIMPLIFIÉE */}
+        {/* Section Services Harmonisée */}
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-6 min-w-max">
             {postesActifs.map((poste) => {
@@ -1102,9 +924,9 @@ const CuisinePlanningInteractive = () => {
               return (
                 <div
                   key={poste.id}
-                  className="flex-shrink-0 w-80 bg-white rounded-xl shadow-lg border border-gray-200"
+                  className="flex-shrink-0 w-80 bg-white rounded-xl shadow-sm border border-orange-100"
                 >
-                  {/* Header du poste SIMPLE */}
+                  {/* Header du poste harmonisé */}
                   <div 
                     className="p-4 text-white rounded-t-xl"
                     style={{ backgroundColor: poste.couleur }}
@@ -1114,24 +936,24 @@ const CuisinePlanningInteractive = () => {
                         <span className="text-xl">{poste.icone}</span>
                       </div>
                       <div>
-                        <h3 className="font-bold text-lg">{poste.nom}</h3>
+                        <h3 className="font-semibold text-lg">{poste.nom}</h3>
                         <p className="text-white text-opacity-80 text-sm">Service actif</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Créneaux SIMPLIFIÉS */}
+                  {/* Créneaux harmonisés */}
                   <div className="p-4 space-y-3">
                     {creneauxForPoste.map((cr) => {
                       const cellId = `${poste.id}-${cr}`;
                       const assignedCount = (board[cellId] || []).length;
                       
                       return (
-                        <div key={cellId} className="bg-gray-50 rounded-lg border border-gray-200">
-                          <div className="flex items-center justify-between p-3 bg-white rounded-t-lg border-b border-gray-200">
-                            <span className="font-semibold text-gray-800 text-sm">{cr}</span>
-                            <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                              {assignedCount}
+                        <div key={cellId} className="bg-orange-50 rounded-lg border border-orange-100">
+                          <div className="flex items-center justify-between p-3 bg-white rounded-t-lg border-b border-orange-100">
+                            <span className="font-medium text-gray-800 text-sm">{cr}</span>
+                            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                {assignedCount}
                             </div>
                           </div>
                           <div className="p-3">
@@ -1140,10 +962,10 @@ const CuisinePlanningInteractive = () => {
                                 <div
                                   ref={provided.innerRef}
                                   {...provided.droppableProps}
-                                  className={`min-h-[140px] p-3 rounded-lg ${
+                                  className={`min-h-[140px] p-3 rounded-lg transition-all ${
                                     snapshot.isDraggingOver 
-                                      ? 'bg-green-100 border-2 border-green-400' 
-                                      : 'bg-white border border-gray-200'
+                                      ? 'bg-green-100 border-2 border-green-300' 
+                                      : 'bg-white border border-orange-200'
                                   }`}
                                 >
                                   <div className="grid grid-cols-3 gap-3">
@@ -1164,6 +986,9 @@ const CuisinePlanningInteractive = () => {
           </div>
         </div>
       </DragDropContext>
+      
+      {/* Assistant IA disponible dans le planning */}
+      <CuisineAIAssistant onDataRefresh={loadData} />
     </div>
   );
 };
