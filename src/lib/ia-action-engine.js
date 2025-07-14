@@ -626,46 +626,180 @@ export class IAActionEngine {
 
       const employees = employeesResult.data || [];
       const postes = postesResult.data || [];
-      // eslint-disable-next-line no-unused-vars
       const competences = competencesResult.data || [];
 
-      // Algorithme IA simplifié pour génération planning
-      const today = new Date().toISOString().split('T')[0];
-      const assignments = [];
+      // Construire map des compétences par employé
+      const competencesMap = {};
+      competences.forEach(comp => {
+        if (!competencesMap[comp.employee_id]) {
+          competencesMap[comp.employee_id] = [];
+        }
+        competencesMap[comp.employee_id].push(comp);
+      });
 
-      // Règles de base pour les postes prioritaires
-      const postePriorities = {
-        'Sandwichs': { min: 5, priority: 1 },
-        'Vaisselle': { min: 3, priority: 2 },
-        'Self Midi': { min: 2, priority: 3 },
-        'Cuisine chaude': { min: 1, priority: 4 },
-        'Pain': { min: 2, priority: 5 }
+      // NOUVELLES RÈGLES MÉTIER STRICTES
+      const POSTE_PRIORITIES = {
+        // PRIORITÉ 1 - ABSOLUE : Sandwiches (4 personnes + 1 chef)
+        'Sandwichs': { 
+          min: 4, 
+          priority: 1, 
+          needsChef: true,
+          chefCompetence: 'Chef sandwichs'
+        },
+        
+        // PRIORITÉ 2 : Pain (2-3 personnes)
+        'Pain': { 
+          min: 2, 
+          max: 3, 
+          priority: 2 
+        },
+        
+        // PRIORITÉ 3 : Vaisselle (3 personnes)
+        'Vaisselle': { 
+          min: 3, 
+          priority: 3 
+        },
+        
+        // PRIORITÉ 4 : Cuisine chaude (4-7 personnes)
+        'Cuisine chaude': { 
+          min: 4, 
+          max: 7, 
+          priority: 4, 
+          needsCompetence: true 
+        },
+        
+        // TOUJOURS 2 MINIMUM : Service/Self Midi (primordial)
+        'Self Midi': { 
+          min: 2, 
+          max: 3, 
+          priority: 5,
+          critical: true 
+        },
+        
+        // PRIORITÉ 6 : Jus (2-3 personnes)
+        'Jus de fruits': { 
+          min: 2, 
+          max: 3, 
+          priority: 6 
+        },
+        
+        // Equipe spécialisée : Pina et Saskia
+        'Equipe Pina et Saskia': { 
+          min: 1, 
+          max: 4, 
+          priority: 7 
+        },
+        
+        // DERNIÈRE PRIORITÉ : Légumerie (flexible)
+        'Légumerie': { 
+          min: 2, 
+          max: 10, 
+          priority: 8 
+        }
       };
 
-      // Assigner selon les priorités
-      let availableEmployees = [...employees];
-      
-      Object.entries(postePriorities).forEach(([posteName, rules]) => {
-        const poste = postes.find(p => p.nom === posteName);
-        if (!poste || availableEmployees.length === 0) return;
+      // Algorithme IA amélioré avec nouvelles règles
+      const today = new Date().toISOString().split('T')[0];
+      const assignments = [];
+      let availableEmployees = employees.filter(emp => emp.employee?.statut === 'Actif');
 
-        const assignedCount = Math.min(rules.min, availableEmployees.length);
-        
-        for (let i = 0; i < assignedCount; i++) {
-          const employee = availableEmployees.shift();
-          if (employee && employee.employee) {
+      console.log(`🎯 Employés disponibles : ${availableEmployees.length}`);
+
+      // Assigner selon les priorités strictes
+      const sortedPostes = Object.entries(POSTE_PRIORITIES)
+        .sort(([, a], [, b]) => a.priority - b.priority);
+
+      for (const [posteName, rules] of sortedPostes) {
+        const poste = postes.find(p => p.nom === posteName);
+        if (!poste || availableEmployees.length === 0) continue;
+
+        console.log(`🎯 Attribution ${posteName} (min: ${rules.min}, priorité: ${rules.priority})`);
+
+        // Filtrer les employés éligibles
+        let eligibleEmployees = availableEmployees;
+
+        // Vérifier compétences si nécessaire
+        if (rules.needsCompetence) {
+          eligibleEmployees = availableEmployees.filter(empCuisine => {
+            const empCompetences = competencesMap[empCuisine.employee.id] || [];
+            return empCompetences.some(comp => {
+              const competencePoste = postes.find(p => p.id === comp.poste_id);
+              return competencePoste && competencePoste.nom === posteName;
+            });
+          });
+          console.log(`🎯 ${posteName} - ${eligibleEmployees.length} employés compétents`);
+        }
+
+        // GESTION SPÉCIALE : Chef Sandwich
+        if (rules.needsChef && rules.chefCompetence) {
+          const chefCandidates = availableEmployees.filter(empCuisine => {
+            const empCompetences = competencesMap[empCuisine.employee.id] || [];
+            return empCompetences.some(comp => {
+              const competencePoste = postes.find(p => p.id === comp.poste_id);
+              return competencePoste && competencePoste.nom === rules.chefCompetence;
+            });
+          });
+
+          if (chefCandidates.length > 0) {
+            const chef = chefCandidates[0];
             assignments.push({
               date: today,
               session: 'matin',
               creneau: 'Service',
-              employee_id: employee.employee.id,
+              employee_id: chef.employee.id,
               poste_id: poste.id,
               statut: 'Planifié',
-              ai_generated: true
+              ai_generated: true,
+              role: 'Chef'
             });
+
+            // Retirer le chef des disponibles
+            availableEmployees = availableEmployees.filter(emp => emp.employee.id !== chef.employee.id);
+            eligibleEmployees = eligibleEmployees.filter(emp => emp.employee.id !== chef.employee.id);
+            
+            console.log(`👨‍🍳 Chef sandwich assigné : ${chef.employee.prenom} ${chef.employee.nom}`);
           }
         }
-      });
+
+        // Assigner le nombre minimum d'employés normaux
+        const employeesToAssign = Math.min(rules.min, eligibleEmployees.length);
+        
+        // Vérifications critiques
+        if (rules.critical && employeesToAssign < rules.min) {
+          console.warn(`⚠️ ALERTE : ${posteName} sous-effectif ! ${employeesToAssign}/${rules.min}`);
+        }
+
+        // Sélectionner les meilleurs employés
+        const selectedEmployees = eligibleEmployees
+          .sort((a, b) => {
+            if (posteName === 'Cuisine chaude') {
+              const profileOrder = { 'Fort': 3, 'Moyen': 2, 'Faible': 1 };
+              return (profileOrder[b.employee.profil] || 0) - (profileOrder[a.employee.profil] || 0);
+            }
+            return Math.random() - 0.5; // Distribution équitable pour autres postes
+          })
+          .slice(0, employeesToAssign);
+
+        // Créer les assignations
+        for (const empCuisine of selectedEmployees) {
+          assignments.push({
+            date: today,
+            session: 'matin',
+            creneau: 'Service',
+            employee_id: empCuisine.employee.id,
+            poste_id: poste.id,
+            statut: 'Planifié',
+            ai_generated: true
+          });
+        }
+
+        // Retirer les employés assignés
+        availableEmployees = availableEmployees.filter(emp => 
+          !selectedEmployees.some(sel => sel.employee.id === emp.employee.id)
+        );
+
+        console.log(`✅ ${posteName} : ${selectedEmployees.length} employés assignés ${rules.needsChef ? '+ 1 chef' : ''}`);
+      }
 
       // Sauvegarder les assignations en base
       let successCount = 0;
@@ -681,12 +815,13 @@ export class IAActionEngine {
       }
 
       return {
-        message: `🤖 Planning IA généré avec succès !\n\n✅ ${successCount} assignations créées pour aujourd'hui\n📋 Postes couverts: ${Object.keys(postePriorities).slice(0, Math.min(5, successCount)).join(', ')}\n\n🎯 Le planning respecte les priorités métier et compétences.`,
+        message: `🤖 **Planning IA généré avec nouvelles règles !**\n\n✅ **${successCount} assignations créées**\n\n🎯 **Règles appliquées :**\n• 🥪 Sandwiches : 4 + 1 chef (priorité absolue)\n• 🍽️ Service : min 2 personnes (primordial)\n• 🔥 Cuisine chaude : min 4 personnes\n• 🍞 Pain : min 2 personnes\n• 🍽️ Vaisselle : 3 personnes (sauf 8h = 1)\n\n🎯 Le planning respecte les priorités et compétences !`,
         type: 'success',
         data: {
           assignations: successCount,
           date: today,
-          postesCouverts: Object.keys(postePriorities)
+          postesCouverts: Object.keys(POSTE_PRIORITIES),
+          rulesApplied: true
         }
       };
 

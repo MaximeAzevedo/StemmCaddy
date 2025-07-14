@@ -21,8 +21,46 @@ import { supabaseSecretariat } from '../lib/supabase-secretariat';
 // Configuration Chart.js
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
+const statsAccueil = [
+  {
+    label: "Dossiers traités",
+    value: 124,
+    icon: ChartBarIcon,
+    color: "bg-blue-100 text-blue-600"
+  },
+  {
+    label: "Partenaires",
+    value: 8,
+    icon: BuildingStorefrontIcon,
+    color: "bg-green-100 text-green-600"
+  },
+  {
+    label: "Alertes en cours",
+    value: 2,
+    icon: ExclamationTriangleIcon,
+    color: "bg-red-100 text-red-600"
+  }
+];
+
+const actionsAccueil = [
+  {
+    title: "Tableau de bord",
+    description: "Visualiser les statistiques et l'analyse des données",
+    icon: ChartBarIcon,
+    color: "from-blue-500 to-indigo-600",
+    tab: "dashboard"
+  },
+  {
+    title: "Saisie des données",
+    description: "Ajouter ou modifier les données du secrétariat",
+    icon: DocumentTextIcon,
+    color: "from-purple-500 to-pink-500",
+    tab: "saisie"
+  }
+];
+
 const SecretariatManagement = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('accueil');
   const [denrees, setDenrees] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -291,6 +329,60 @@ const SecretariatManagement = ({ user, onLogout }) => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Chargement des données...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === 'accueil') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-slate-50 pb-16">
+        {/* Header central premium */}
+        <div className="flex flex-col items-center pt-12 pb-6">
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-4 shadow-xl">
+            <ScaleIcon className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-4xl font-extrabold text-gray-900 mb-2 text-center">Gestion Secrétariat</h1>
+          <p className="text-gray-500 text-lg text-center max-w-2xl mb-2">
+            Gérez les dossiers, partenaires, alertes et la saisie des données du secrétariat.
+          </p>
+        </div>
+
+        {/* Statistiques premium */}
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 px-4">
+          {statsAccueil.map((stat, i) => (
+            <div key={stat.label} className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 ${stat.color}`}>
+                <stat.icon className="w-7 h-7" />
+              </div>
+              <p className="text-gray-500 font-medium mb-1">{stat.label}</p>
+              <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions Rapides premium */}
+        <div className="max-w-3xl mx-auto px-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Actions Rapides</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {actionsAccueil.map((action, index) => (
+              <motion.div
+                key={action.title}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 * index }}
+                whileHover={{ scale: 1.03 }}
+                className="bg-white rounded-2xl shadow-xl p-6 cursor-pointer group transition-all duration-300"
+                onClick={() => setActiveTab(action.tab)}
+              >
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${action.color} flex items-center justify-center mb-4 group-hover:shadow-lg transition-all duration-300`}>
+                  <action.icon className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{action.title}</h3>
+                <p className="text-gray-500 text-sm">{action.description}</p>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     );

@@ -13,14 +13,12 @@ import {
   ChefHat
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
 import { format, parseISO, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
 import CuisineAIAssistant from './CuisineAIAssistant';
 
 const AbsenceManagementCuisine = ({ user, onLogout }) => {
-  const navigate = useNavigate();
   const [absences, setAbsences] = useState([]);
   const [employeesCuisine, setEmployeesCuisine] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -268,9 +266,9 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-violet-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des absences cuisine...</p>
         </div>
       </div>
@@ -285,13 +283,13 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <button
-                onClick={() => navigate('/cuisine')}
+                onClick={() => window.history.back()}
                 className="mr-4 p-2 hover:bg-gray-100 rounded-lg"
                 title="Retour au module cuisine"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <ChefHat className="w-8 h-8 text-orange-600 mr-3" />
+              <ChefHat className="w-8 h-8 text-blue-600 mr-3" />
               <h1 className="text-2xl font-bold text-gray-900">Gestion des Absences - Cuisine</h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -344,7 +342,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                 placeholder="Rechercher par employé ou motif..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -352,7 +350,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
           <div className="flex space-x-4">
             <button
               onClick={() => openModal()}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg flex items-center"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg flex items-center"
               disabled={employeesCuisine.length === 0}
             >
               <Plus className="w-5 h-5 mr-2" />
@@ -404,9 +402,9 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                   <tr key={employee.id} className="border-t border-gray-200">
                     <td className="p-2 font-medium">
                       <div className="flex items-center space-x-2">
-                        <ChefHat className="w-4 h-4 text-orange-600" />
+                        <ChefHat className="w-4 h-4 text-blue-600" />
                         <span>{employee.nom} {employee.prenom}</span>
-                        <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800">
+                        <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
                           {employee.profil}
                         </span>
                       </div>
@@ -441,7 +439,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
         {/* Stats rapides */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white shadow-lg rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-orange-600">{employeesCuisine.length}</div>
+            <div className="text-2xl font-bold text-blue-600">{employeesCuisine.length}</div>
             <div className="text-sm text-gray-600">Employés cuisine</div>
           </div>
           <div className="bg-white shadow-lg rounded-xl p-4 text-center">
@@ -476,8 +474,8 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-orange-100 to-red-200 rounded-full flex items-center justify-center">
-                      <ChefHat className="w-6 h-6 text-orange-600" />
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-100 to-violet-200 rounded-full flex items-center justify-center">
+                      <ChefHat className="w-6 h-6 text-blue-600" />
                     </div>
                     
                     <div>
@@ -494,7 +492,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                       </div>
                     </div>
                     
-                    <div className="px-3 py-1 rounded-full text-sm font-medium border bg-orange-100 text-orange-800 border-orange-200">
+                    <div className="px-3 py-1 rounded-full text-sm font-medium border bg-blue-100 text-blue-800 border-blue-200">
                       {absence.type_absence || 'Absent'}
                     </div>
                   </div>
@@ -502,7 +500,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => openModal(absence)}
-                      className="p-2 text-gray-400 hover:text-orange-600"
+                      className="p-2 text-gray-400 hover:text-blue-600"
                       title="Modifier"
                     >
                       <Edit className="w-4 h-4" />
@@ -564,7 +562,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                     value={formData.employee_id}
                     onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Sélectionner un employé</option>
                     {employeesCuisine.map(employee => (
@@ -585,7 +583,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                       value={formData.date_debut}
                       onChange={(e) => setFormData({...formData, date_debut: e.target.value})}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   
@@ -599,7 +597,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                       onChange={(e) => setFormData({...formData, date_fin: e.target.value})}
                       required
                       min={formData.date_debut}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -611,7 +609,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                     onChange={(e) => setFormData({...formData, motif: e.target.value})}
                     placeholder="Raison de l'absence (maladie, congés, formation...)"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 
@@ -626,7 +624,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
                     disabled={submitting}
                   >
                     {submitting ? 'Sauvegarde...' : (selectedAbsence ? 'Modifier' : 'Ajouter')}

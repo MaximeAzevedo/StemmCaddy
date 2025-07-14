@@ -23,21 +23,21 @@ const DashboardCuisine = ({ user, onLogout }) => {
       title: 'Planning Cuisine',
       description: 'Organiser les plannings et les postes',
       icon: CalendarDaysIcon,
-      color: 'from-orange-500 to-red-600',
+      color: 'from-blue-500 to-indigo-600',
       tab: 'planning'
     },
     {
       title: 'Gestion des Employés',
       description: 'Voir et gérer les profils des employés',
       icon: UserGroupIcon,
-      color: 'from-blue-500 to-blue-600',
+      color: 'from-indigo-500 to-violet-600',
       tab: 'employees'
     },
     {
       title: 'Gestion des Absences',
       description: 'Gérer les absences et indisponibilités',
       icon: UserMinusIcon,
-      color: 'from-red-500 to-red-600',
+      color: 'from-violet-500 to-purple-600',
       tab: 'absences'
     }
   ];
@@ -60,13 +60,13 @@ const DashboardCuisine = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-violet-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* En-tête du module */}
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-4">
-            <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
               <span className="text-3xl">🍽️</span>
             </div>
           </div>

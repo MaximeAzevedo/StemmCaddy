@@ -38,7 +38,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   // Hook sécurisé pour la gestion des employés sélectionnés
   const { 
     employee: selectedEmployee, 
-    selectEmployee, 
+    setEmployee: selectEmployee, 
     clearEmployee
   } = useSafeEmployee();
   
@@ -54,13 +54,13 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       id: 'planning',
       name: 'Planning Cuisine',
       icon: Calendar,
-      color: 'text-orange-600 bg-orange-100'
+      color: 'text-blue-600 bg-blue-100'
     },
     {
       id: 'employees',
       name: 'Équipe Cuisine',
       icon: UserCheck,
-      color: 'text-blue-600 bg-blue-100'
+      color: 'text-indigo-600 bg-indigo-100'
     }
   ];
 
@@ -210,8 +210,8 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
     switch (profil) {
       case 'Débutant': return 'bg-red-50 border-red-200 text-red-700';
       case 'Intermédiaire': return 'bg-yellow-50 border-yellow-200 text-yellow-700';
-      case 'Expérimenté': return 'bg-green-50 border-green-200 text-green-700';
-      case 'Expert': return 'bg-purple-50 border-purple-200 text-purple-700';
+      case 'Expérimenté': return 'bg-blue-50 border-blue-200 text-blue-700';
+      case 'Expert': return 'bg-indigo-50 border-indigo-200 text-indigo-700';
       default: return 'bg-gray-50 border-gray-200 text-gray-700';
     }
   };
@@ -539,9 +539,9 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
 
   if (loading && activeTab === 'employees') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-violet-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement de l'équipe cuisine...</p>
         </div>
       </div>
@@ -554,15 +554,15 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="bg-white rounded-xl shadow-lg p-6 cursor-pointer hover:shadow-xl transition-all duration-300 border border-orange-100"
+      className="bg-white rounded-xl shadow-lg p-6 cursor-pointer hover:shadow-xl transition-all duration-300 border border-blue-100"
       onClick={() => selectEmployee(employee)}
     >
       <div className="flex items-start space-x-4 mb-4">
-        <div className="w-16 h-16 bg-gradient-to-r from-orange-100 to-red-100 rounded-full flex items-center justify-center">
+        <div className="w-16 h-16 bg-gradient-to-r from-blue-100 to-violet-100 rounded-full flex items-center justify-center">
           {employee.photo_url ? (
             <img src={employee.photo_url} alt={employee.employee.nom} className="w-16 h-16 rounded-full object-cover" />
           ) : (
-            <span className="text-2xl font-bold text-orange-600">
+            <span className="text-2xl font-bold text-blue-600">
               {employee.employee.nom.charAt(0)}
             </span>
           )}
@@ -590,7 +590,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
           </div>
           <div className="flex flex-wrap gap-1">
             {employee.employee.langues.slice(0, 3).map((langue, index) => (
-              <span key={index} className="px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded border border-orange-200">
+              <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded border border-blue-200">
                 {langue}
               </span>
             ))}
@@ -636,7 +636,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       className="fixed inset-0 bg-white z-50 overflow-y-auto"
     >
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-6">
+      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
@@ -658,7 +658,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
             {editMode && (
               <button
                 onClick={saveEmployee}
-                className="px-4 py-2 bg-white text-orange-600 hover:bg-gray-100 rounded-lg flex items-center"
+                className="px-4 py-2 bg-white text-blue-600 hover:bg-gray-100 rounded-lg flex items-center"
               >
                 <Save className="w-4 h-4 mr-2" />
                 Sauvegarder
@@ -672,16 +672,16 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Informations personnelles */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-100">
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-blue-100">
               <h2 className="text-xl font-bold text-gray-900 mb-6">Informations Générales</h2>
               
               {/* Photo */}
               <div className="text-center mb-6">
-                <div className="w-32 h-32 mx-auto bg-gradient-to-r from-orange-100 to-red-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden">
+                <div className="w-32 h-32 mx-auto bg-gradient-to-r from-blue-100 to-violet-100 rounded-full flex items-center justify-center mb-4 relative overflow-hidden">
                   {(editedEmployee?.photo_url || selectedEmployee?.photo_url) ? (
                     <img src={editedEmployee?.photo_url || selectedEmployee?.photo_url} alt={editedEmployee?.employee?.nom || selectedEmployee?.employee?.nom} className="w-32 h-32 rounded-full object-cover" />
                   ) : (
-                    <span className="text-4xl font-bold text-orange-600">
+                    <span className="text-4xl font-bold text-blue-600">
                       {(editedEmployee?.employee?.nom || selectedEmployee?.employee?.nom)?.charAt(0)}
                     </span>
                   )}
@@ -701,7 +701,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                 <button 
                   onClick={triggerPhotoUpload}
                   disabled={photoUploading}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center mx-auto"
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center mx-auto"
                 >
                   <Camera className="w-4 h-4 mr-2" />
                   {photoUploading ? 'Upload en cours...' : 'Changer la photo'}
@@ -774,7 +774,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                           type="checkbox"
                           checked={(editedEmployee?.employee?.langues || []).includes(langue)}
                           onChange={() => handleLanguageToggle(langue)}
-                          className="mr-2 text-orange-500 focus:ring-orange-500"
+                          className="mr-2 text-blue-500 focus:ring-blue-500"
                         />
                         {langue}
                       </label>
@@ -783,7 +783,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                 ) : (
                   <div className="flex flex-wrap gap-1">
                     {(editedEmployee?.employee?.langues || selectedEmployee?.employee?.langues || []).map((langue, index) => (
-                      <span key={index} className="px-2 py-1 bg-orange-50 text-orange-700 text-xs rounded border border-orange-200">
+                      <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded border border-blue-200">
                         {langue}
                       </span>
                     ))}
@@ -795,7 +795,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
 
           {/* Compétences cuisine */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-100">
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-blue-100">
               <h2 className="text-xl font-bold text-gray-900 mb-6">Compétences par Poste de Cuisine</h2>
               
               <div className="space-y-4">
@@ -805,8 +805,8 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                   return (
                     <div key={poste.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                          <span className="text-orange-600 font-bold text-sm">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-blue-600 font-bold text-sm">
                             {poste.nom.charAt(0)}
                           </span>
                         </div>
@@ -824,14 +824,14 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                                 type="checkbox"
                                 checked={competence.valide}
                                 onChange={(e) => updateCompetence(employee.employee_id, poste.id, 'valide', e.target.checked)}
-                                className="mr-2 text-orange-500 focus:ring-orange-500"
+                                className="mr-2 text-blue-500 focus:ring-blue-500"
                               />
                               Validé
                             </label>
                             <select
                               value={competence.niveau}
                               onChange={(e) => updateCompetence(employee.employee_id, poste.id, 'niveau', parseInt(e.target.value))}
-                              className="px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+                              className="px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                               disabled={!competence.valide}
                             >
                               <option value={0}>Non autorisé</option>
@@ -867,7 +867,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
     return (
       <div className="space-y-6">
         {/* Barre de recherche et filtres */}
-        <div className="bg-white rounded-xl shadow-lg p-6 border border-orange-100">
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-blue-100">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
@@ -877,7 +877,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                   placeholder="Rechercher un employé..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -885,7 +885,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
               <select
                 value={filterProfile}
                 onChange={(e) => setFilterProfile(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Tous les niveaux</option>
                 {profiles.map(profile => (
@@ -930,7 +930,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-violet-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* En-tête avec navigation */}
@@ -961,12 +961,12 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
                   onClick={() => setActiveTab(tab.id)}
                   className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                     activeTab === tab.id
-                      ? 'border-orange-500 text-orange-600'
+                      ? 'border-blue-500 text-blue-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
                   <div className="flex items-center space-x-2">
-                    <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-orange-600' : 'text-gray-400'}`} />
+                    <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`} />
                     <span>{tab.name}</span>
                   </div>
                 </button>

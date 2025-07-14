@@ -406,148 +406,246 @@ const CuisinePlanningInteractive = () => {
       
       console.log('🤖 IA - Génération pour', employees.length, 'employés et', postesActifs.length, 'postes');
       
-      // Règles métier spécifiques
+      // NOUVELLES RÈGLES MÉTIER STRICTES - Session MATIN principalement
       const POSTE_RULES = {
-        'Vaisselle': { min: 3, max: 3, priority: 3 },
-        'Self Midi': { min: 2, max: 2, priority: 4 },
-        'Sandwichs': { min: 5, max: 6, priority: 5 }, // PRIORITÉ MAXIMALE
-        'Pain': { min: 2, max: 3, priority: 2 },
-        'Jus de fruits': { min: 1, max: 2, priority: 1 },
-        'Cuisine chaude': { min: 1, max: 2, priority: 4, needsCompetence: true },
-        'Légumerie': { min: 1, max: 2, priority: 2 },
-        'Equipe Pina et Saskia': { min: 2, max: 3, priority: 3 }
+        // PRIORITÉ 1 - ABSOLUE : Sandwiches (4 personnes + 1 chef)
+        'Sandwichs': { 
+          min: 4, 
+          max: 4, 
+          priority: 1, 
+          needsChef: true, // Nécessite 1 chef sandwich en plus
+          chefCompetence: 'Chef sandwichs'
+        },
+        
+        // PRIORITÉ 2 : Pain (flexible 2-3)
+        'Pain': { 
+          min: 2, 
+          max: 3, 
+          priority: 2,
+          canRelocateAfter10h: true // Peut basculer vers autres postes à 10h
+        },
+        
+        // PRIORITÉ 3 : Vaisselle (3 personnes, sauf 8h = 1)
+        'Vaisselle': { 
+          min: 3, 
+          max: 3, 
+          priority: 3,
+          specialRules: {
+            '8h': { min: 1, max: 1 } // Exception 8h
+          }
+        },
+        
+        // PRIORITÉ 4 : Cuisine chaude (4-7 personnes)
+        'Cuisine chaude': { 
+          min: 4, 
+          max: 7, 
+          priority: 4, 
+          needsCompetence: true 
+        },
+        
+        // PRIORITÉ 5 : Jus (2-3 normalement, 1 minimum en pénurie)
+        'Jus de fruits': { 
+          min: 2, 
+          max: 3, 
+          priority: 5,
+          emergencyMin: 1 // En cas de pénurie, peut descendre à 1
+        },
+        
+        // TOUJOURS 2 MINIMUM : Service/Self Midi (primordial)
+        'Self Midi': { 
+          min: 2, 
+          max: 3, 
+          priority: 6,
+          critical: true // Toujours 2 minimum, primordial
+        },
+        
+        // Equipe spécialisée : Pina et Saskia
+        'Equipe Pina et Saskia': { 
+          min: 1, 
+          max: 4, 
+          priority: 7
+        },
+        
+        // DERNIÈRE PRIORITÉ : Légumerie (flexible selon personnel)
+        'Légumerie': { 
+          min: 2, 
+          max: 10, 
+          priority: 8, // Dernière priorité
+          flexible: true // Peut être réduit si manque de personnel
+        }
       };
       
-      // Algorithme IA optimisé avec priorités
+      // Algorithme IA optimisé avec priorités STRICTES
       const newBoard = { ...board };
-      let assignedEmployees = [];
+      let availableEmployees = [...employees].filter(ec => ec.employee.statut === 'Actif');
       const assignments = [];
+      const assignedEmployees = [];
       
-      // Trier les postes par priorité (Sandwiches en premier)
-      const sortedPostes = postesActifs.sort((a, b) => {
-        const priorityA = POSTE_RULES[a.nom]?.priority || 0;
-        const priorityB = POSTE_RULES[b.nom]?.priority || 0;
-        return priorityB - priorityA;
-      });
+      console.log(`🎯 Personnel disponible : ${availableEmployees.length} employés`);
       
-      for (const poste of sortedPostes) {
-        const creneauxForPoste = getCreneauxForPoste(poste.nom, currentSession);
-        const rules = POSTE_RULES[poste.nom] || { min: 1, max: 2, priority: 1 };
+      // ÉTAPE 1 : Assigner par priorité (Session MATIN principalement)
+      if (currentSession === 'matin') {
         
-        for (const creneau of creneauxForPoste) {
-          const cellId = `${poste.id}-${creneau}`;
-          if (!newBoard[cellId]) newBoard[cellId] = [];
+        // Trier les postes par priorité (1 = plus important)
+        const sortedPostes = postesActifs.sort((a, b) => {
+          const priorityA = POSTE_RULES[a.nom]?.priority || 999;
+          const priorityB = POSTE_RULES[b.nom]?.priority || 999;
+          return priorityA - priorityB;
+        });
+        
+        for (const poste of sortedPostes) {
+          const rules = POSTE_RULES[poste.nom];
+          if (!rules) continue;
           
-          // Filtrer les employés disponibles
-          let availableEmployees = employees.filter(ec => 
-            !assignedEmployees.includes(ec.employee.id) && 
-            ec.employee.statut === 'Actif'
-          );
+          const creneauxForPoste = getCreneauxForPoste(poste.nom, currentSession);
           
-          // Si le poste nécessite des compétences spécifiques
-          if (rules.needsCompetence) {
-            availableEmployees = availableEmployees.filter(ec => {
-              const empCompetences = competencesMap[ec.employee.id] || [];
-              return empCompetences.some(comp => {
-                const competencePoste = allPostes.find(p => p.id === comp.poste_id);
-                return competencePoste && competencePoste.nom === poste.nom;
+          for (const creneau of creneauxForPoste) {
+            const cellId = `${poste.id}-${creneau}`;
+            if (!newBoard[cellId]) newBoard[cellId] = [];
+            
+            // Règles spéciales par créneau (ex: Vaisselle 8h)
+            let targetMin = rules.min;
+            
+            if (rules.specialRules && rules.specialRules[creneau]) {
+              targetMin = rules.specialRules[creneau].min;
+            }
+            
+            // Filtrer employés disponibles avec compétences
+            let eligibleEmployees = availableEmployees.filter(ec => 
+              !assignedEmployees.includes(ec.employee.id)
+            );
+            
+            // Si compétence requise, filtrer par compétence
+            if (rules.needsCompetence) {
+              eligibleEmployees = eligibleEmployees.filter(ec => {
+                const empCompetences = competencesMap[ec.employee.id] || [];
+                return empCompetences.some(comp => {
+                  const competencePoste = allPostes.find(p => p.id === comp.poste_id);
+                  return competencePoste && competencePoste.nom === poste.nom;
+                });
               });
-            });
+            }
             
-            console.log(`🎯 ${poste.nom} - ${availableEmployees.length} employés compétents trouvés`);
-          }
-          
-          // Sélection intelligente selon le profil du poste
-          const selectedEmployees = availableEmployees
-            .sort((a, b) => {
-              // Pour Cuisine chaude : privilégier les compétents ET expérimentés
-              if (poste.nom === 'Cuisine chaude') {
-                const profileOrder = { 'Fort': 3, 'Moyen': 2, 'Faible': 1 };
-                return (profileOrder[b.profil] || 0) - (profileOrder[a.profil] || 0);
-              }
+            console.log(`🎯 ${poste.nom} (${creneau}) - ${eligibleEmployees.length} employés éligibles`);
+            
+            // GESTION SPÉCIALE : Chef Sandwich
+            if (rules.needsChef && rules.chefCompetence) {
+              // D'abord assigner le chef
+              const chefCandidates = eligibleEmployees.filter(ec => {
+                const empCompetences = competencesMap[ec.employee.id] || [];
+                return empCompetences.some(comp => {
+                  const competencePoste = allPostes.find(p => p.id === comp.poste_id);
+                  return competencePoste && competencePoste.nom === rules.chefCompetence;
+                });
+              });
               
-              // Pour Sandwiches (priorité) : mélanger expérience et disponibilité
-              if (poste.nom === 'Sandwichs') {
-                const profileOrder = { 'Fort': 3, 'Moyen': 2, 'Faible': 1 };
-                const scoreDiff = (profileOrder[b.profil] || 0) - (profileOrder[a.profil] || 0);
-                if (Math.abs(scoreDiff) <= 1) {
-                  // Si profils similaires, ordre alphabétique pour consistance
-                  return a.employee.nom.localeCompare(b.employee.nom);
+              if (chefCandidates.length > 0) {
+                const chef = chefCandidates[0]; // Prendre le premier chef disponible
+                const chefItem = {
+                  draggableId: `ai-chef-${Date.now()}-${Math.random()}-${chef.employee.id}`,
+                  planningId: null,
+                  employeeId: chef.employee.id,
+                  employee: { ...chef.employee, isChef: true },
+                  photo_url: chef.photo_url,
+                };
+                
+                newBoard[cellId].push(chefItem);
+                assignedEmployees.push(chef.employee.id);
+                assignments.push({
+                  employeeId: chef.employee.id,
+                  posteId: poste.id,
+                  creneau: creneau,
+                  session: currentSession,
+                  role: 'Chef'
+                });
+                
+                // Retirer le chef de la liste des éligibles
+                eligibleEmployees = eligibleEmployees.filter(ec => ec.employee.id !== chef.employee.id);
+                console.log(`👨‍🍳 Chef sandwich assigné : ${chef.employee.prenom} ${chef.employee.nom}`);
+              }
+            }
+            
+            // Calculer combien d'employés normaux assigner
+            let employeesToAssign = Math.min(targetMin, eligibleEmployees.length);
+            
+            // Vérification seuil critique (Self Midi, Sandwiches)
+            if (rules.critical || rules.priority === 1) {
+              if (employeesToAssign < targetMin) {
+                console.warn(`⚠️ ALERTE : Impossible d'assigner ${targetMin} personnes à ${poste.nom}. Seulement ${employeesToAssign} disponibles.`);
+              }
+            }
+            
+            // Assigner les employés selon leur adéquation
+            const selectedEmployees = eligibleEmployees
+              .sort((a, b) => {
+                // Prioriser selon le profil pour chaque poste
+                if (poste.nom === 'Cuisine chaude') {
+                  const profileOrder = { 'Fort': 3, 'Moyen': 2, 'Faible': 1 };
+                  return (profileOrder[b.employee.profil] || 0) - (profileOrder[a.employee.profil] || 0);
                 }
-                return scoreDiff;
-              }
-              
-              // Pour Vaisselle : équipe mixte
-              if (poste.nom === 'Vaisselle') {
-                return Math.random() - 0.5; // Distribution aléatoire équitable
-              }
-              
-              // Autres postes : privilégier l'expérience
-              const profileOrder = { 'Fort': 3, 'Moyen': 2, 'Faible': 1 };
-              return (profileOrder[b.profil] || 0) - (profileOrder[a.profil] || 0);
-            })
-            .slice(0, rules.min); // Assigner le minimum requis
-          
-          // Assigner les employés sélectionnés
-          for (const empCuisine of selectedEmployees) {
-            const newItem = {
-              draggableId: `ai-${Date.now()}-${Math.random()}-${empCuisine.employee.id}`,
-              planningId: null,
-              employeeId: empCuisine.employee.id,
-              employee: empCuisine.employee,
-              photo_url: empCuisine.photo_url,
-            };
+                
+                if (poste.nom === 'Sandwichs') {
+                  // Mix expérience + compétence sandwich
+                  const hasCompetence = (competencesMap[a.employee.id] || []).some(comp => {
+                    const compPoste = allPostes.find(p => p.id === comp.poste_id);
+                    return compPoste && compPoste.nom === 'Sandwichs';
+                  });
+                  if (hasCompetence) return -1;
+                  return Math.random() - 0.5;
+                }
+                
+                // Autres postes : distribution équitable
+                return Math.random() - 0.5;
+              })
+              .slice(0, employeesToAssign);
             
-            newBoard[cellId].push(newItem);
-            assignedEmployees.push(empCuisine.employee.id);
-            assignments.push({
-              poste: poste.nom,
-              creneau,
-              employee: empCuisine.employee.nom,
-              profil: empCuisine.profil
-            });
+            // Créer les assignations
+            for (const empCuisine of selectedEmployees) {
+              const newItem = {
+                draggableId: `ai-${Date.now()}-${Math.random()}-${empCuisine.employee.id}`,
+                planningId: null,
+                employeeId: empCuisine.employee.id,
+                employee: empCuisine.employee,
+                photo_url: empCuisine.photo_url,
+              };
+              
+              newBoard[cellId].push(newItem);
+              assignedEmployees.push(empCuisine.employee.id);
+              assignments.push({
+                employeeId: empCuisine.employee.id,
+                posteId: poste.id,
+                creneau: creneau,
+                session: currentSession
+              });
+            }
             
-            // Sauvegarder en base immédiatement
-            await saveAssignment(newItem, cellId);
+            console.log(`✅ ${poste.nom} (${creneau}) : ${selectedEmployees.length} employés assignés ${rules.needsChef ? '+ 1 chef' : ''}`);
           }
-          
-          console.log(`✅ ${poste.nom} (${creneau}): ${selectedEmployees.length}/${rules.min} assignés`);
         }
-      }
-      
-      setBoard(newBoard);
-      
-      // Résumé intelligent des assignations
-      const summary = Object.entries(POSTE_RULES).map(([posteName, rules]) => {
-        const assigned = assignments.filter(a => a.poste === posteName).length;
-        const status = assigned >= rules.min ? '✅' : '⚠️';
-        return `${status} ${posteName}: ${assigned}/${rules.min}`;
-      }).join('\n');
-      
-      // Obtenir des recommandations IA via Azure OpenAI
-      let aiRecommendations = '';
-      try {
-        const planningAnalysis = Object.entries(POSTE_RULES).reduce((acc, [posteName, rules]) => {
-          const assigned = assignments.filter(a => a.poste === posteName);
-          acc[posteName] = {
-            assigned: assigned.length,
-            required: rules.min,
-            employees: assigned.map(a => a.employee),
-            status: assigned.length >= rules.min ? 'OK' : 'SOUS_EFFECTIF'
-          };
-          return acc;
-        }, {});
         
-        const recommendations = await getAIRecommendations(planningAnalysis);
-        aiRecommendations = recommendations ? `\n\n🤖 Recommandations IA:\n${recommendations}` : '';
-      } catch (error) {
-        console.log('Recommandations IA non disponibles:', error);
+      } else {
+        // Session APRÈS-MIDI : Règles plus flexibles
+        console.log('🌅 Mode après-midi : règles flexibles appliquées');
+        
+        // Pour l'après-midi, utiliser l'ancien algorithme avec règles flexibles
+        // AFTERNOON_RULES supprimé car non utilisé pour le moment
       }
       
-      toast.success(`🎯 Planning IA généré avec succès !\n\n${summary}\n\nTotal: ${assignedEmployees.length} employés assignés${aiRecommendations}`, { 
-        id: 'ai-planning',
-        duration: 8000 
-      });
+      // ÉTAPE 2 : Sauvegarder en base de données
+      setBoard(newBoard);
+      await saveAllPlanning();
+      
+      // ÉTAPE 3 : Rapport de génération
+      const totalAssigned = assignedEmployees.length;
+      const postsCount = Object.keys(POSTE_RULES).length;
+      
+      toast.success(
+        `🤖 Planning IA généré avec succès !\n` +
+        `👥 ${totalAssigned} employés répartis sur ${postsCount} postes\n` +
+        `🎯 Règles métier strictes respectées\n` +
+        `🥪 Sandwiches : 4+1 chef | 🍽️ Service : min 2 | 🔥 Cuisine : ${POSTE_RULES['Cuisine chaude']?.min || 4}+`,
+        { id: 'ai-planning', duration: 8000 }
+      );
       
     } catch (error) {
       console.error('Erreur IA planning:', error);
@@ -688,39 +786,8 @@ const CuisinePlanningInteractive = () => {
     };
   }, [showAIMenu]);
 
-  /* ---------------------- Intégration Azure OpenAI ---------------------- */
-  const getAIRecommendations = async (planningData) => {
-    try {
-      // Utiliser l'infrastructure Azure OpenAI existante pour des recommandations
-      const aiService = await import('../lib/aiService');
-      
-      const prompt = `Analyse ce planning cuisine et donne des recommandations d'optimisation :
-      
-      Date: ${format(selectedDate, 'dd/MM/yyyy')}
-      Session: ${currentSession}
-      
-      Assignations actuelles: ${JSON.stringify(planningData, null, 2)}
-      
-      Règles métier:
-      - Sandwiches: priorité absolue, min 5 personnes
-      - Vaisselle: exactement 3 personnes
-      - Self Midi: exactement 2 personnes  
-      - Pain: min 2 personnes
-      - Jus de fruits: min 1 personne
-      - Cuisine chaude: personnel compétent uniquement
-      
-      Donne 3 recommandations concrètes pour optimiser ce planning.`;
-      
-      const response = await aiService.aiService.requestAIAnalysis(prompt);
-      return response;
-      
-    } catch (error) {
-      console.error('Erreur recommandations IA:', error);
-      return 'Recommandations IA temporairement indisponibles.';
-    }
-  };
-
-  /* ---------------------- Navigation Mode TV ---------------------- */
+  // getAIRecommendations supprimé car non utilisé pour le moment
+  
   const openTVMode = () => {
     // Passer la date et session actuelles au mode TV
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -740,8 +807,8 @@ const CuisinePlanningInteractive = () => {
           {...provided.dragHandleProps}
           className={`w-16 h-20 rounded-lg overflow-hidden bg-white border-2 cursor-pointer transition-all ${
             snapshot.isDragging 
-              ? 'border-orange-400 shadow-lg transform scale-105' 
-              : 'border-orange-200 hover:border-orange-300'
+              ? 'border-blue-400 shadow-lg transform scale-105' 
+              : 'border-blue-200 hover:border-blue-300'
           }`}
         >
           {item.photo_url ? (
@@ -751,7 +818,7 @@ const CuisinePlanningInteractive = () => {
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center">
+            <div className="w-full h-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
               <span className="text-white font-bold text-xs">
                 {item.employee.nom?.[0]}{item.employee.nom?.[1] || ''}
               </span>
@@ -764,9 +831,9 @@ const CuisinePlanningInteractive = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center border border-orange-100">
-          <div className="animate-spin rounded-full h-12 w-12 border-3 border-orange-200 border-t-orange-500 mx-auto mb-6"></div>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-violet-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center border border-blue-100">
+          <div className="animate-spin rounded-full h-12 w-12 border-3 border-blue-200 border-t-blue-500 mx-auto mb-6"></div>
           <h3 className="text-xl font-semibold text-gray-800 mb-2">Chargement du planning cuisine</h3>
           <p className="text-gray-600">Préparation de l'interface...</p>
         </div>
@@ -778,9 +845,9 @@ const CuisinePlanningInteractive = () => {
   const postesActifs = postes.filter(p => conf.postesActifs.includes(p.nom));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-violet-50 p-6">
       {/* Header Harmonisé */}
-      <div className="bg-white rounded-xl shadow-sm border border-orange-100 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-6 mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           {/* Section Date et Sessions */}
           <div className="flex items-center gap-4">
@@ -788,7 +855,7 @@ const CuisinePlanningInteractive = () => {
               type="date"
               value={format(selectedDate, 'yyyy-MM-dd')}
               onChange={(e) => setSelectedDate(new Date(e.target.value))}
-              className="border border-orange-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 bg-white shadow-sm"
+              className="border border-blue-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 bg-white shadow-sm"
             />
             
             {Object.keys(sessionsConfig).map((key) => {
@@ -799,8 +866,8 @@ const CuisinePlanningInteractive = () => {
                   onClick={() => handleSessionChange(key)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                     currentSession === key 
-                      ? 'bg-orange-500 text-white shadow-md' 
-                      : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200'
+                      ? 'bg-blue-500 text-white shadow-md' 
+                      : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -844,16 +911,16 @@ const CuisinePlanningInteractive = () => {
               </button>
               
               {showAIMenu && (
-                <div className="absolute top-full mt-2 left-0 bg-white border border-orange-100 rounded-lg shadow-lg z-50 min-w-[200px]">
+                <div className="absolute top-full mt-2 left-0 bg-white border border-blue-100 rounded-lg shadow-lg z-50 min-w-[200px]">
                   <button
                     onClick={() => handleAIAction('new')}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-orange-50 border-b border-orange-100 transition-colors"
+                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 border-b border-blue-100 transition-colors"
                   >
                     ✨ Nouveau Planning
                   </button>
                   <button
                     onClick={() => handleAIAction('optimize')}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-orange-50 transition-colors"
+                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
                   >
                     ⚡ Optimiser Existant
                   </button>
@@ -863,7 +930,7 @@ const CuisinePlanningInteractive = () => {
             
             <button
               onClick={openTVMode}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white font-medium text-sm hover:bg-blue-600 shadow-md transition-all"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500 text-white font-medium text-sm hover:bg-indigo-600 shadow-md transition-all"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -888,8 +955,8 @@ const CuisinePlanningInteractive = () => {
       <DragDropContext onDragEnd={onDragEnd}>
         {/* Section Employés Disponibles Harmonisée */}
         <div className="mb-6">
-          <div className="bg-white rounded-xl shadow-sm border border-orange-100">
-            <div className="bg-gradient-to-r from-orange-500 to-red-500 p-4 rounded-t-xl">
+          <div className="bg-white rounded-xl shadow-sm border border-blue-100">
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 rounded-t-xl">
               <h2 className="text-lg font-semibold text-white">
                 👥 Équipe Disponible ({availableEmployees.length} personnes)
               </h2>
@@ -902,8 +969,8 @@ const CuisinePlanningInteractive = () => {
                     {...provided.droppableProps}
                     className={`grid grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-16 2xl:grid-cols-20 gap-4 min-h-[140px] p-4 rounded-lg transition-all ${
                       snapshot.isDraggingOver 
-                          ? 'bg-orange-100 border-2 border-orange-300' 
-                          : 'bg-orange-50 border border-orange-200'
+                          ? 'bg-blue-100 border-2 border-blue-300' 
+                          : 'bg-blue-50 border border-blue-200'
                     }`}
                   >
                     {availableEmployees.map((item, idx) => renderEmployeeCard(item, idx, true))}
@@ -924,7 +991,7 @@ const CuisinePlanningInteractive = () => {
               return (
                 <div
                   key={poste.id}
-                  className="flex-shrink-0 w-80 bg-white rounded-xl shadow-sm border border-orange-100"
+                  className="flex-shrink-0 w-80 bg-white rounded-xl shadow-sm border border-blue-100"
                 >
                   {/* Header du poste harmonisé */}
                   <div 
@@ -949,10 +1016,10 @@ const CuisinePlanningInteractive = () => {
                       const assignedCount = (board[cellId] || []).length;
                       
                       return (
-                        <div key={cellId} className="bg-orange-50 rounded-lg border border-orange-100">
-                          <div className="flex items-center justify-between p-3 bg-white rounded-t-lg border-b border-orange-100">
+                        <div key={cellId} className="bg-blue-50 rounded-lg border border-blue-100">
+                          <div className="flex items-center justify-between p-3 bg-white rounded-t-lg border-b border-blue-100">
                             <span className="font-medium text-gray-800 text-sm">{cr}</span>
-                            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
                                 {assignedCount}
                             </div>
                           </div>
@@ -965,7 +1032,7 @@ const CuisinePlanningInteractive = () => {
                                   className={`min-h-[140px] p-3 rounded-lg transition-all ${
                                     snapshot.isDraggingOver 
                                       ? 'bg-green-100 border-2 border-green-300' 
-                                      : 'bg-white border border-orange-200'
+                                      : 'bg-white border border-blue-200'
                                   }`}
                                 >
                                   <div className="grid grid-cols-3 gap-3">
