@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { NotificationProvider } from './components/PremiumNotifications';
+// ✅ NOUVEAU : Importer le contexte partagé
+import { PlanningDataProvider } from './contexts/PlanningDataContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import HomeLanding from './components/HomeLanding';
@@ -137,33 +139,20 @@ function App() {
   }
 
   return (
-    <div className="App tv-scale">
-      <Router>
-        <AppContent 
-          user={user} 
-          handleLogin={handleLogin} 
-          handleLogout={handleLogout} 
-        />
-        
-        {/* Assistant IA flottant disponible partout */}
-        
-        {/* Notifications */}
-        <Toaster 
-          position="bottom-right"
-          toastOptions={{
-            className: 'tv-scale',
-            duration: 3000,
-            style: {
-              background: '#fff',
-              color: '#1f2937',
-              boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-              borderRadius: '12px',
-              border: '1px solid #e5e7eb'
-            },
-          }}
-        />
-      </Router>
-    </div>
+    <NotificationProvider>
+      <PlanningDataProvider>
+        <Router>
+          <AppContent 
+            user={user} 
+            handleLogin={handleLogin} 
+            handleLogout={handleLogout} 
+          />
+          
+          {/* Assistant IA flottant disponible partout */}
+          
+        </Router>
+      </PlanningDataProvider>
+    </NotificationProvider>
   );
 }
 

@@ -348,6 +348,7 @@ export const supabaseCuisine = {
   /**
    * Sauvegarder le planning complet en base de données
    * Remplace localStorage pour partage multi-utilisateurs
+   * 🔧 CORRECTION : Gestion des contraintes uniques
    */
   async savePlanningPartage(boardData, selectedDate) {
     try {
@@ -359,7 +360,7 @@ export const supabaseCuisine = {
         .delete()
         .eq('date', dateStr);
       
-      // 2. Insérer les nouvelles assignations
+      // 2. Préparer les nouvelles assignations (ASSIGNATIONS MULTIPLES AUTORISÉES)
       const insertions = [];
       
       Object.entries(boardData).forEach(([cellId, employees]) => {
@@ -369,44 +370,77 @@ export const supabaseCuisine = {
         const [poste, creneau] = cellId.split('-', 2);
         if (!poste || !creneau) return;
         
-        // Parser créneau → heures début/fin
-        let heure_debut, heure_fin;
-        if (creneau.includes('-') && creneau.length > 4) {
-          // Format "8h-16h" ou "11h-11h45"
-          if (creneau.includes('h-') && creneau.includes('h', creneau.indexOf('h-') + 2)) {
-            // Format "11h-11h45"
-            const parts = creneau.split('-');
-            heure_debut = parts[0].replace('h', ':00');
-            heure_fin = parts[1].replace('h', ':');
-            if (!heure_fin.includes(':')) heure_fin += '00';
-          } else {
-            // Format "8h-16h" 
-            const parts = creneau.split('-');
-            heure_debut = parts[0].replace('h', ':00');
-            heure_fin = parts[1].replace('h', ':00');
-          }
-        } else {
-          // Créneaux spéciaux simples (8h, 10h, midi)
-          if (creneau === 'midi') {
-            heure_debut = '12:00';
-            heure_fin = '16:00';
-          } else if (creneau === '8h') {
-            heure_debut = '08:00';
-            heure_fin = '10:00';
-          } else if (creneau === '10h') {
-            heure_debut = '10:00';
-            heure_fin = '12:00';
-          } else {
-            // Format générique "Xh"
-            heure_debut = creneau.replace('h', ':00');
-            heure_fin = (parseInt(creneau) + 2) + ':00'; // +2h par défaut
-          }
-        }
-        
         // Obtenir config poste
         const posteConfig = POSTES_CUISINE.find(p => p.nom === poste) || {};
         
         employees.forEach(emp => {
+          // 🔧 DEBUG : Vérifier le créneau reçu
+          console.log(`🔍 DEBUG Créneau: "${creneau}" pour ${poste}`);
+          
+          // Parser créneau → heures début/fin (robuste contre troncatures)
+          let heure_debut, heure_fin;
+          
+          try {
+            if (creneau.includes('-') && creneau.length > 3) {
+              // Format "8h-16h" ou "11h-11h45" ou "11h45-12h45"
+              const parts = creneau.split('-');
+              
+              // Parser heure de début
+              if (parts[0].includes('h')) {
+                const hourMinutes = parts[0].split('h');
+                const hours = hourMinutes[0] || '8';
+                const minutes = hourMinutes[1] || '00';
+                heure_debut = hours.padStart(2, '0') + ':' + minutes.padStart(2, '0');
+              } else {
+                heure_debut = '08:00'; // fallback
+              }
+              
+              // Parser heure de fin
+              if (parts[1] && parts[1].includes('h')) {
+                const hourMinutes = parts[1].split('h');
+                const hours = hourMinutes[0] || '16';
+                const minutes = hourMinutes[1] || '00';
+                heure_fin = hours.padStart(2, '0') + ':' + minutes.padStart(2, '0');
+              } else if (parts[1]) {
+                // Fallback pour heure de fin sans 'h'
+                const endHour = parseInt(parts[1]) || 16;
+                heure_fin = endHour.toString().padStart(2, '0') + ':00';
+              } else {
+                heure_fin = '16:00'; // fallback
+              }
+            } else {
+              // Créneaux spéciaux simples (8h, 10h, midi)
+              if (creneau === 'midi') {
+                heure_debut = '12:00';
+                heure_fin = '16:00';
+              } else if (creneau === '8h') {
+                heure_debut = '08:00';
+                heure_fin = '10:00';
+              } else if (creneau === '10h') {
+                heure_debut = '10:00';
+                heure_fin = '12:00';
+              } else if (creneau.endsWith('h')) {
+                // Format générique "Xh"
+                const hour = parseInt(creneau.replace('h', '')) || 8;
+                heure_debut = hour.toString().padStart(2, '0') + ':00';
+                heure_fin = (hour + 2).toString().padStart(2, '0') + ':00';
+              } else {
+                // Fallback total
+                console.warn(`⚠️ Créneau non reconnu: "${creneau}", utilisation fallback`);
+                heure_debut = '08:00';
+                heure_fin = '10:00';
+              }
+            }
+            
+            // 🔍 DEBUG : Vérifier le résultat du parsing
+            console.log(`⏰ Parsing "${creneau}" → ${heure_debut} - ${heure_fin}`);
+            
+          } catch (error) {
+            console.error(`❌ Erreur parsing créneau "${creneau}":`, error);
+            heure_debut = '08:00';
+            heure_fin = '10:00';
+          }
+          
           insertions.push({
             employee_id: emp.employeeId,
             date: dateStr,
@@ -422,12 +456,19 @@ export const supabaseCuisine = {
         });
       });
       
+      console.log(`💾 Préparation sauvegarde: ${insertions.length} assignations (assignations multiples autorisées)`);
+      
+      // 3. Insérer toutes les assignations (plus de limitation UNIQUE)
       if (insertions.length > 0) {
         const { error } = await supabase
           .from('planning_cuisine_new')
-          .insert(insertions);
+          .insert(insertions)
+          .select('id');
         
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Erreur insertion planning:', error);
+          return { success: false, error };
+        }
       }
       
       console.log(`💾 Planning partagé sauvegardé: ${insertions.length} assignations`);
@@ -526,27 +567,5 @@ export const supabaseCuisine = {
 };
 
 // ==================== UTILITAIRES POSTES ====================
-
-/**
- * Récupérer les créneaux pour un poste donné
- * ✅ CRÉNEAUX CORRIGÉS selon spécifications réelles
- */
-export const getCreneauxForPoste = (posteNom, session = 'matin') => {
-  const creneauxParPoste = {
-    // Postes standards 8h-16h
-    'Cuisine chaude': ['8h-16h'],
-    'Sandwichs': ['8h-16h'], 
-    'Jus de fruits': ['8h-16h'],
-    'Légumerie': ['8h-16h'],
-    'Equipe Pina et Saskia': ['8h-16h'],
-    
-    // Postes spéciaux
-    'Pain': ['8h-12h'],
-    'Vaisselle': ['8h', '10h', 'midi'],
-    'Self Midi': ['11h-11h45', '11h45-12h45']
-  };
-  
-  return creneauxParPoste[posteNom] || ['8h-16h'];
-};
 
 export default supabaseCuisine; 

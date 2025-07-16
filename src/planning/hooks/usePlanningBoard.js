@@ -158,12 +158,61 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
   }, [board, availableEmployees, onBoardChange]);
 
   /**
-   * Reset du board
+   * Reset du board (sans supprimer les employés disponibles)
    */
   const resetBoard = useCallback(() => {
-    setBoard({ unassigned: [] });
-    setAvailableEmployees([]);
-  }, []);
+    // Garder les employés disponibles, vider seulement les assignations
+    const resetBoard = {};
+    // Recréer les cellules vides
+    const conf = getSessionConfig(currentSession);
+    const postesActifs = conf.postesActifs || [];
+    
+    postesActifs.forEach(posteNom => {
+      const creneauxForPoste = getCreneauxForPoste(posteNom);
+      creneauxForPoste.forEach(creneau => {
+        resetBoard[`${posteNom}-${creneau}`] = [];
+      });
+    });
+    
+    setBoard(resetBoard);
+    console.log('🔄 Board reseté, employés disponibles conservés');
+  }, [currentSession]);
+
+  /**
+   * Recharger les employés disponibles
+   */
+  const reloadAvailableEmployees = useCallback(async (empList, absences) => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const absentEmployeeIds = absences
+      .filter(abs => {
+        const absenceStart = abs.date_debut;
+        const absenceEnd = abs.date_fin;
+        return dateStr >= absenceStart && dateStr <= absenceEnd;
+      })
+      .map(abs => abs.employee_id);
+    
+    const presentEmployees = empList.filter(ec => 
+      !absentEmployeeIds.includes(ec.id) && ec.actif !== false
+    );
+    
+    const availableItems = presentEmployees.map(ec => ({
+      draggableId: `emp-${ec.id}`,
+      planningId: null,
+      employeeId: ec.id,
+      employee: {
+        id: ec.id,
+        nom: ec.prenom,
+        profil: ec.langue_parlee || 'Standard',
+        statut: ec.actif ? 'Actif' : 'Inactif'
+      },
+      photo_url: ec.photo_url,
+      nom: ec.prenom,
+      prenom: ec.prenom
+    }));
+
+    setAvailableEmployees(availableItems);
+    console.log('👥 Employés disponibles rechargés:', availableItems.length);
+  }, [selectedDate]);
 
   /**
    * Fusion board IA
@@ -191,6 +240,7 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
     buildSmartBoard,
     onDragEnd,
     resetBoard,
+    reloadAvailableEmployees,
     mergeAIBoard,
     updateBoard
   };

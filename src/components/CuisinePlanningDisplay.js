@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 import { getSessionConfig } from '../planning/config';
-import { getCreneauxForPoste, supabaseCuisine } from '../lib/supabase-cuisine';
+import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { getCreneauxForPoste } from '../planning/config';
 
 const CuisinePlanningDisplay = () => {
   const [searchParams] = useSearchParams();

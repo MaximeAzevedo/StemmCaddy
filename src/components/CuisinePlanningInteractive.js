@@ -3,8 +3,7 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { SparklesIcon } from '@heroicons/react/24/outline';
-import { sessionsConfig, getSessionConfig } from '../planning/config';
-import { getCreneauxForPoste } from '../lib/supabase-cuisine';
+import { sessionsConfig, getSessionConfig, getCreneauxForPoste } from '../planning/config';
 import { 
   usePlanningDataLoader, 
   usePlanningBoard, 
@@ -16,9 +15,8 @@ const CuisinePlanningInteractive = () => {
   // ✅ États locaux simplifiés
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentSession, setCurrentSession] = useState('matin');
-  const [showAIMenu, setShowAIMenu] = useState(false);
 
-  // ✅ HOOKS HYBRIDES - Données métier DB + Planning localStorage
+  // ✅ HOOKS CORRIGÉS - Planning manuel avec base de données
   const { 
     loading, 
     postes, 
@@ -29,6 +27,10 @@ const CuisinePlanningInteractive = () => {
   const { 
     board,
     lastSaved,
+    isLoading: planningLoading,
+    isSaving,
+    hasUnsavedChanges,
+    saveToDatabase,
     resetPlanning,
     exportPlanning,
     getStats,
@@ -40,14 +42,13 @@ const CuisinePlanningInteractive = () => {
     buildSmartBoard, 
     onDragEnd, 
     resetBoard,
-    mergeAIBoard,
-    updateBoard
+    reloadAvailableEmployees,
+    mergeAIBoard
   } = usePlanningBoard(selectedDate, currentSession, setBoard);
 
   const { 
     aiLoading, 
-    generateAIPlanning, 
-    optimizeExistingPlanning 
+    generateAIPlanning
   } = usePlanningAI(selectedDate, currentSession, mergeAIBoard);
 
   // ✅ Chargement initial et reconstruction du board
@@ -55,44 +56,66 @@ const CuisinePlanningInteractive = () => {
     const initializeData = async () => {
       try {
         const data = await loadData();
-        if (data) {
-          // Construire le board vide avec les données métier
-          const emptyBoard = await buildSmartBoard(
-            data.postes, 
-            data.creneaux, 
-            data.employees, 
-            data.absences
-          );
-          
-          // Si le board localStorage est vide, initialiser avec structure vide
-          if (Object.keys(board).length === 0) {
-            updateBoard(emptyBoard);
-          }
-        }
+        await buildSmartBoard(
+          data.postes, 
+          data.creneaux, 
+          data.employees, 
+          data.absences
+        );
+        
+        console.log('✅ Initialisation terminée');
       } catch (error) {
-        console.error('Erreur initialisation:', error);
-        toast.error('Erreur de chargement des données');
+        console.error('❌ Erreur initialisation:', error);
+        toast.error('Erreur lors du chargement des données');
       }
     };
-
+    
     initializeData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, currentSession, loadData, buildSmartBoard]);
 
-  // ✅ Gestion des sessions
+  // ✅ Handlers simplifiés
   const handleSessionChange = (newSession) => {
     setCurrentSession(newSession);
   };
 
-  // ✅ Menu IA avec nouvelle architecture
-  const handleAIAction = (action) => {
-    setShowAIMenu(false);
-    if (action === 'new') {
-      // Reset puis génération
+  // ✅ Sauvegarde manuelle
+  const handleSave = async () => {
+    const result = await saveToDatabase();
+    if (result.success) {
+      console.log('✅ Planning sauvegardé avec succès');
+    }
+  };
+
+  // ✅ Reset avec confirmation
+  const handleResetAll = async () => {
+    if (window.confirm('⚠️ Êtes-vous sûr de vouloir supprimer tout le planning ? Cette action est irréversible.')) {
+      await resetPlanning();
+      resetBoard(); // Vider aussi les employés disponibles
+    }
+  };
+
+  const handleExport = () => {
+    exportPlanning();
+  };
+
+  // ✅ Génération IA améliorée
+  const handleGenerateAI = async () => {
+    try {
+      // 1. Reset le board mais garde les employés
       resetBoard();
-      generateAIPlanning();
-    } else if (action === 'optimize') {
-      optimizeExistingPlanning(board);
+      
+      // 2. Recharger les données fraîches pour l'IA
+      const data = await loadData();
+      
+      // 3. Recharger les employés disponibles
+      await reloadAvailableEmployees(data.employees, data.absences);
+      
+      // 4. Générer le planning IA
+      await generateAIPlanning();
+      
+    } catch (error) {
+      console.error('❌ Erreur génération IA:', error);
+      toast.error('Erreur lors de la génération IA');
     }
   };
 
@@ -110,37 +133,25 @@ const CuisinePlanningInteractive = () => {
     const result = await runDataDiagnostic();
     const stats = getStats();
     
-    console.log('📊 STATISTIQUES PLANNING LOCAL:', stats);
+    console.log('📊 STATISTIQUES PLANNING:', stats);
     toast[result.success ? 'success' : 'error'](
-      `${result.message}\n\n📊 Planning local: ${stats.totalAssignments} assignations (${stats.fillRate}% rempli)`, 
+      `${result.message}\n\n📊 Planning: ${stats.totalAssignments} assignations (${stats.fillRate}% rempli)`, 
       { duration: 4000 }
     );
-  };
-
-  // ✅ Reset complet
-  const handleResetAll = () => {
-    resetPlanning(); // Reset localStorage
-    resetBoard();    // Reset UI
-  };
-
-  // ✅ Export du planning
-  const handleExport = () => {
-    exportPlanning();
   };
 
   // ✅ Fermer le menu IA quand on clique ailleurs
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showAIMenu && !event.target.closest('.ai-menu-container')) {
-        setShowAIMenu(false);
-      }
+      // Plus de menu IA déroulant, suppression de cette logique
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
+    
+    // Plus d'événement listener nécessaire
+    
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      // Plus de cleanup nécessaire
     };
-  }, [showAIMenu]);
+  }, []);
 
   // ✅ Rendu des cartes employés
   const renderEmployeeCard = (item, index) => (
@@ -182,13 +193,13 @@ const CuisinePlanningInteractive = () => {
   );
 
   // ✅ Écran de chargement
-  if (loading) {
+  if (loading || planningLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-xl p-8 text-center border border-gray-100">
           <div className="animate-spin rounded-full h-12 w-12 border-3 border-gray-200 border-t-blue-600 mx-auto mb-6"></div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Chargement des données métier</h3>
-          <p className="text-gray-600">Préparation de l'interface hybride...</p>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Chargement des données</h3>
+          <p className="text-gray-600">Préparation du planning cuisine...</p>
         </div>
       </div>
     );
@@ -200,7 +211,7 @@ const CuisinePlanningInteractive = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* ✅ Header avec nouvelles fonctionnalités */}
+      {/* ✅ Header avec sauvegarde manuelle */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           {/* Section Date et Sessions */}
@@ -233,14 +244,30 @@ const CuisinePlanningInteractive = () => {
 
           {/* Section Actions */}
           <div className="flex items-center gap-3">
+            {/* Bouton SAUVEGARDER - Principal */}
             <button
-              onClick={handleResetAll}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-600 text-white font-medium text-sm hover:bg-gray-700"
+              onClick={handleSave}
+              disabled={isSaving || !hasUnsavedChanges}
+              className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium text-sm ${
+                hasUnsavedChanges 
+                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              <span>Reset</span>
+              <span>{isSaving ? 'Sauvegarde...' : '💾 Sauvegarder'}</span>
+            </button>
+            
+            <button
+              onClick={handleResetAll}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>🗑️ Reset</span>
             </button>
             
             <button
@@ -253,34 +280,15 @@ const CuisinePlanningInteractive = () => {
               <span>Export</span>
             </button>
             
-            {/* Menu IA */}
-            <div className="relative ai-menu-container">
-              <button
-                onClick={() => setShowAIMenu(!showAIMenu)}
-                disabled={aiLoading}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white font-medium text-sm hover:bg-purple-700 disabled:opacity-50"
-              >
-                <SparklesIcon className="w-4 h-4" />
-                <span>{aiLoading ? 'IA en cours...' : 'IA Auto'}</span>
-              </button>
-              
-              {showAIMenu && (
-                <div className="absolute top-full mt-2 left-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-                  <button
-                    onClick={() => handleAIAction('new')}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
-                  >
-                    ✨ Nouveau Planning
-                  </button>
-                  <button
-                    onClick={() => handleAIAction('optimize')}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    ⚡ Optimiser Existant
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Bouton IA */}
+            <button
+              onClick={handleGenerateAI}
+              disabled={aiLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white font-medium text-sm hover:bg-purple-700 disabled:opacity-50"
+            >
+              <SparklesIcon className="w-4 h-4" />
+              <span>{aiLoading ? 'Génération IA...' : '✨ Générer Planning IA'}</span>
+            </button>
             
             <button
               onClick={openTVMode}
@@ -304,13 +312,22 @@ const CuisinePlanningInteractive = () => {
           </div>
         </div>
         
-        {/* Indicateur de sauvegarde localStorage */}
+        {/* Indicateur d'état du planning */}
         <div className="mt-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 rounded-lg text-green-700 text-sm border border-green-200">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm border ${
+            hasUnsavedChanges 
+              ? 'bg-orange-50 text-orange-700 border-orange-200' 
+              : 'bg-green-50 text-green-700 border-green-200'
+          }`}>
+            <div className={`w-2 h-2 rounded-full ${
+              hasUnsavedChanges ? 'bg-orange-500' : 'bg-green-500'
+            }`}></div>
             <span>
-              📱 Planning local actif • {stats.totalAssignments} assignations • Taux: {stats.fillRate}%
-              {lastSaved && ` • Sauvé: ${format(lastSaved, 'HH:mm:ss')}`}
+              {hasUnsavedChanges 
+                ? `⚠️ ${stats.totalAssignments} modifications non sauvegardées` 
+                : `✅ Planning sauvegardé • ${stats.totalAssignments} assignations • Taux: ${stats.fillRate}%`
+              }
+              {lastSaved && !hasUnsavedChanges && ` • Sauvé: ${format(lastSaved, 'HH:mm:ss')}`}
             </span>
           </div>
         </div>
@@ -368,7 +385,7 @@ const CuisinePlanningInteractive = () => {
                       </div>
                       <div>
                         <h3 className="font-bold text-lg">{poste.nom}</h3>
-                        <p className="text-white text-opacity-80 text-sm">Planning local</p>
+                        <p className="text-white text-opacity-80 text-sm">Planning manuel</p>
                       </div>
                     </div>
                   </div>
@@ -376,7 +393,7 @@ const CuisinePlanningInteractive = () => {
                   {/* Créneaux */}
                   <div className="p-4 space-y-3">
                     {creneauxForPoste.map((cr) => {
-                      const cellId = `${poste.id}-${cr}`;
+                      const cellId = `${poste.nom}-${cr}`;
                       const assignedCount = (board[cellId] || []).length;
                       
                       return (

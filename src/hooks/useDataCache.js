@@ -198,7 +198,7 @@ export const useEmployeesCuisineCache = (dependencies = []) => {
   const { unifiedSupabase } = require('../lib/supabase-unified');
   
   return useDataCache(
-    'employees_cuisine',
+    'employes_cuisine',
     () => unifiedSupabase.employees.getCuisine(),
     dependencies
   );
@@ -223,9 +223,23 @@ export const useCompetencesCuisineCache = (dependencies = []) => {
 export const usePostesCuisineCache = (dependencies = []) => {
   const { unifiedSupabase } = require('../lib/supabase-unified');
   
+  // Dans le nouveau système, les postes sont codés en dur
+  const getPostesCuisineStatic = () => {
+    const postes = [
+      { id: 1, nom: 'Cuisine chaude', couleur: '#f59e0b', icone: '🔥' },
+      { id: 2, nom: 'Cuisine froide', couleur: '#06b6d4', icone: '❄️' },
+      { id: 3, nom: 'Chef sandwichs', couleur: '#8b5cf6', icone: '👨‍🍳' },
+      { id: 4, nom: 'Sandwichs', couleur: '#10b981', icone: '🥪' },
+      { id: 5, nom: 'Vaisselle', couleur: '#6b7280', icone: '🍽️' },
+      { id: 6, nom: 'Légumerie', couleur: '#84cc16', icone: '🥬' },
+      { id: 7, nom: 'Équipe Pina et Saskia', couleur: '#ec4899', icone: '🧊' }
+    ];
+    return Promise.resolve({ data: postes, error: null });
+  };
+  
   return useDataCache(
-    'postes_cuisine',
-    () => unifiedSupabase.postes.getCuisine(),
+    'postes_cuisine_static',
+    getPostesCuisineStatic,
     dependencies
   );
 };

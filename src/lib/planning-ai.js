@@ -1,9 +1,9 @@
-// Intelligence Artificielle pour la gestion automatique des plannings
+// Génération Automatique pour la gestion optimisée des plannings
 import { supabaseCuisine } from './supabase-cuisine';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
 
 /**
- * Configuration des règles métier pour l'IA
+ * Configuration des règles métier avancées pour la génération automatique
  */
 const PLANNING_RULES = {
   // Postes prioritaires qui doivent toujours être couverts
@@ -38,7 +38,7 @@ const PLANNING_RULES = {
   // Repos minimum entre deux services
   MIN_REST_HOURS: 10,
 
-  // Préférences par profil - MISES À JOUR
+  // NOUVELLES RÈGLES SOPHISTIQUÉES - Préférences par profil
   PROFILE_PREFERENCES: {
     'Fort': ['Cuisine chaude', 'Sandwichs', 'Légumerie'],
     'Moyen': ['Sandwichs', 'Vaisselle', 'Pain', 'Self Midi'],
@@ -57,6 +57,40 @@ const PLANNING_RULES = {
     'Légumerie': 8 // Dernière priorité
   },
 
+  // NOUVELLES RÈGLES SOPHISTIQUÉES - Équilibrage de charge
+  WORKLOAD_BALANCING: {
+    // Éviter qu'un employé ait trop d'heures par rapport aux autres
+    MAX_DEVIATION_HOURS: 5, // Écart max entre le plus chargé et le moins chargé
+    // Rotation automatique des postes difficiles
+    ROTATION_POSTES_DIFFICILES: ['Vaisselle', 'Cuisine chaude'],
+    // Limite de jours consécutifs sur un poste difficile
+    MAX_CONSECUTIVE_DAYS_HARD_POSTE: 3,
+    // Bonus pour accepter les postes difficiles
+    BONUS_POSTE_DIFFICILE: 15
+  },
+
+  // NOUVELLES RÈGLES - Préférences temporelles
+  TIME_PREFERENCES: {
+    // Certains employés préfèrent le matin
+    MORNING_PREFERENCE_BONUS: 10,
+    // Certains employés préfèrent l'après-midi
+    AFTERNOON_PREFERENCE_BONUS: 10,
+    // Éviter les changements d'horaires trop fréquents
+    CONSISTENCY_BONUS: 20
+  },
+
+  // RÈGLES AVANCÉES - Compétences et formations
+  COMPETENCE_ADVANCED: {
+    // Bonus pour les compétences validées
+    VALIDATED_COMPETENCE_BONUS: 25,
+    // Malus pour absence de compétence requise
+    MISSING_COMPETENCE_PENALTY: -50,
+    // Bonus pour employés polyvalents (>3 compétences)
+    POLYVALENT_BONUS: 15,
+    // Formation en cours - bonus d'encouragement
+    TRAINING_BONUS: 20
+  },
+
   // Postes nécessitant des compétences spécifiques
   COMPETENCE_REQUIRED: ['Cuisine chaude', 'Sandwichs'],
 
@@ -69,6 +103,29 @@ const PLANNING_RULES = {
   SPECIAL_RULES: {
     'Vaisselle': {
       '8h': { min: 1, max: 1 } // Exception pour 8h
+    }
+  },
+
+  // NOUVELLES RÈGLES - Gestion des conflits d'équipe
+  TEAM_DYNAMICS: {
+    // Éviter certaines combinaisons d'employés si nécessaire
+    AVOID_COMBINATIONS: [],
+    // Encourager certaines équipes qui travaillent bien ensemble
+    PREFERRED_TEAMS: [],
+    // Bonus pour mélanger les niveaux (mentor/apprenti)
+    MENTORING_BONUS: 10
+  },
+
+  // RÈGLES MÉTÉO ET SAISONNALITÉ
+  SEASONAL_RULES: {
+    // Ajustements selon la période de l'année
+    SUMMER_ADJUSTMENTS: {
+      'Jus de fruits': { multiplier: 1.5 }, // Plus de demande en été
+      'Légumerie': { multiplier: 1.2 }
+    },
+    WINTER_ADJUSTMENTS: {
+      'Cuisine chaude': { multiplier: 1.3 }, // Plus de demande en hiver
+      'Sandwichs': { multiplier: 0.9 }
     }
   }
 };

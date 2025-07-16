@@ -1,212 +1,170 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { supabaseCuisine } from '../../lib/supabase-cuisine';
+import { supabase } from '../../lib/supabase';
 
 /**
- * Hook pour la gestion partagée du planning (Base de données + Sync auto)
- * Remplace localStorage par base de données pour partage multi-utilisateurs
+ * Hook pour la gestion manuelle du planning (Base de données uniquement)
+ * Workflow : Chargement DB → Modifications temporaires → Sauvegarde manuelle
  */
 export const useLocalPlanningSync = (selectedDate) => {
   const [board, setBoard] = useState({});
   const [lastSaved, setLastSaved] = useState(null);
-  const [lastSync, setLastSync] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Référence pour éviter les sauvegardes en boucle
-  const lastBoardRef = useRef(null);
-  const saveTimeoutRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   /**
-   * Chargement du planning depuis la base de données
+   * Chargement du planning depuis la base de données au démarrage
    */
   const loadFromDB = useCallback(async () => {
     try {
+      setIsLoading(true);
+      console.log('📥 Chargement planning depuis base de données...');
+      
       const { data: boardData, error } = await supabaseCuisine.loadPlanningPartage(selectedDate);
       
       if (error) {
         console.error('❌ Erreur chargement planning:', error);
+        setBoard({});
         return {};
       }
       
-      console.log(`📥 Planning chargé depuis DB:`, Object.keys(boardData).length, 'cellules');
+      console.log(`✅ Planning chargé depuis DB:`, Object.keys(boardData).length, 'cellules');
+      setBoard(boardData);
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date());
       return boardData;
       
     } catch (error) {
       console.error('❌ Erreur chargement planning:', error);
+      setBoard({});
       return {};
+    } finally {
+      setIsLoading(false);
     }
   }, [selectedDate]);
 
   /**
-   * Sauvegarde du planning en base de données (debounced)
+   * Sauvegarde MANUELLE du planning en base de données
    */
-  const saveToDB = useCallback(async (boardData) => {
+  const saveToDatabase = useCallback(async () => {
     if (isSaving) {
-      console.log('⏳ Sauvegarde déjà en cours, skip...');
-      return { success: true };
+      console.log('⏳ Sauvegarde déjà en cours...');
+      return { success: false, message: 'Sauvegarde en cours...' };
     }
 
     try {
       setIsSaving(true);
-      const result = await supabaseCuisine.savePlanningPartage(boardData, selectedDate);
+      toast.loading('💾 Sauvegarde du planning...', { id: 'save-planning' });
+      
+      console.log('💾 Sauvegarde manuelle planning...', Object.keys(board).length, 'cellules');
+      
+      const result = await supabaseCuisine.savePlanningPartage(board, selectedDate);
       
       if (result.success) {
         setLastSaved(new Date());
-        lastBoardRef.current = JSON.stringify(boardData);
-
-        // Broadcast pour synchronisation mode TV
-        window.dispatchEvent(new CustomEvent('planning-updated', {
-          detail: {
-            date: format(selectedDate, 'yyyy-MM-dd'),
-            planning: boardData,
-            timestamp: Date.now()
-          }
-        }));
-
-        console.log(`💾 Planning sauvegardé en DB:`, Object.keys(boardData).length, 'cellules');
-        return { success: true };
+        setHasUnsavedChanges(false);
+        
+        const message = result.partial 
+          ? `Planning sauvegardé partiellement (${result.saved}/${result.total})` 
+          : 'Planning sauvegardé avec succès !';
+          
+        toast.success(message, { id: 'save-planning' });
+        console.log('✅ Planning sauvegardé:', result);
+        return { success: true, message };
       } else {
-        throw result.error;
+        throw new Error(result.error?.message || 'Erreur de sauvegarde');
       }
-
+      
     } catch (error) {
       console.error('❌ Erreur sauvegarde planning:', error);
-      toast.error('Erreur de sauvegarde planning');
-      return { success: false, error };
+      toast.error('Erreur lors de la sauvegarde', { id: 'save-planning' });
+      return { success: false, message: 'Erreur de sauvegarde' };
     } finally {
       setIsSaving(false);
     }
-  }, [selectedDate, isSaving]);
+  }, [board, selectedDate, isSaving]);
 
   /**
-   * Chargement initial depuis la base de données
-   */
-  useEffect(() => {
-    const loadInitial = async () => {
-      const initialBoard = await loadFromDB();
-      setBoard(initialBoard);
-      setLastSync(new Date());
-      lastBoardRef.current = JSON.stringify(initialBoard);
-    };
-    
-    loadInitial();
-  }, [loadFromDB]);
-
-  /**
-   * Auto-sauvegarde DEBOUNCED à chaque changement du board
-   */
-  useEffect(() => {
-    // Éviter la sauvegarde si :
-    // 1. Pas encore de sync initial
-    // 2. Board vide 
-    // 3. Contenu identique à la dernière sauvegarde
-    if (!lastSync || Object.keys(board).length === 0) {
-      return;
-    }
-
-    const currentBoardStr = JSON.stringify(board);
-    if (currentBoardStr === lastBoardRef.current) {
-      return; // Pas de changement
-    }
-
-    // Débouncer la sauvegarde (attendre 2 secondes)
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      console.log('💾 Auto-sauvegarde déclenchée...');
-      saveToDB(board);
-    }, 2000);
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [board, lastSync, saveToDB]);
-
-  /**
-   * Synchronisation automatique avec les autres utilisateurs (polling 30s)
-   */
-  useEffect(() => {
-    if (!lastSync) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const { hasChanges } = await supabaseCuisine.checkPlanningChanges(selectedDate, lastSync);
-        
-        if (hasChanges) {
-          console.log('🔄 Changements détectés par un autre utilisateur, rechargement...');
-          const updatedBoard = await loadFromDB();
-          setBoard(updatedBoard);
-          setLastSync(new Date());
-          lastBoardRef.current = JSON.stringify(updatedBoard);
-          toast.success('Planning mis à jour par un autre utilisateur', { duration: 2000 });
-        }
-      } catch (error) {
-        console.warn('Erreur sync automatique:', error);
-      }
-    }, 30000); // 30 secondes
-
-    return () => clearInterval(interval);
-  }, [lastSync, selectedDate, loadFromDB]);
-
-  /**
-   * Reset du planning actuel
+   * Reset COMPLET : vide l'interface ET supprime en base de données
    */
   const resetPlanning = useCallback(async () => {
-    const emptyBoard = {};
-    setBoard(emptyBoard);
-    
-    // Sauvegarder planning vide en DB
-    await saveToDB(emptyBoard);
-    
-    // Broadcast reset
-    window.dispatchEvent(new CustomEvent('planning-reset', {
-      detail: { date: format(selectedDate, 'yyyy-MM-dd') }
-    }));
-    
-    toast.success('Planning remis à zéro !');
-    console.log(`🗑️ Planning reseté pour ${format(selectedDate, 'yyyy-MM-dd')}`);
-  }, [selectedDate, saveToDB]);
+    try {
+      console.log('🗑️ Reset complet du planning...');
+      
+      // 1. Supprimer en base de données
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const { error } = await supabase
+        .from('planning_cuisine_new')
+        .delete()
+        .eq('date', dateStr);
+      
+      if (error) {
+        console.error('❌ Erreur suppression DB:', error);
+        toast.error('Erreur lors de la suppression en base');
+        return { success: false };
+      }
+      
+      // 2. Vider l'interface
+      setBoard({});
+      setHasUnsavedChanges(false);
+      setLastSaved(null);
+      
+      console.log('✅ Planning complètement supprimé');
+      toast.success('🗑️ Planning supprimé !');
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Erreur reset planning:', error);
+      toast.error('Erreur lors du reset');
+      return { success: false };
+    }
+  }, [selectedDate]);
 
   /**
-   * Export du planning actuel
+   * Export planning (fonctionnalité existante)
    */
   const exportPlanning = useCallback(() => {
-    const data = {
-      date: format(selectedDate, 'yyyy-MM-dd'),
-      planning: board,
-      exportedAt: new Date().toISOString(),
-      version: '3.0-shared-db'
-    };
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `planning-${format(selectedDate, 'yyyy-MM-dd')}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    toast.success('Planning exporté !');
+    try {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const exportData = {
+        date: dateStr,
+        planning: board,
+        exported_at: new Date().toISOString(),
+        stats: getStats()
+      };
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { 
+        type: 'application/json' 
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `planning-cuisine-${dateStr}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success('📄 Planning exporté !');
+      console.log('📄 Planning exporté:', dateStr);
+      
+    } catch (error) {
+      console.error('❌ Erreur export:', error);
+      toast.error('Erreur lors de l\'export');
+    }
   }, [selectedDate, board]);
 
   /**
-   * Rechargement manuel depuis la DB
+   * Mise à jour du board avec marquage "non sauvegardé"
    */
-  const reloadFromDB = useCallback(async () => {
-    const updatedBoard = await loadFromDB();
-    setBoard(updatedBoard);
-    setLastSync(new Date());
-    lastBoardRef.current = JSON.stringify(updatedBoard);
-    toast.success('Planning rechargé depuis la base !');
-  }, [loadFromDB]);
+  const updateBoard = useCallback((newBoard) => {
+    setBoard(newBoard);
+    setHasUnsavedChanges(true);
+  }, []);
 
   /**
-   * Statistiques du planning partagé
+   * Statistiques du planning
    */
   const getStats = useCallback(() => {
     const totalAssignments = Object.values(board).reduce((sum, cell) => sum + (cell?.length || 0), 0);
@@ -218,20 +176,29 @@ export const useLocalPlanningSync = (selectedDate) => {
       filledCells,
       totalCells,
       fillRate: totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0,
-      lastSaved
+      lastSaved,
+      hasUnsavedChanges
     };
-  }, [board, lastSaved]);
+  }, [board, lastSaved, hasUnsavedChanges]);
+
+  /**
+   * Chargement initial depuis la base de données
+   */
+  useEffect(() => {
+    loadFromDB();
+  }, [loadFromDB]);
 
   return {
     board,
-    setBoard,
+    setBoard: updateBoard, // Utilise updateBoard pour marquer les changements
     lastSaved,
+    isLoading,
+    isSaving,
+    hasUnsavedChanges,
+    saveToDatabase, // Nouvelle fonction de sauvegarde manuelle
     resetPlanning,
     exportPlanning,
-    reloadFromDB, // Nouvelle fonction pour forcer le rechargement
-    getStats, // ✅ Fonction statistiques rajoutée
-    isShared: true, // Indicateur que c'est partagé
-    isSaving, // Indicateur de sauvegarde en cours
-    lastSync // Pour debug/interface
+    getStats,
+    loadFromDB // Pour recharger manuellement si besoin
   };
 }; 

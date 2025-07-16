@@ -1,16 +1,12 @@
 import { supabase } from './supabase';
 
 /**
- * 🏗️ API SUPABASE UNIFIÉE
+ * ========================================
+ * API UNIFIÉE SUPABASE
+ * ========================================
  * 
- * Remplace tous les clients disparates (supabase-cuisine, supabase-secretariat, etc.)
- * par une seule API cohérente et optimisée.
- * 
- * OBJECTIFS :
- * ✅ Éliminer les redondances de tables
- * ✅ Centraliser toutes les requêtes  
- * ✅ Éviter les boucles infinies
- * ✅ Garantir la cohérence des données
+ * Cette bibliothèque centralise l'accès aux données
+ * et remplace progressivement les anciennes API spécialisées
  */
 
 export const unifiedSupabase = {
@@ -18,8 +14,10 @@ export const unifiedSupabase = {
   // ==================== EMPLOYÉS UNIFIÉS ====================
   
   employees: {
+    
     /**
      * Récupérer tous les employés
+     * REMPLACE: supabase.getEmployees()
      */
     async getAll() {
       try {
@@ -28,7 +26,7 @@ export const unifiedSupabase = {
           .select('*')
           .order('nom');
         
-        return { data: data || [], error };
+        return { data, error };
       } catch (err) {
         console.error('❌ Erreur getAll employees:', err);
         return { data: [], error: err };
@@ -42,19 +40,12 @@ export const unifiedSupabase = {
     async getCuisine() {
       try {
         const { data, error } = await supabase
-          .from('employees')
+          .from('employes_cuisine_new')
           .select('*')
-          .or('department.eq.cuisine,department.is.null') // Support legacy + nouveaux
-          .order('nom');
+          .eq('actif', true)
+          .order('prenom');
         
-        // Transformer pour compatibilité avec l'ancien format
-        const transformedData = (data || []).map(emp => ({
-          employee_id: emp.id,
-          employee: emp,
-          photo_url: emp.photo_url || null
-        }));
-        
-        return { data: transformedData, error };
+        return { data, error };
       } catch (err) {
         console.error('❌ Erreur getCuisine employees:', err);
         return { data: [], error: err };
@@ -62,18 +53,19 @@ export const unifiedSupabase = {
     },
 
     /**
-     * Récupérer les employés de logistique/transport
-     * REMPLACE: supabaseAPI.getEmployees() pour logistique
+     * Récupérer les employés logistique
+     * REMPLACE: supabaseLogistique.getEmployeesLogistique()
      */
     async getLogistique() {
       try {
         const { data, error } = await supabase
           .from('employees')
           .select('*')
-          .or('department.eq.logistique,department.is.null') // Support legacy
+          .or('department.eq.logistique,department.is.null')
+          .eq('statut', 'Actif')
           .order('nom');
         
-        return { data: data || [], error };
+        return { data, error };
       } catch (err) {
         console.error('❌ Erreur getLogistique employees:', err);
         return { data: [], error: err };
@@ -81,99 +73,36 @@ export const unifiedSupabase = {
     },
 
     /**
-     * Mettre à jour un employé (unifié)
+     * Créer un nouvel employé cuisine
      */
-    async update(employeeId, updates) {
+    async createCuisine(employeeData) {
       try {
         const { data, error } = await supabase
-          .from('employees')
-          .update(updates)
-          .eq('id', employeeId)
+          .from('employes_cuisine_new')
+          .insert(employeeData)
           .select();
         
-        return { data: data?.[0] || null, error };
+        return { data, error };
       } catch (err) {
-        console.error('❌ Erreur update employee:', err);
+        console.error('❌ Erreur createCuisine employee:', err);
         return { data: null, error: err };
       }
-    }
-  },
-
-  // ==================== COMPÉTENCES UNIFIÉES ====================
-  
-  competences: {
-    /**
-     * Récupérer toutes les compétences
-     */
-    async getAll() {
-      try {
-        const { data, error } = await supabase
-          .from('competences')
-          .select('*');
-        
-        return { data: data || [], error };
-      } catch (err) {
-        console.error('❌ Erreur getAll competences:', err);
-        return { data: [], error: err };
-      }
     },
 
     /**
-     * Récupérer les compétences cuisine
-     * REMPLACE: supabaseCuisine.getCompetencesCuisineSimple()
+     * Mettre à jour un employé cuisine
      */
-    async getByCuisine() {
+    async updateCuisine(id, updates) {
       try {
         const { data, error } = await supabase
-          .from('competences')
-          .select('*')
-          .or('type.eq.cuisine,poste_cuisine_id.not.is.null') // Support legacy
-          .order('employee_id');
-        
-        return { data: data || [], error };
-      } catch (err) {
-        console.error('❌ Erreur getByCuisine competences:', err);
-        return { data: [], error: err };
-      }
-    },
-
-    /**
-     * Récupérer les compétences véhicules
-     * REMPLACE: supabaseAPI.getAllCompetences() pour véhicules
-     */
-    async getByVehicule() {
-      try {
-        const { data, error } = await supabase
-          .from('competences')
-          .select(`
-            *,
-            vehicle:vehicles(nom),
-            employee:employees(nom)
-          `)
-          .or('type.eq.vehicule,vehicle_id.not.is.null') // Support legacy
-          .order('employee_id');
-        
-        return { data: data || [], error };
-      } catch (err) {
-        console.error('❌ Erreur getByVehicule competences:', err);
-        return { data: [], error: err };
-      }
-    },
-
-    /**
-     * Mettre à jour une compétence
-     */
-    async update(employeeId, competenceData) {
-      try {
-        const { data, error } = await supabase
-          .from('competences')
-          .upsert(competenceData)
-          .eq('employee_id', employeeId)
+          .from('employes_cuisine_new')
+          .update(updates)
+          .eq('id', id)
           .select();
         
-        return { data: data?.[0] || null, error };
+        return { data, error };
       } catch (err) {
-        console.error('❌ Erreur update competence:', err);
+        console.error('❌ Erreur updateCuisine employee:', err);
         return { data: null, error: err };
       }
     }
@@ -182,43 +111,19 @@ export const unifiedSupabase = {
   // ==================== PLANNING UNIFIÉ ====================
   
   planning: {
+    
     /**
-     * Récupérer le planning général
+     * Récupérer le planning logistique
+     * REMPLACE: supabaseLogistique.getPlanningLogistique()
      */
-    async getGeneral(startDate, endDate) {
+    async getLogistique(dateDebut = null, dateFin = null) {
       try {
         let query = supabase
           .from('planning')
           .select(`
             *,
-            employee:employees(nom, profil, permis),
-            vehicle:vehicles(nom, capacite)
-          `);
-
-        if (startDate && endDate) {
-          query = query.gte('date', startDate).lte('date', endDate);
-        }
-        
-        const { data, error } = await query.order('date');
-        return { data: data || [], error };
-      } catch (err) {
-        console.error('❌ Erreur getGeneral planning:', err);
-        return { data: [], error: err };
-      }
-    },
-
-    /**
-     * Récupérer le planning cuisine
-     * REMPLACE: supabaseCuisine.getPlanningCuisine()
-     */
-    async getByCuisine(dateDebut = null, dateFin = null) {
-      try {
-        let query = supabase
-          .from('planning_cuisine')
-          .select(`
-            *,
             employee:employees(*),
-            poste:postes_cuisine(*)
+            vehicle:vehicles(*)
           `);
         
         if (dateDebut) {
@@ -229,34 +134,119 @@ export const unifiedSupabase = {
           }
         }
         
-        const { data, error } = await query.order('date').order('creneau');
-        return { data: data || [], error };
+        const { data, error } = await query.order('date').order('heure_debut');
+        
+        return { data, error };
       } catch (err) {
-        console.error('❌ Erreur getByCuisine planning:', err);
+        console.error('❌ Erreur getLogistique planning:', err);
         return { data: [], error: err };
       }
-    }
-  },
+    },
 
-  // ==================== POSTES UNIFIÉS ====================
-  
-  postes: {
     /**
-     * Récupérer les postes de cuisine
-     * REMPLACE: supabaseCuisine.getPostes()
+     * Récupérer le planning cuisine
+     * REMPLACE: supabaseCuisine.getPlanningCuisine()
      */
-    async getCuisine() {
+    async getCuisine(dateDebut = null, dateFin = null) {
+      try {
+        let query = supabase
+          .from('planning_cuisine_new')
+          .select(`
+            *,
+            employe:employes_cuisine_new(id, prenom, photo_url)
+          `);
+        
+        if (dateDebut) {
+          if (dateFin) {
+            query = query.gte('date', dateDebut).lte('date', dateFin);
+          } else {
+            query = query.eq('date', dateDebut);
+          }
+        }
+        
+        const { data, error } = await query.order('date').order('heure_debut');
+        
+        if (error) throw error;
+        
+        // Adapter le format pour la compatibilité
+        const planningAdapte = data.map(item => ({
+          id: item.id,
+          date: item.date,
+          employee_id: item.employee_id,
+          poste: {
+            nom: item.poste,
+            couleur: item.poste_couleur,
+            icone: item.poste_icone
+          },
+          creneau: item.creneau,
+          heure_debut: item.heure_debut,
+          heure_fin: item.heure_fin,
+          role: item.role,
+          notes: item.notes,
+          employee: item.employe ? {
+            id: item.employe.id,
+            nom: item.employe.prenom,
+            prenom: item.employe.prenom,
+            photo_url: item.employe.photo_url
+          } : null
+        }));
+        
+        return { data: planningAdapte, error: null };
+      } catch (error) {
+        console.error('❌ Erreur getCuisine planning:', error);
+        return { data: [], error };
+      }
+    },
+
+    /**
+     * Créer une affectation planning cuisine
+     */
+    async createCuisine(planningData) {
       try {
         const { data, error } = await supabase
-          .from('postes_cuisine')
-          .select('*')
-          .eq('actif', true)
-          .order('ordre_affichage');
+          .from('planning_cuisine_new')
+          .insert(planningData)
+          .select();
         
-        return { data: data || [], error };
+        return { data, error };
       } catch (err) {
-        console.error('❌ Erreur getCuisine postes:', err);
-        return { data: [], error: err };
+        console.error('❌ Erreur createCuisine planning:', err);
+        return { data: null, error: err };
+      }
+    },
+
+    /**
+     * Mettre à jour une affectation planning cuisine
+     */
+    async updateCuisine(id, updates) {
+      try {
+        const { data, error } = await supabase
+          .from('planning_cuisine_new')
+          .update(updates)
+          .eq('id', id)
+          .select();
+        
+        return { data, error };
+      } catch (err) {
+        console.error('❌ Erreur updateCuisine planning:', err);
+        return { data: null, error: err };
+      }
+    },
+
+    /**
+     * Supprimer une affectation planning cuisine
+     */
+    async deleteCuisine(id) {
+      try {
+        const { data, error } = await supabase
+          .from('planning_cuisine_new')
+          .delete()
+          .eq('id', id);
+        
+        return { data, error };
+      } catch (err) {
+        console.error('❌ Erreur deleteCuisine planning:', err);
+        return { data: null, error: err };
       }
     }
   },
@@ -264,71 +254,116 @@ export const unifiedSupabase = {
   // ==================== ABSENCES UNIFIÉES ====================
   
   absences: {
+    
     /**
-     * Récupérer les absences générales
+     * Récupérer les absences logistique
+     * REMPLACE: supabaseLogistique.getAbsencesLogistique()
      */
-    async getGeneral(dateDebut = null, dateFin = null) {
+    async getLogistique(dateDebut = null, dateFin = null) {
       try {
         let query = supabase
           .from('absences')
           .select(`
             *,
-            employee:employees!absences_employee_id_fkey(nom, prenom, profil)
-          `)
-          .order('date_debut', { ascending: false });
-
+            employee:employees(*)
+          `);
+        
         if (dateDebut && dateFin) {
           query = query.or(`date_debut.lte.${dateFin},date_fin.gte.${dateDebut}`);
+        } else if (dateDebut) {
+          query = query.lte('date_debut', dateDebut).gte('date_fin', dateDebut);
         }
-
-        const { data, error } = await query;
-        return { data: data || [], error };
+        
+        const { data, error } = await query.order('date_debut');
+        
+        return { data, error };
       } catch (err) {
-        console.error('❌ Erreur getGeneral absences:', err);
+        console.error('❌ Erreur getLogistique absences:', err);
         return { data: [], error: err };
       }
     },
 
     /**
-     * Récupérer les absences de cuisine
+     * Récupérer les absences cuisine
      * REMPLACE: supabaseCuisine.getAbsencesCuisine()
      */
-    async getByCuisine(dateDebut = null, dateFin = null) {
+    async getCuisine(dateDebut = null, dateFin = null) {
       try {
         let query = supabase
-          .from('absences_cuisine')
+          .from('absences_cuisine_new')
           .select(`
             *,
-            employee:employees(*)
-          `)
-          .order('date_debut', { ascending: false });
-
+            employe:employes_cuisine_new(id, prenom, photo_url)
+          `);
+        
         if (dateDebut && dateFin) {
           query = query.or(`date_debut.lte.${dateFin},date_fin.gte.${dateDebut}`);
+        } else if (dateDebut) {
+          query = query.lte('date_debut', dateDebut).gte('date_fin', dateDebut);
         }
-
-        const { data, error } = await query;
-        return { data: data || [], error };
-      } catch (err) {
-        console.warn('⚠️ Table absences_cuisine n\'existe pas encore, fallback...');
-        // Fallback vers absences générales filtrées
-        return await this.getGeneral(dateDebut, dateFin);
+        
+        const { data, error } = await query.order('date_debut');
+        
+        if (error) throw error;
+        
+        return { data, error };
+      } catch (error) {
+        console.error('❌ Erreur getCuisine absences:', error);
+        return { data: [], error };
       }
     },
 
     /**
-     * Créer une absence
+     * Créer une absence cuisine
      */
-    async create(absenceData) {
+    async createCuisine(absenceData) {
       try {
         const { data, error } = await supabase
-          .from('absences')
+          .from('absences_cuisine_new')
           .insert(absenceData)
+          .select(`
+            *,
+            employe:employes_cuisine_new(id, prenom, photo_url)
+          `);
+        
+        return { data, error };
+      } catch (err) {
+        console.error('❌ Erreur createCuisine absence:', err);
+        return { data: null, error: err };
+      }
+    },
+
+    /**
+     * Mettre à jour une absence cuisine
+     */
+    async updateCuisine(id, updates) {
+      try {
+        const { data, error } = await supabase
+          .from('absences_cuisine_new')
+          .update(updates)
+          .eq('id', id)
           .select();
         
-        return { data: data?.[0] || null, error };
+        return { data, error };
       } catch (err) {
-        console.error('❌ Erreur create absence:', err);
+        console.error('❌ Erreur updateCuisine absence:', err);
+        return { data: null, error: err };
+      }
+    },
+
+    /**
+     * Supprimer une absence cuisine
+     */
+    async deleteCuisine(id) {
+      try {
+        const { data, error } = await supabase
+          .from('absences_cuisine_new')
+          .delete()
+          .eq('id', id);
+        
+        return { data, error };
+      } catch (err) {
+        console.error('❌ Erreur deleteCuisine absence:', err);
         return { data: null, error: err };
       }
     }
@@ -337,9 +372,6 @@ export const unifiedSupabase = {
   // ==================== VÉHICULES ====================
   
   vehicles: {
-    /**
-     * Récupérer tous les véhicules
-     */
     async getAll() {
       try {
         const { data, error } = await supabase
@@ -347,7 +379,7 @@ export const unifiedSupabase = {
           .select('*')
           .order('nom');
         
-        return { data: data || [], error };
+        return { data, error };
       } catch (err) {
         console.error('❌ Erreur getAll vehicles:', err);
         return { data: [], error: err };
@@ -355,46 +387,27 @@ export const unifiedSupabase = {
     }
   },
 
-  // ==================== UTILITAIRES ====================
+  // ==================== COMPÉTENCES ====================
   
-  /**
-   * Test de connexion unifié
-   */
-  async testConnection() {
-    try {
-      console.log('🔍 Test connexion API unifiée...');
-      
-      const { data, error } = await supabase
-        .from('employees')
-        .select('count')
-        .limit(1);
-      
-      if (error) {
-        console.error('❌ Erreur test connexion:', error);
-        return { success: false, error };
+  competences: {
+    async getAll() {
+      try {
+        const { data, error } = await supabase
+          .from('competences')
+          .select(`
+            *,
+            employee:employees(*),
+            vehicle:vehicles(*)
+          `)
+          .order('created_at');
+        
+        return { data, error };
+      } catch (err) {
+        console.error('❌ Erreur getAll competences:', err);
+        return { data: [], error: err };
       }
-      
-      console.log('✅ API unifiée connectée avec succès');
-      return { success: true, data };
-    } catch (err) {
-      console.error('❌ Erreur critique test connexion:', err);
-      return { success: false, error: err };
     }
-  },
-
-  /**
-   * Fonction de migration (pour plus tard)
-   */
-  async migrateLegacyData() {
-    console.log('🚀 Migration des données legacy vers API unifiée...');
-    // TODO: Implémenter la migration
-    return { success: true, message: 'Migration à implémenter' };
   }
 };
-
-// Test automatique de connexion au démarrage
-unifiedSupabase.testConnection().catch(err => {
-  console.warn('⚠️ Impossible de tester la connexion unifiée:', err);
-});
 
 export default unifiedSupabase; 

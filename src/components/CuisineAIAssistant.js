@@ -126,20 +126,17 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
       if (employeesRes?.data) {
         console.log('👥 STRUCTURE EMPLOYÉS - Premiers 3 éléments:', 
           employeesRes.data.slice(0, 3).map(emp => ({
-            employee_id: emp.employee_id,
-            employee: emp.employee ? {
-              id: emp.employee.id,
-              nom: emp.employee.nom,
-              profil: emp.employee.profil
-            } : 'EMPLOYEE NULL',
-            service: emp.service
+            id: emp.id,
+            prenom: emp.prenom,
+            langue_parlee: emp.langue_parlee,
+            actif: emp.actif
           }))
         );
         
         console.log('📋 LISTE COMPLÈTE des noms d\'employés:', 
           employeesRes.data
-            .filter(emp => emp.employee?.nom)
-            .map(emp => emp.employee.nom)
+            .filter(emp => emp.prenom)
+            .map(emp => emp.prenom)
             .join(', ')
         );
       }
@@ -204,7 +201,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
         
         // 🔧 RECHERCHE CORRIGÉE - Exacte d'abord
         let detectedEmployee = contextData.employees.find(emp => {
-          const empNom = emp.employee?.nom?.toLowerCase().trim();
+          const empNom = emp.prenom?.toLowerCase().trim();
           console.log(`🔎 Comparaison exacte: "${empNom}" === "${searchName}"`);
           return empNom === searchName;
         });
@@ -214,7 +211,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
         // 🔧 RECHERCHE FLOUE si pas trouvé
         if (!detectedEmployee) {
           detectedEmployee = contextData.employees.find(emp => {
-            const empNom = emp.employee?.nom?.toLowerCase().trim() || '';
+            const empNom = emp.prenom?.toLowerCase().trim() || '';
             const contains1 = empNom.includes(searchName);
             const contains2 = searchName.includes(empNom);
             console.log(`🔎 Comparaison floue: "${empNom}" ↔ "${searchName}" → contains1:${contains1}, contains2:${contains2}`);
@@ -239,7 +236,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
           console.log(`🔤 Recherche normalisée: "${searchName}" → "${normalizedSearch}"`);
           
           detectedEmployee = contextData.employees.find(emp => {
-            const empNom = emp.employee?.nom;
+            const empNom = emp.prenom;
             if (!empNom) return false;
             
             const normalizedEmpNom = normalizeText(empNom);
@@ -255,9 +252,9 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
         
         if (detectedEmployee) {
           console.log('✅ EMPLOYÉ TROUVÉ:', {
-            nom: detectedEmployee.employee?.nom,
-            id: detectedEmployee.employee?.id,
-            employee_id: detectedEmployee.employee_id
+            nom: detectedEmployee.prenom,
+            id: detectedEmployee.id,
+            langue_parlee: detectedEmployee.langue_parlee
           });
           
           // Extraction de date (code existant)
@@ -327,7 +324,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
           
           // Créer l'absence
           const absenceData = {
-            employee_id: detectedEmployee.employee.id,
+            employee_id: detectedEmployee.id,
             date_debut: targetDate,
             date_fin: targetDate,
             type_absence: 'Absent',
@@ -342,7 +339,7 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
             console.log('🔄 Résultat création:', result);
             
             if (!result.error && result.data) {
-              actionResults.push(`✅ Absence créée: ${detectedEmployee.employee.nom} le ${targetDate}`);
+              actionResults.push(`✅ Absence créée: ${detectedEmployee.prenom} le ${targetDate}`);
               console.log('🎉 SUCCESS - Absence créée avec ID:', result.data.id);
               
               // 🔧 RAFRAÎCHISSEMENT STABLE avec délai
@@ -366,12 +363,12 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
           console.error('❌ EMPLOYÉ NON TROUVÉ MALGRÉ TOUTES LES RECHERCHES');
           console.log('📋 DÉBOGAGE - Liste complète des employés disponibles:');
           contextData.employees.forEach((emp, index) => {
-            console.log(`  ${index + 1}. "${emp.employee?.nom}" (ID: ${emp.employee?.id}) - Service: ${emp.service || 'N/A'}`);
+            console.log(`  ${index + 1}. "${emp.prenom}" (ID: ${emp.id}) - Langue: ${emp.langue_parlee || 'N/A'}`);
           });
           
           const availableNames = contextData.employees
-            .filter(emp => emp.employee?.nom)
-            .map(emp => emp.employee.nom);
+            .filter(emp => emp.prenom)
+            .map(emp => emp.prenom);
             
           actionResults.push(`⚠️ Employé "${detectedEmployeeName}" non reconnu dans la base cuisine.\n\n📋 Employés disponibles (${availableNames.length}): ${availableNames.join(', ')}\n\n💡 Vérifiez l'orthographe ou utilisez "Analyser équipe" pour voir tous les employés.`);
         }
@@ -427,7 +424,7 @@ CONTEXTE DONNÉES ACTUELLES CUISINE:
 
 EMPLOYÉS DISPONIBLES (${contextData.employees.length}):
 ${contextData.employees.map(emp => 
-  `- ${emp.employee?.nom || 'Nom manquant'} (${emp.employee?.profil || 'Profil non défini'})`
+  `- ${emp.prenom || 'Nom manquant'} (${emp.langue_parlee || 'Langue non définie'})`
 ).join('\n')}
 
 POSTES DE TRAVAIL (${contextData.postes.length}):
