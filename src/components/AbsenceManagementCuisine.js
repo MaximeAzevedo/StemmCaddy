@@ -67,13 +67,22 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
         setAbsences(absencesResult.data || []);
       }
 
-      // Extraire les employés de la structure employeesCuisine
-      const employees = (employeesResult.data || []).map(ec => ec.employee);
+      // 🔧 STRUCTURE CORRIGÉE : employés directs sans imbrication
+      const employees = (employeesResult.data || [])
+        .filter(emp => emp && emp.id && emp.prenom)
+        .map(emp => ({
+          id: emp.id,
+          nom: emp.prenom,
+          prenom: emp.prenom,
+          photo_url: emp.photo_url,
+          langue_parlee: emp.langue_parlee
+        }));
+      
       setEmployeesCuisine(employees);
       
       // Log pour debug
-      console.log('Employés cuisine chargés:', employees.length);
-      console.log('Absences cuisine chargées:', absencesResult.data?.length || 0);
+      console.log('✅ Employés cuisine chargés:', employees.length);
+      console.log('✅ Absences cuisine chargées:', absencesResult.data?.length || 0);
 
     } catch (error) {
       console.error('Erreur chargement données cuisine:', error);
@@ -82,25 +91,14 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
       
       // Données de démonstration en cas d'erreur
       setEmployeesCuisine([
-        { id: 1, nom: 'Jean', prenom: 'Cuisinier', profil: 'Fort' },
-        { id: 2, nom: 'Marie', prenom: 'Pâtissière', profil: 'Moyen' },
-        { id: 3, nom: 'Pierre', prenom: 'Aide', profil: 'Faible' },
-        { id: 4, nom: 'Sophie', prenom: 'Chef', profil: 'Fort' },
-        { id: 5, nom: 'Paul', prenom: 'Plongeur', profil: 'Moyen' }
+        { id: 1, nom: 'Salah', prenom: 'Salah', langue_parlee: 'Arabe' },
+        { id: 2, nom: 'Majda', prenom: 'Majda', langue_parlee: 'Yougoslave' },
+        { id: 3, nom: 'Mahmoud', prenom: 'Mahmoud', langue_parlee: 'Arabe' },
+        { id: 4, nom: 'Mohammad', prenom: 'Mohammad', langue_parlee: 'Arabe' },
+        { id: 5, nom: 'Amar', prenom: 'Amar', langue_parlee: 'Arabe' }
       ]);
       
-      setAbsences([
-        {
-          id: 1,
-          employee_id: 3,
-          employee_nom: 'Pierre',
-          date_debut: format(new Date(), 'yyyy-MM-dd'),
-          date_fin: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
-          motif: 'Maladie',
-          type_absence: 'Absent',
-          statut: 'Confirmée'
-        }
-      ]);
+      setAbsences([]);
     } finally {
       setLoading(false);
     }
@@ -126,13 +124,14 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
     try {
       setSubmitting(true);
       
+      // 🔧 STRUCTURE CORRIGÉE : pas de colonne statut
       const absenceData = {
         employee_id: parseInt(formData.employee_id),
         date_debut: formData.date_debut,
         date_fin: formData.date_fin,
         type_absence: 'Absent',
-        statut: 'Confirmée',
         motif: formData.motif || null
+        // ❌ Supprimé : statut (colonne n'existe pas)
       };
 
       let result;
@@ -219,7 +218,8 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
   };
 
   const filteredAbsences = absences.filter(absence => {
-    const employeeName = absence.employee_nom || 
+    // 🔧 STRUCTURE CORRIGÉE : employe.prenom au lieu de employee_nom
+    const employeeName = absence.employe?.prenom || 
                         employeesCuisine.find(e => e.id === absence.employee_id)?.nom || 
                         'Inconnu';
     const matchesSearch = employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -230,7 +230,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
   const getEmployeesWithAbsences = () => {
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i));
     
-    return employeesCuisine.map(employee => {
+    return employeesCuisine.filter(employee => employee && employee.id).map(employee => {
       const employeeAbsences = absences.filter(absence => 
         absence.employee_id === employee.id &&
         weekDays.some(day => 
@@ -261,7 +261,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
 
   const getEmployeeNameById = (id) => {
     const employee = employeesCuisine.find(e => e.id === id);
-    return employee ? `${employee.nom} ${employee.prenom || ''}`.trim() : 'Employé inconnu';
+    return employee ? employee.nom : 'Employé inconnu';
   };
 
   if (loading) {
@@ -283,7 +283,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <button
-                onClick={() => window.history.back()}
+                onClick={() => window.location.href = '/cuisine'}
                 className="mr-4 p-2 hover:bg-gray-100 rounded-lg"
                 title="Retour au module cuisine"
               >
@@ -300,7 +300,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
               >
                 <Home className="w-5 h-5" />
               </button>
-              <span className="text-gray-600">{user.email}</span>
+              <span className="text-gray-600">{user?.email || 'Utilisateur'}</span>
               <button
                 onClick={onLogout}
                 className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 transition-colors"
@@ -403,9 +403,9 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                     <td className="p-2 font-medium">
                       <div className="flex items-center space-x-2">
                         <ChefHat className="w-4 h-4 text-blue-600" />
-                        <span>{employee.nom} {employee.prenom}</span>
+                        <span>{employee?.nom || 'N/A'} {employee?.prenom || ''}</span>
                         <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
-                          {employee.profil}
+                          {employee?.profil || 'N/A'}
                         </span>
                       </div>
                     </td>
@@ -480,7 +480,7 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                     
                     <div>
                       <h3 className="font-semibold text-gray-900">
-                        {absence.employee_nom || getEmployeeNameById(absence.employee_id)}
+                        {absence.employe?.prenom || getEmployeeNameById(absence.employee_id)}
                       </h3>
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <span>{format(parseISO(absence.date_debut), 'dd/MM/yyyy')}</span>
@@ -561,13 +561,12 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
                   <select
                     value={formData.employee_id}
                     onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
-                    required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Sélectionner un employé</option>
-                    {employeesCuisine.map(employee => (
+                    {employeesCuisine.filter(employee => employee && employee.id && employee.nom).map(employee => (
                       <option key={employee.id} value={employee.id}>
-                        {employee.nom} {employee.prenom ? `(${employee.prenom})` : ''}
+                        {employee.nom} {employee.langue_parlee ? `(${employee.langue_parlee})` : ''}
                       </option>
                     ))}
                   </select>
