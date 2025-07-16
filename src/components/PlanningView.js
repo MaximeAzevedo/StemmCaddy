@@ -359,10 +359,6 @@ const PlanningView = ({ user, onLogout }) => {
                     <Save className="w-4 h-4 mr-2" />
                     Sauvegarder
                   </button>
-                  <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center">
-                    <Download className="w-4 h-4 mr-2" />
-                    Exporter
-                  </button>
                 </div>
               </div>
             </div>

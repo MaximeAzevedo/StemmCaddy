@@ -38,22 +38,6 @@ export const sessionsConfig = {
     ],
     // Tous les créneaux possibles
     creneaux: ['8h-16h', '8h-12h', '8h', '10h', 'midi', '11h-11h45', '11h45-12h45']
-  },
-  'apres-midi': {
-    label: 'Après-midi',
-    icon: MoonIcon,
-    color: 'from-blue-400 to-indigo-600',
-    postesActifs: [
-      'Cuisine chaude', 
-      'Sandwichs', 
-      'Pain', 
-      'Jus de fruits', 
-      'Vaisselle', 
-      'Légumerie', 
-      'Self Midi', 
-      'Equipe Pina et Saskia'
-    ],
-    creneaux: ['8h-16h', '8h-12h', '8h', '10h', 'midi', '11h-11h45', '11h45-12h45']
   }
 };
 
