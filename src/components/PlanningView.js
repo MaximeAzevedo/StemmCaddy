@@ -4,264 +4,517 @@ import {
   Calendar, 
   Save, 
   Zap,
-  Home,
-  AlertTriangle,
-  CheckCircle
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  User,
+  Truck,
+  Monitor
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { aiPlanningEngine } from '../lib/ai-planning-engine'; // ✅ NOUVEAU : Moteur IA intelligent
+import { supabaseLogistique } from '../lib/supabase-logistique';
+import { aiPlanningEngine } from '../lib/ai-planning-engine';
 
 const PlanningView = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const [currentWeek, setCurrentWeek] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [planning, setPlanning] = useState({});
-  const [employees] = useState([
-    { id: 1, nom: 'Martial', profil: 'Fort', langues: ['Français'], permis: true },
-    { id: 2, nom: 'Margot', profil: 'Moyen', langues: ['Français'], permis: true },
-    { id: 3, nom: 'Shadi', profil: 'Fort', langues: ['Arabe', 'Anglais', 'Français'], permis: false },
-    { id: 4, nom: 'Ahmad', profil: 'Moyen', langues: ['Arabe'], permis: true },
-    { id: 5, nom: 'Tamara', profil: 'Faible', langues: ['Luxembourgeois', 'Français'], permis: true },
-    { id: 6, nom: 'Soroosh', profil: 'Fort', langues: ['Perse'], permis: true },
-    { id: 7, nom: 'Imad', profil: 'Moyen', langues: ['Arabe'], permis: true }
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  // Données logistique
+  const [employees, setEmployees] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [competences, setCompetences] = useState([]);
+  
+  // État pour le menu contextuel des rôles
+  const [contextMenu, setContextMenu] = useState(null);
 
-  const vehicles = [
-    { id: 'cr21', name: 'Crafter 21', capacity: 3, color: 'bg-blue-500' },
-    { id: 'cr23', name: 'Crafter 23', capacity: 3, color: 'bg-green-500' },
-    { id: 'jumper', name: 'Jumper', capacity: 3, color: 'bg-purple-500' },
-    { id: 'ducato', name: 'Ducato', capacity: 3, color: 'bg-orange-500' },
-    { id: 'transit', name: 'Transit', capacity: 8, color: 'bg-red-500' },
-    { id: 'caddy', name: 'Reste Caddy', capacity: 10, color: 'bg-gray-500' }
-  ];
+  /**
+   * Chargement des données logistique
+   */
+  const loadLogisticData = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const [employeesResult, vehiculesResult, competencesResult] = await Promise.all([
+        supabaseLogistique.getEmployeesLogistique(),
+        supabaseLogistique.getVehicules(),
+        supabaseLogistique.getCompetencesVehicules()
+      ]);
 
-  const initializePlanning = useCallback(() => {
+      if (employeesResult.error) throw employeesResult.error;
+      if (vehiculesResult.error) throw vehiculesResult.error;
+      if (competencesResult.error) throw competencesResult.error;
+      
+      setEmployees(employeesResult.data || []);
+      setVehicles(vehiculesResult.data || []);
+      setCompetences(competencesResult.data || []);
+      
+    } catch (error) {
+      console.error('❌ Erreur chargement données logistique:', error);
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLogisticData();
+  }, [loadLogisticData]);
+
+  /**
+   * Créer un planning vide
+   */
+  const createEmptyPlanning = useCallback(() => {
     const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
     const newPlanning = {};
     
     weekDays.forEach(day => {
       const dateKey = format(day, 'yyyy-MM-dd');
-      newPlanning[dateKey] = {
-        cr21: [
-          { id: 2, nom: 'Margot', status: 'assigned' },
-          { id: 7, nom: 'Imad', status: 'assigned' }
-        ],
-        cr23: [
-          { id: 6, nom: 'Soroosh', status: 'assigned' },
-          { id: 4, nom: 'Ahmad', status: 'assigned' }
-        ],
-        jumper: [
-          { id: 5, nom: 'Tamara', status: 'assigned' }
-        ],
-        ducato: [],
-        transit: [
-          { id: 3, nom: 'Shadi', status: 'absent' }
-        ],
-        caddy: [
-          { id: 1, nom: 'Martial', status: 'assigned' }
-        ]
-      };
+      newPlanning[dateKey] = {};
+      
+      vehicles.forEach(vehicle => {
+        newPlanning[dateKey][vehicle.id] = [];
+      });
     });
     
     setPlanning(newPlanning);
-  }, [currentWeek]);
+    console.log('📅 Planning vide initialisé');
+  }, [currentWeek, vehicles]);
 
-  // Calculer weekDays au niveau du composant pour l'affichage
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+  /**
+   * Initialisation planning
+   */
+  const initializePlanning = useCallback(async () => {
+    if (vehicles.length === 0) return;
+    
+    try {
+      console.log('🔄 Initialisation planning...');
+      
+      // D'abord créer un planning vide
+      createEmptyPlanning();
+      
+      // Ensuite essayer de charger le planning existant
+      const result = await supabaseLogistique.loadPlanningHebdomadaire(currentWeek);
+      
+      if (result.error) {
+        console.warn('⚠️ Erreur chargement planning existant:', result.error);
+        // Le planning vide créé précédemment reste
+      } else if (result.data && Object.keys(result.data).length > 0) {
+        // Merger le planning existant avec la structure vide
+        const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+        const mergedPlanning = {};
+        
+        weekDays.forEach(day => {
+          const dateKey = format(day, 'yyyy-MM-dd');
+          mergedPlanning[dateKey] = {};
+          
+          // Initialiser toutes les cases véhicules
+          vehicles.forEach(vehicle => {
+            mergedPlanning[dateKey][vehicle.id] = result.data[dateKey]?.[vehicle.id] || [];
+          });
+        });
+        
+        console.log('✅ Planning existant mergé avec structure complète');
+        setPlanning(mergedPlanning);
+      } else {
+        console.log('ℹ️ Pas de planning existant, utilisation du planning vide');
+        // Le planning vide créé précédemment reste
+      }
+    } catch (error) {
+      console.error('❌ Erreur initialisation planning:', error);
+      createEmptyPlanning();
+    }
+  }, [currentWeek, vehicles, createEmptyPlanning]);
 
   useEffect(() => {
-    // Initialiser le planning avec des données de démonstration
-    initializePlanning();
-  }, [currentWeek, initializePlanning]);
+    if (!loading && vehicles.length > 0) {
+      initializePlanning();
+    }
+  }, [loading, vehicles, currentWeek, initializePlanning]);
 
+  /**
+   * Génération IA
+   */
   const generateAIPlanning = async () => {
+    if (employees.length === 0 || vehicles.length === 0) {
+      toast.error('Données non chargées');
+      return;
+    }
+
     try {
-      console.log('🤖 Lancement de la génération IA intelligente...');
-      toast.loading('🤖 Génération planning IA avec Azure OpenAI...', { id: 'ai-planning' });
+      toast.loading('🤖 Génération IA...', { id: 'ai-planning' });
       
-      // Utiliser notre nouveau moteur IA intelligent pour chaque jour de la semaine
       const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
       const optimizedPlanning = {};
       
       for (const day of weekDays) {
         const dateString = format(day, 'yyyy-MM-dd');
-        console.log(`🎯 Génération IA pour ${dateString}...`);
         
-        // Appel IA pour ce jour spécifique
-        const aiResult = await aiPlanningEngine.generateIntelligentPlanning(dateString);
+        const aiResult = await aiPlanningEngine.generateOptimalPlanningLogistique(
+          dateString,
+          employees,
+          vehicles,
+          competences
+        );
         
-        if (aiResult.success) {
-          // Transformer les résultats IA en format attendu par l'interface
-          optimizedPlanning[dateString] = {
-            // Exemple de mapping - à adapter selon vos besoins
-            cr21: [],
-            cr23: [],
-            jumper: [],
-            ducato: [],
-            transit: [],
-            caddy: []
-          };
-          
-          // Afficher les recommandations IA si disponibles
-          if (aiResult.recommendations?.length > 0) {
-            console.log(`💡 Recommandations IA pour ${dateString}:`, aiResult.recommendations);
-          }
+        if (aiResult.success && aiResult.planning) {
+          optimizedPlanning[dateString] = aiResult.planning;
         } else {
-          console.warn(`⚠️ IA indisponible pour ${dateString}, utilisation planning par défaut`);
-          // Fallback vers un planning basique pour ce jour
-          const availableEmployees = [...employees];
-          optimizedPlanning[dateString] = {
-            cr21: getOptimalTeam(availableEmployees, 3, 'cr21'),
-            cr23: getOptimalTeam(availableEmployees, 3, 'cr23'),
-            jumper: getOptimalTeam(availableEmployees, 3, 'jumper'),
-            ducato: getOptimalTeam(availableEmployees, 3, 'ducato'),
-            transit: getOptimalTeam(availableEmployees, 6, 'transit'),
-            caddy: availableEmployees.slice(0, 4).map(emp => ({ ...emp, status: 'assigned' }))
-          };
+          optimizedPlanning[dateString] = getDefaultPlanningForDay();
         }
       }
       
       setPlanning(optimizedPlanning);
-      
-      const totalAssignments = Object.values(optimizedPlanning)
-        .reduce((sum, dayPlan) => {
-          return sum + Object.values(dayPlan).reduce((daySum, team) => daySum + team.length, 0);
-        }, 0);
-      
-      toast.success(`🎯 Planning IA optimisé généré ! ${totalAssignments} affectations créées`, { 
-        id: 'ai-planning',
-        duration: 4000 
-      });
+      toast.success('🎯 Planning IA généré !', { id: 'ai-planning' });
       
     } catch (error) {
       console.error('❌ Erreur génération IA:', error);
-      toast.error(`❌ Erreur génération IA: ${error.message}`, { id: 'ai-planning' });
+      toast.error('❌ Erreur génération IA', { id: 'ai-planning' });
     }
   };
 
-  const getOptimalTeam = (employees, maxSize, vehicleType) => {
-    // Logique simplifiée pour équilibrer les profils et langues
-    const forts = employees.filter(e => e.profil === 'Fort');
-    const moyens = employees.filter(e => e.profil === 'Moyen');
-    const faibles = employees.filter(e => e.profil === 'Faible');
-    
-    const team = [];
-    
-    // Assurer un profil fort si possible
-    if (forts.length > 0 && team.length < maxSize) {
-      team.push({ ...forts[0], status: 'assigned' });
+  /**
+   * Sauvegarder le planning dans la base de données
+   */
+  const savePlanning = async () => {
+    if (Object.keys(planning).length === 0) {
+      toast.error('Aucun planning à sauvegarder');
+      return;
     }
-    
-    // Ajouter un profil faible avec un fort
-    if (faibles.length > 0 && team.length > 0 && team.length < maxSize) {
-      team.push({ ...faibles[0], status: 'assigned' });
+
+    try {
+      setSaving(true);
+      toast.loading('💾 Sauvegarde en cours...', { id: 'save-planning' });
+      
+      const result = await supabaseLogistique.savePlanningHebdomadaire(planning, currentWeek);
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      const totalAssignations = result.data?.length || 0;
+      toast.success(`✅ Planning sauvegardé ! (${totalAssignations} assignations)`, { 
+        id: 'save-planning',
+        duration: 3000 
+      });
+      
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde planning:', error);
+      toast.error(`❌ Erreur sauvegarde: ${error.message}`, { 
+        id: 'save-planning',
+        duration: 4000 
+      });
+    } finally {
+      setSaving(false);
     }
-    
-    // Compléter avec des moyens
-    while (team.length < maxSize && moyens.length > 0) {
-      team.push({ ...moyens[team.length % moyens.length], status: 'assigned' });
-    }
-    
-    return team;
   };
 
+  /**
+   * Planning par défaut
+   */
+  const getDefaultPlanningForDay = () => {
+    const dayPlanning = {};
+    vehicles.forEach(vehicle => {
+      dayPlanning[vehicle.id] = [];
+    });
+    return dayPlanning;
+  };
+
+  /**
+   * Drag & Drop
+   */
   const onDragEnd = (result) => {
-    const { destination, source } = result;
+    const { destination, source, draggableId } = result;
     
     if (!destination) return;
     
     if (destination.droppableId === source.droppableId && destination.index === source.index) {
       return;
     }
-    
-    const sourceDate = source.droppableId.split('-')[0];
-    const sourceVehicle = source.droppableId.split('-')[1];
-    const destDate = destination.droppableId.split('-')[0];
-    const destVehicle = destination.droppableId.split('-')[1];
-    
-    const newPlanning = { ...planning };
-    
-    // Vérifier si les objets existent avant d'y accéder
-    if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceVehicle]) {
-      console.error('❌ Source invalide:', { sourceDate, sourceVehicle });
-      toast.error('Erreur: Source de déplacement invalide');
+
+    // Vérification que les données sont chargées
+    if (employees.length === 0 || vehicles.length === 0) {
+      toast.error('Données non chargées, veuillez patienter');
       return;
     }
-    
-    if (!newPlanning[destDate]) {
-      newPlanning[destDate] = {};
-    }
-    
-    if (!newPlanning[destDate][destVehicle]) {
-      newPlanning[destDate][destVehicle] = [];
-    }
-    
-    // Vérifier si l'index source est valide
-    if (source.index >= newPlanning[sourceDate][sourceVehicle].length) {
-      console.error('❌ Index source invalide:', { sourceIndex: source.index, arrayLength: newPlanning[sourceDate][sourceVehicle].length });
-      toast.error('Erreur: Index de déplacement invalide');
+
+    // Vérification que le planning est initialisé
+    if (!planning || Object.keys(planning).length === 0) {
+      toast.error('Planning non initialisé');
       return;
     }
-    
-    // Retirer de la source
-    const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
-    if (!draggedEmployee) {
-      console.error('❌ Employé non trouvé à l\'index:', source.index);
-      toast.error('Erreur: Employé non trouvé');
+
+    // Déplacement depuis la liste des employés vers le planning
+    if (source.droppableId === 'employees-pool' && draggableId.startsWith('employee-')) {
+      // Extraire l'ID de l'employé depuis le draggableId
+      const employeeId = parseInt(draggableId.replace('employee-', ''));
+      const draggedEmployee = employees.find(emp => emp.id === employeeId);
+      
+      if (!draggedEmployee) {
+        console.error('❌ Employé non trouvé:', employeeId);
+        toast.error('Employé non trouvé');
+        return;
+      }
+      
+      // Parser avec underscore comme séparateur
+      const parts = destination.droppableId.split('_');
+      
+      if (parts.length !== 2) {
+        console.error('❌ Format droppableId invalide:', destination.droppableId);
+        toast.error('Destination invalide');
+        return;
+      }
+      
+      const [destDate, destVehicleId] = parts;
+      const destVehicle = parseInt(destVehicleId);
+      
+      if (!planning[destDate] || !planning[destDate][destVehicle]) {
+        console.error('❌ Destination invalide:', { destDate, destVehicle });
+        toast.error('Destination invalide');
+        return;
+      }
+      
+      const destVehicleInfo = vehicles.find(v => v.id === destVehicle);
+      if (destVehicleInfo && planning[destDate][destVehicle].length >= destVehicleInfo.capacite) {
+        toast.error(`Capacité max atteinte pour ${destVehicleInfo.nom}`);
+        return;
+      }
+      
+      const newPlanning = { ...planning };
+      
+      // Assigner l'employé avec rôle par défaut (equipier)
+      const employeeWithRole = {
+        ...draggedEmployee, 
+        status: 'assigned',
+        role: 'equipier'  // Rôle par défaut
+      };
+      
+      newPlanning[destDate][destVehicle] = [
+        ...newPlanning[destDate][destVehicle],
+        employeeWithRole
+      ];
+      
+      setPlanning(newPlanning);
+      toast.success(`${getFirstName(draggedEmployee.nom)} assigné`);
+      
       return;
     }
-    
-    newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
-    
-    // Vérifier la capacité du véhicule de destination
-    const destVehicleInfo = vehicles.find(v => v.id === destVehicle);
-    if (destVehicleInfo && newPlanning[destDate][destVehicle].length >= destVehicleInfo.capacity) {
-      toast.error(`Le véhicule ${destVehicleInfo.name} est à pleine capacité (${destVehicleInfo.capacity})`);
-      // Remettre l'employé à sa place
-      newPlanning[sourceDate][sourceVehicle].splice(source.index, 0, draggedEmployee);
+
+    // Déplacement depuis le planning vers la sidebar employés (désassignation)
+    if (destination.droppableId === 'employees-pool' && draggableId.startsWith('planning-')) {
+      // Parser avec underscore comme séparateur
+      const sourceParts = source.droppableId.split('_');
+      if (sourceParts.length !== 2) {
+        console.error('❌ Format source droppableId invalide:', source.droppableId);
+        toast.error('Source invalide');
+        return;
+      }
+      
+      const [sourceDate, sourceVehicleId] = sourceParts;
+      const sourceVehicle = parseInt(sourceVehicleId);
+      
+      const newPlanning = { ...planning };
+      
+      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceVehicle]) {
+        console.error('❌ Source invalide:', { sourceDate, sourceVehicle });
+        toast.error('Source invalide');
+        return;
+      }
+      
+      const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
+      if (!draggedEmployee) {
+        console.error('❌ Employé non trouvé à l\'index:', source.index);
+        toast.error('Employé non trouvé');
+        return;
+      }
+      
+      // Retirer l'employé du planning (désassignation)
+      newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
+      
+      setPlanning(newPlanning);
+      toast.success(`${getFirstName(draggedEmployee.nom)} désassigné`);
+      
       return;
     }
-    
-    // Ajouter à la destination
-    const destIndex = Math.min(destination.index, newPlanning[destDate][destVehicle].length);
-    newPlanning[destDate][destVehicle].splice(destIndex, 0, draggedEmployee);
-    
-    setPlanning(newPlanning);
-    toast.success('Planning mis à jour');
+
+    // Déplacement entre cases du planning
+    if (draggableId.startsWith('planning-')) {
+      // Parser avec underscore comme séparateur
+      const sourceParts = source.droppableId.split('_');
+      const destParts = destination.droppableId.split('_');
+      
+      if (sourceParts.length !== 2 || destParts.length !== 2) {
+        console.error('❌ Format droppableId invalide:', { source: source.droppableId, dest: destination.droppableId });
+        toast.error('Format invalide');
+        return;
+      }
+      
+      const [sourceDate, sourceVehicleId] = sourceParts;
+      const [destDate, destVehicleId] = destParts;
+      const sourceVehicle = parseInt(sourceVehicleId);
+      const destVehicle = parseInt(destVehicleId);
+      
+      const newPlanning = { ...planning };
+      
+      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceVehicle]) {
+        console.error('❌ Source invalide:', { sourceDate, sourceVehicle });
+        toast.error('Source invalide');
+        return;
+      }
+      if (!newPlanning[destDate]) newPlanning[destDate] = {};
+      if (!newPlanning[destDate][destVehicle]) newPlanning[destDate][destVehicle] = [];
+      
+      const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
+      if (!draggedEmployee) {
+        console.error('❌ Employé non trouvé à l\'index:', source.index);
+        toast.error('Employé non trouvé');
+        return;
+      }
+      
+      const destVehicleInfo = vehicles.find(v => v.id === destVehicle);
+      if (destVehicleInfo && newPlanning[destDate][destVehicle].length >= destVehicleInfo.capacite) {
+        toast.error(`Capacité max atteinte`);
+        return;
+      }
+      
+      newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
+      newPlanning[destDate][destVehicle].splice(destination.index, 0, draggedEmployee);
+      
+      setPlanning(newPlanning);
+      toast.success(`${getFirstName(draggedEmployee.nom)} déplacé`);
+      
+      return;
+    }
+
+    console.warn('⚠️ Type de drag non reconnu:', draggableId);
+    toast.error('Type de déplacement non reconnu');
   };
 
-  const getEmployeeCard = (employee, index, dateKey, vehicleId) => (
-    <Draggable key={employee.id} draggableId={`${employee.id}-${dateKey}-${vehicleId}`} index={index}>
-      {(provided, snapshot) => (
-        <div
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-          className={`p-2 mb-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-            snapshot.isDragging ? 'shadow-lg scale-105' : ''
-          } ${
-            employee.status === 'absent' 
-              ? 'bg-red-100 text-red-800 border border-red-200' 
-              : 'bg-white text-gray-900 border border-gray-200 hover:shadow-md'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span>{employee.nom}</span>
-            {employee.status === 'absent' && (
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-            )}
-          </div>
-        </div>
-      )}
-    </Draggable>
-  );
+  /**
+   * Récupérer le prénom
+   */
+  const getFirstName = (fullName) => {
+    return fullName.split(' ')[0];
+  };
 
-  const getVehicleColumn = (vehicle, date) => {
-    const dateKey = format(date, 'yyyy-MM-dd');
-    const droppableId = `${dateKey}-${vehicle.id}`;
-    const teamMembers = planning[dateKey]?.[vehicle.id] || [];
+  /**
+   * Obtenir une couleur unique par véhicule
+   */
+  const getVehicleColor = (vehicleId) => {
+    const colors = [
+      'bg-blue-500',
+      'bg-emerald-500', 
+      'bg-purple-500',
+      'bg-orange-500',
+      'bg-pink-500',
+      'bg-indigo-500',
+      'bg-teal-500',
+      'bg-rose-500'
+    ];
+    return colors[vehicleId % colors.length];
+  };
+
+  /**
+   * Calculer la hauteur optimale selon la capacité du véhicule
+   */
+  const getVehicleColumnHeight = (capacity) => {
+    if (capacity <= 3) return 'h-32';       // 128px pour petits véhicules
+    if (capacity <= 5) return 'h-40';       // 160px pour véhicules moyens  
+    if (capacity <= 8) return 'h-48';       // 192px pour gros véhicules
+    return 'h-56';                          // 224px pour très gros véhicules
+  };
+
+  /**
+   * Obtenir les styles selon le rôle
+   */
+  const getRoleStyles = (role) => {
+    switch (role?.toLowerCase()) {
+      case 'conducteur':
+        return {
+          border: 'border-l-2 border-red-500',
+          badge: 'bg-red-500 text-white',
+          text: 'C'
+        };
+      case 'assistant':
+        return {
+          border: 'border-l-2 border-green-500',
+          badge: 'bg-green-500 text-white',
+          text: 'A'
+        };
+      default: // equipier
+        return {
+          border: '',
+          badge: '',
+          text: ''
+        };
+    }
+  };
+
+  /**
+   * Changer le rôle d'un employé avec validation des règles métier
+   */
+  const changeEmployeeRole = (dateKey, vehicleId, employeeIndex, newRole) => {
+    const newPlanning = { ...planning };
+    const vehicleTeam = newPlanning[dateKey][vehicleId];
+    const employee = vehicleTeam[employeeIndex];
+    
+    if (!employee) return;
+    
+    // Validation simple : 1 seul conducteur par véhicule
+    const currentConductors = vehicleTeam.filter(emp => emp.role === 'conducteur').length;
+    
+    if (newRole === 'conducteur' && currentConductors >= 1 && employee.role !== 'conducteur') {
+      toast.error('Un seul conducteur par véhicule');
+      setContextMenu(null);
+      return;
+    }
+    
+    // Appliquer le nouveau rôle
+    employee.role = newRole;
+    setPlanning(newPlanning);
+    
+    // Message simple
+    const employeeName = getFirstName(employee.nom);
+    toast.success(`${employeeName} → ${newRole}`);
+    
+    // Fermer le menu
+    setContextMenu(null);
+  };
+
+  /**
+   * Ouvrir le menu contextuel
+   */
+  const openContextMenu = (e, dateKey, vehicleId, employeeIndex) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      dateKey,
+      vehicleId,
+      employeeIndex
+    });
+  };
+
+  /**
+   * Fermer le menu contextuel
+   */
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  /**
+   * Véhicule colonne
+   */
+  const getVehicleColumn = (vehicle, day) => {
+    const dateKey = format(day, 'yyyy-MM-dd');
+    const employees = planning[dateKey]?.[vehicle.id] || [];
+    const droppableId = `${dateKey}_${vehicle.id}`;
+    const columnHeight = getVehicleColumnHeight(vehicle.capacite);
     
     return (
       <Droppable droppableId={droppableId}>
@@ -269,195 +522,238 @@ const PlanningView = ({ user, onLogout }) => {
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
-            className={`min-h-32 p-3 rounded-lg border-2 transition-all duration-200 ${
+            className={`${columnHeight} p-2 transition-all duration-200 border-2 rounded-lg ${
               snapshot.isDraggingOver 
-                ? 'border-primary-400 bg-primary-50' 
+                ? 'border-blue-400 bg-blue-50' 
                 : 'border-gray-200 bg-gray-50'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <div className={`w-3 h-3 rounded-full ${vehicle.color}`}></div>
-              <span className="text-xs text-gray-600">{teamMembers.length}/{vehicle.capacity}</span>
+            <div className="space-y-1 h-full overflow-y-auto">
+              {employees.map((employee, index) => {
+                const roleStyles = getRoleStyles(employee.role);
+                
+                return (
+                  <Draggable 
+                    key={`${dateKey}-${vehicle.id}-${employee.id}-${index}`} 
+                    draggableId={`planning-${dateKey}-${vehicle.id}-${employee.id}-${index}`} 
+                    index={index}
+                  >
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        onContextMenu={(e) => openContextMenu(e, dateKey, vehicle.id, index)}
+                        className={`px-2 py-1 text-xs rounded transition-all cursor-grab active:cursor-grabbing relative ${roleStyles.border} ${
+                          snapshot.isDragging
+                            ? 'bg-blue-500 text-white shadow-lg transform rotate-1'
+                            : employee.profil === 'Fort' ? 'bg-emerald-100 text-emerald-800' :
+                              employee.profil === 'Moyen' ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
+                        }`}
+                        title={`Clic droit pour changer le rôle (${employee.role || 'equipier'})`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>{getFirstName(employee.nom)}</span>
+                          {roleStyles.badge && (
+                            <span className={`w-4 h-4 rounded-full text-xs flex items-center justify-center ${roleStyles.badge}`}>
+                              {roleStyles.text}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
             </div>
-            
-            {teamMembers.map((employee, index) => 
-              getEmployeeCard(employee, index, dateKey, vehicle.id)
-            )}
-            
             {provided.placeholder}
             
-            {teamMembers.length === 0 && (
-              <div className="text-center text-gray-400 text-sm py-4">
-                Glissez un employé ici
-              </div>
-            )}
+            <div className="text-xs text-gray-400 text-center mt-1">
+              {employees.length}/{vehicle.capacite}
+            </div>
           </div>
         )}
       </Droppable>
     );
   };
 
-  const getWeekStats = () => {
-    let totalAssigned = 0;
-    let totalAbsent = 0;
-    let alerts = [];
-    
-    weekDays.forEach(day => {
-      const dateKey = format(day, 'yyyy-MM-dd');
-      const dayPlanning = planning[dateKey];
-      
-      if (dayPlanning) {
-        Object.entries(dayPlanning).forEach(([vehicleId, team]) => {
-          team.forEach(employee => {
-            if (employee.status === 'assigned') totalAssigned++;
-            if (employee.status === 'absent') totalAbsent++;
-          });
-          
-          // Vérifier les alertes
-          const vehicle = vehicles.find(v => v.id === vehicleId);
-          if (team.length > vehicle.capacity) {
-            alerts.push(`${vehicle.name} - ${format(day, 'EEEE', { locale: fr })} : Trop d'employés`);
-          }
-        });
-      }
-    });
-    
-    return { totalAssigned, totalAbsent, alerts };
-  };
+  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
 
-  const stats = getWeekStats();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <button
-                onClick={() => navigate('/')}
-                className="mr-4 p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Home className="w-5 h-5" />
-              </button>
-              <Calendar className="w-8 h-8 text-primary-600 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-900">Planning des Équipes</h1>
-            </div>
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      {/* Header Tesla-style */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <span className="text-gray-600">{user.name}</span>
+              <button
+                onClick={() => navigate('/logistique')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Planning Logistique</h1>
+                <p className="text-sm text-gray-500">{employees.length} employés • {vehicles.length} véhicules</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={generateAIPlanning}
+                disabled={employees.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <Zap className="w-4 h-4" />
+                <span>IA</span>
+              </button>
+              <button 
+                onClick={savePlanning}
+                disabled={saving || Object.keys(planning).length === 0}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <Save className="w-4 h-4" />
+                <span>{saving ? 'Sauvegarde...' : 'Sauvegarder'}</span>
+              </button>
+              <button
+                onClick={() => navigate('/logistique/tv')}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+                title="Mode TV - Affichage télévision"
+              >
+                <Monitor className="w-4 h-4" />
+                <span>Mode TV</span>
+              </button>
               <button
                 onClick={onLogout}
-                className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
               >
                 Déconnexion
               </button>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Contrôles et Stats */}
-        <div className="flex flex-col lg:flex-row gap-8 mb-8">
-          {/* Contrôles */}
-          <div className="lg:w-2/3">
-            <div className="card-premium p-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">
-                    Semaine du {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
-                  </h2>
-                  <div className="flex space-x-4">
-                    <button
-                      onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
-                      className="text-sm text-primary-600 hover:text-primary-800"
-                    >
-                      ← Semaine précédente
-                    </button>
-                    <button
-                      onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
-                      className="text-sm text-primary-600 hover:text-primary-800"
-                    >
-                      Semaine suivante →
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={generateAIPlanning}
-                    className="btn-primary flex items-center"
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="flex h-[calc(100vh-73px)]">
+          {/* Sidebar Employés */}
+          <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="font-semibold text-gray-900 flex items-center">
+                <User className="w-4 h-4 mr-2" />
+                Employés ({employees.length})
+              </h2>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <Droppable droppableId="employees-pool">
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`space-y-2 min-h-[200px] p-2 rounded-lg transition-colors ${
+                      snapshot.isDraggingOver 
+                        ? 'bg-blue-50 border-2 border-blue-300 border-dashed' 
+                        : ''
+                    }`}
                   >
-                    <Zap className="w-4 h-4 mr-2" />
-                    Générer avec IA
-                  </button>
-                  <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center">
-                    <Save className="w-4 h-4 mr-2" />
-                    Sauvegarder
-                  </button>
-                </div>
-              </div>
+                    {employees.map((employee, index) => (
+                      <Draggable key={employee.id} draggableId={`employee-${employee.id}`} index={index}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            className={`p-3 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${
+                              snapshot.isDragging
+                                ? 'bg-blue-500 text-white shadow-xl transform rotate-2'
+                                : employee.profil === 'Fort' ? 'bg-emerald-50 border-emerald-200' :
+                                  employee.profil === 'Moyen' ? 'bg-amber-50 border-amber-200' :
+                                  'bg-rose-50 border-rose-200'
+                            }`}
+                          >
+                            <div className="font-medium text-sm">
+                              {getFirstName(employee.nom)}
+                            </div>
+                            <div className={`text-xs mt-1 ${
+                              snapshot.isDragging ? 'text-blue-100' :
+                              employee.profil === 'Fort' ? 'text-emerald-600' :
+                              employee.profil === 'Moyen' ? 'text-amber-600' :
+                              'text-rose-600'
+                            }`}>
+                              {employee.profil}
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                    
+                    {/* Texte d'aide quand on survole */}
+                    {snapshot.isDraggingOver && (
+                      <div className="text-center text-blue-600 text-sm font-medium py-4">
+                        👋 Relâchez pour désassigner l'employé
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Droppable>
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="lg:w-1/3">
-            <div className="card-premium p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Statistiques</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Employés assignés:</span>
-                  <span className="font-semibold text-green-600">{stats.totalAssigned}</span>
+          {/* Zone Planning Full-Width */}
+          <div className="flex-1 flex flex-col">
+            {/* Navigation Semaine */}
+            <div className="bg-white border-b border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <h3 className="font-semibold text-gray-900">
+                    {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
+                  </h3>
+                  <button
+                    onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Absences:</span>
-                  <span className="font-semibold text-red-600">{stats.totalAbsent}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Alertes:</span>
-                  <span className="font-semibold text-yellow-600">{stats.alerts.length}</span>
-                </div>
+                <Calendar className="w-5 h-5 text-gray-400" />
               </div>
-              
-              {stats.alerts.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-900 mb-2">Alertes:</h4>
-                  {stats.alerts.map((alert, index) => (
-                    <div key={index} className="text-xs text-red-600 mb-1">{alert}</div>
-                  ))}
-                </div>
-              )}
             </div>
-          </div>
-        </div>
 
-        {/* Légende véhicules */}
-        <div className="card-premium p-4 mb-8">
-          <div className="flex flex-wrap gap-4">
-            {vehicles.map(vehicle => (
-              <div key={vehicle.id} className="flex items-center space-x-2">
-                <div className={`w-4 h-4 rounded-full ${vehicle.color}`}></div>
-                <span className="text-sm text-gray-700">{vehicle.name}</span>
-                <span className="text-xs text-gray-500">({vehicle.capacity} max)</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Planning Drag & Drop */}
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="card-premium p-6">
-            <div className="overflow-x-auto">
+            {/* Grille Planning */}
+            <div className="flex-1 overflow-auto p-6">
               <div className="min-w-full">
-                {/* En-têtes des jours */}
+                {/* Headers jours */}
                 <div className="grid grid-cols-6 gap-4 mb-4">
-                  <div className="text-sm font-medium text-gray-700">Véhicules</div>
+                  <div className="text-sm font-medium text-gray-700 flex items-center">
+                    <Truck className="w-4 h-4 mr-2" />
+                    Véhicules
+                  </div>
                   {weekDays.map(day => (
                     <div key={day.toISOString()} className="text-center">
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-semibold text-gray-900">
                         {format(day, 'EEEE', { locale: fr })}
                       </div>
-                      <div className="text-xs text-gray-600">
+                      <div className="text-xs text-gray-500">
                         {format(day, 'dd/MM')}
                       </div>
                     </div>
@@ -465,55 +761,66 @@ const PlanningView = ({ user, onLogout }) => {
                 </div>
 
                 {/* Lignes véhicules */}
-                {vehicles.map(vehicle => (
-                  <div key={vehicle.id} className="grid grid-cols-6 gap-4 mb-4">
-                    <div className="flex items-center space-x-2 py-2">
-                      <div className={`w-3 h-3 rounded-full ${vehicle.color}`}></div>
-                      <span className="text-sm font-medium text-gray-900">{vehicle.name}</span>
-                    </div>
-                    {weekDays.map(day => (
-                      <div key={`${vehicle.id}-${day.toISOString()}`}>
-                        {getVehicleColumn(vehicle, day)}
+                <div className="space-y-3">
+                  {vehicles.map(vehicle => (
+                    <div key={vehicle.id} className="grid grid-cols-6 gap-4">
+                      <div className="flex items-center space-x-3 py-2">
+                        <div className={`w-3 h-3 rounded-full ${getVehicleColor(vehicle.id)}`}></div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{vehicle.nom}</div>
+                          <div className="text-xs text-gray-500">{vehicle.capacite} places</div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                ))}
+                      {weekDays.map(day => (
+                        <div key={`${vehicle.id}-${day.toISOString()}`}>
+                          {getVehicleColumn(vehicle, day)}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </DragDropContext>
+        </div>
+      </DragDropContext>
 
-        {/* Pool d'employés disponibles */}
-        <div className="mt-8 card-premium p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Employés Disponibles</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-            {employees.map(employee => (
-              <div key={employee.id} className="bg-white p-3 rounded-lg border border-gray-200 text-center">
-                <div className="w-10 h-10 bg-gradient-to-r from-primary-100 to-secondary-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-sm font-bold text-primary-600">
-                    {employee.nom.charAt(0)}
-                  </span>
-                </div>
-                <div className="text-sm font-medium text-gray-900">{employee.nom}</div>
-                <div className={`text-xs px-2 py-1 rounded-full mt-1 ${
-                  employee.profil === 'Fort' ? 'bg-green-100 text-green-700' :
-                  employee.profil === 'Moyen' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
-                  {employee.profil}
-                </div>
-                <div className="flex items-center justify-center mt-1">
-                  {employee.permis ? (
-                    <CheckCircle className="w-3 h-3 text-green-500" />
-                  ) : (
-                    <AlertTriangle className="w-3 h-3 text-red-500" />
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* Menu contextuel */}
+      {contextMenu && (
+        <div
+          className="fixed inset-0 z-50"
+          onClick={closeContextMenu}
+          onContextMenu={closeContextMenu}
+        >
+          <div
+            className="absolute bg-white p-2 rounded-md shadow-lg"
+            style={{
+              top: contextMenu.y,
+              left: contextMenu.x,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => changeEmployeeRole(contextMenu.dateKey, contextMenu.vehicleId, contextMenu.employeeIndex, 'conducteur')}
+              className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-gray-100"
+            >
+              Conducteur
+            </button>
+            <button
+              onClick={() => changeEmployeeRole(contextMenu.dateKey, contextMenu.vehicleId, contextMenu.employeeIndex, 'assistant')}
+              className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-gray-100"
+            >
+              Assistant
+            </button>
+            <button
+              onClick={() => changeEmployeeRole(contextMenu.dateKey, contextMenu.vehicleId, contextMenu.employeeIndex, 'equipier')}
+              className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-gray-100"
+            >
+              Équipier
+            </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

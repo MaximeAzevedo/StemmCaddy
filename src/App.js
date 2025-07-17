@@ -7,7 +7,9 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import HomeLanding from './components/HomeLanding';
 import EmployeeManagement from './components/EmployeeManagement';
+import LogistiqueManagement from './components/LogistiqueManagement';
 import PlanningView from './components/PlanningView';
+import LogistiqueTVView from './components/LogistiqueTVView';
 import AbsenceManagement from './components/AbsenceManagement';
 import AbsenceManagementCuisine from './components/AbsenceManagementCuisine';
 import DashboardCuisine from './components/DashboardCuisine';
@@ -20,11 +22,16 @@ import './index.css';
 const AppContent = ({ user, handleLogin, handleLogout }) => {
   const location = useLocation();
   
+  // Vérifier si on est en mode TV
+  const isTVMode = location?.pathname === '/cuisine/tv' || location?.pathname === '/logistique/tv';
+  
   return (
     <>
-      <MainHeader />
-      {/* Wrapper avec marge pour compenser le header flottant */}
-      <div className={location?.pathname === '/cuisine/tv' ? '' : 'pt-20'}>
+      {/* Afficher le header seulement si on n'est pas en mode TV */}
+      {!isTVMode && <MainHeader />}
+      
+      {/* Wrapper avec marge pour compenser le header flottant seulement si header visible */}
+      <div className={isTVMode ? '' : 'pt-20'}>
         <Routes>
           <Route 
             path="/login" 
@@ -40,6 +47,15 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
             path="/logistique"
             element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
+          <Route 
+            path="/logistique/gestion"
+            element={user ? <LogistiqueManagement user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+          />
+          <Route 
+            path="/logistique/planning"
+            element={user ? <PlanningView user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+          />
+          <Route path="/logistique/tv" element={<LogistiqueTVView />} />
           <Route 
             path="/employees" 
             element={

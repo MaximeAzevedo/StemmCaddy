@@ -1,11 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Users, Calendar, UserMinus } from 'lucide-react';
+import { Truck, Users, Calendar, UserMinus, Settings } from 'lucide-react';
 
 const Dashboard = ({ user, onLogout }) => {
   // Statistiques fictives (à remplacer par vos données réelles)
   const stats = {
-    totalEmployees: 7,
+    totalEmployees: 21,
     vehiclesActive: 5,
     absencesToday: 1
   };
@@ -13,17 +13,17 @@ const Dashboard = ({ user, onLogout }) => {
   const quickActions = [
     {
       title: 'Gestion des Employés',
-      description: 'Voir et gérer les profils des employés',
-      icon: Users,
-      color: 'from-blue-500 to-blue-600',
-      onClick: () => window.location.assign('/employees')
+      description: 'Gérer les profils et compétences logistique',
+      icon: Settings,
+      color: 'from-purple-500 to-purple-600',
+      onClick: () => window.location.assign('/logistique/gestion')
     },
     {
       title: 'Planning des Équipes',
-      description: 'Organiser et optimiser les plannings',
+      description: 'Créer et organiser les plannings avec IA',
       icon: Calendar,
       color: 'from-green-500 to-green-600',
-      onClick: () => window.location.assign('/planning')
+      onClick: () => window.location.assign('/logistique/planning')
     },
     {
       title: 'Gestion des Absences',
