@@ -10,30 +10,35 @@ import {
   useLocalPlanningSync, 
   usePlanningAI 
 } from '../planning/hooks';
+import { aiPlanningEngine } from '../lib/ai-planning-engine'; // ✅ NOUVEAU : Moteur IA intelligent
+// import PlanningExplanationPopup from './PlanningExplanationPopup'; // ✅ MASQUÉ : Pop-up premium (temporairement désactivé)
 
 const CuisinePlanningInteractive = () => {
   // ✅ États locaux simplifiés
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentSession, setCurrentSession] = useState('matin');
+  
+  // ✅ MASQUÉ : État pour le pop-up d'explication (temporairement désactivé)
+  // const [showExplanation, setShowExplanation] = useState(false);
+  // const [planningExplanationData, setPlanningExplanationData] = useState(null);
 
   // ✅ HOOKS CORRIGÉS - Planning manuel avec base de données
   const { 
     loading, 
     postes, 
     loadData, 
-    runDataDiagnostic 
+    // runDataDiagnostic // ✅ SUPPRIMÉ : Variable non utilisée
   } = usePlanningDataLoader(selectedDate, currentSession);
 
   const { 
     board,
-    lastSaved,
     isLoading: planningLoading,
     isSaving,
     hasUnsavedChanges,
     saveToDatabase,
     resetPlanning,
-    exportPlanning,
-    getStats,
+    // exportPlanning, // Gardé disponible pour usage futur
+    // getStats,       // Gardé disponible pour usage futur
     setBoard
   } = useLocalPlanningSync(selectedDate);
 
@@ -44,7 +49,7 @@ const CuisinePlanningInteractive = () => {
     resetBoard,
     reloadAvailableEmployees,
     mergeAIBoard
-  } = usePlanningBoard(selectedDate, currentSession, setBoard);
+  } = usePlanningBoard(selectedDate, currentSession, setBoard, board); // ✅ CORRECTION : Passer le board externe
 
   const { 
     aiLoading, 
@@ -94,28 +99,118 @@ const CuisinePlanningInteractive = () => {
     }
   };
 
-  const handleExport = () => {
-    exportPlanning();
-  };
-
-  // ✅ Génération IA améliorée
+  // ✅ Génération IA INTELLIGENTE avec Azure OpenAI
   const handleGenerateAI = async () => {
     try {
-      // 1. Reset le board mais garde les employés
+      console.log('🤖 Lancement de la génération IA intelligente...');
+      toast.loading('🤖 Génération planning IA en cours...', { id: 'ai-generation' });
+
+      // 1. Reset le board pour partir propre
       resetBoard();
       
       // 2. Recharger les données fraîches pour l'IA
       const data = await loadData();
       
-      // 3. Recharger les employés disponibles
-      await reloadAvailableEmployees(data.employees, data.absences);
+      // 3. Utiliser notre nouveau moteur IA intelligent
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      const aiResult = await aiPlanningEngine.generateIntelligentPlanning(dateString);
       
-      // 4. Générer le planning IA
-      await generateAIPlanning();
+      if (aiResult.success || aiResult.planning_optimal) {
+        // 4. Intégrer les résultats IA dans l'interface
+        toast.success(`🎯 Planning IA généré ! ${aiResult.assignments?.length || aiResult.statistiques?.employes_utilises || 0} affectations créées`, { 
+          id: 'ai-generation',
+          duration: 4000 
+        });
+        
+        // 5. ✅ NOUVEAU : Déclencher le pop-up d'explication premium
+        // setPlanningExplanationData(aiResult);
+        // setShowExplanation(true);
+        
+        // 6. Afficher les recommandations IA si disponibles
+        if (aiResult.recommandations?.length > 0) {
+          console.log('💡 Recommandations IA:', aiResult.recommandations);
+        }
+        
+        // 7. ✅ CORRIGÉ : Intégrer directement les résultats IA au lieu de recharger la base
+        if (aiResult.planning_optimal && aiResult.planning_optimal.length > 0) {
+          // Convertir les résultats IA en format board pour l'interface
+          const newBoard = {};
+          const employeesUsed = [];
+          
+          aiResult.planning_optimal.forEach((posteAssignment, index) => {
+            if (posteAssignment.employes_assignes && posteAssignment.employes_assignes.length > 0) {
+              // ✅ CORRECTION : Gérer le créneau spécifique de l'assignment
+              const creneauUtilise = posteAssignment.creneau || getCreneauxForPoste(posteAssignment.poste, currentSession)[0];
+              const cellId = `${posteAssignment.poste}-${creneauUtilise}`;
+              
+              if (!newBoard[cellId]) {
+                newBoard[cellId] = [];
+              }
+              
+              posteAssignment.employes_assignes.forEach(emp => {
+                // ✅ CORRECTION CRITIQUE : Récupérer l'ID réel de l'employé depuis les données
+                const realEmployee = data.employees.find(realEmp => 
+                  realEmp.prenom.toLowerCase() === emp.prenom.toLowerCase()
+                );
+                
+                if (!realEmployee) {
+                  console.warn(`⚠️ Employé "${emp.prenom}" non trouvé dans la base de données`);
+                  return; // Ignorer cet employé s'il n'existe pas
+                }
+                
+                // Créer un employé pour l'interface AVEC STRUCTURE COMPATIBLE ET ID RÉEL
+                const employeeForBoard = {
+                  id: `ai-${index}-${emp.prenom}`,
+                  draggableId: `ai-${index}-${emp.prenom}`,
+                  employeeId: realEmployee.id, // ✅ CORRECTION : Utiliser l'ID réel de la DB
+                  // ✅ CORRECTION : Ajouter la propriété employee manquante
+                  employee: {
+                    id: realEmployee.id, // ✅ CORRECTION : ID réel
+                    nom: emp.prenom,
+                    profil: emp.raison || emp.role || 'IA',
+                    statut: 'Actif'
+                  },
+                  // Propriétés directes pour compatibilité
+                  prenom: emp.prenom,
+                  nom: emp.prenom,
+                  profil: emp.raison || emp.role,
+                  generatedBy: 'ai',
+                  score: emp.score_adequation,
+                  role: emp.role,
+                  photo_url: realEmployee.photo_url // ✅ CORRECTION : Utiliser la vraie photo
+                };
+                
+                newBoard[cellId].push(employeeForBoard);
+                employeesUsed.push(emp.prenom);
+              });
+            }
+          });
+          
+          console.log('🎯 Board IA construit avec créneaux multiples:', newBoard);
+          console.log('🗂️ Clés de cellules:', Object.keys(newBoard));
+          setBoard(newBoard);
+          
+          // ✅ CORRECTION : Garder les employés disponibles pour permettre les modifications
+          // au lieu de les vider complètement avec []
+          await reloadAvailableEmployees(data.employees, data.absences);
+        } else {
+          // Si pas de planning_optimal, recharger normalement
+          await buildSmartBoard(data.postes, data.creneaux, data.employees, data.absences);
+        }
+        
+      } else {
+        // Fallback vers l'ancienne méthode si IA échoue
+        console.warn('⚠️ IA indisponible, fallback vers méthode classique...', aiResult.error);
+        toast.error('⚠️ IA indisponible, génération avec règles prédéfinies', { id: 'ai-generation' });
+        
+        // Utiliser l'ancienne méthode en secours
+        await reloadAvailableEmployees(data.employees, data.absences);
+        await generateAIPlanning();
+      }
       
     } catch (error) {
       console.error('❌ Erreur génération IA:', error);
-      toast.error('Erreur lors de la génération IA');
+      toast.error(`❌ Erreur génération IA: ${error.message}`, { id: 'ai-generation' });
     }
   };
 
@@ -126,18 +221,6 @@ const CuisinePlanningInteractive = () => {
     console.log('📺 Ouverture Mode TV avec:', { date: dateStr, session: currentSession });
     window.open(tvUrl, '_blank', 'fullscreen=yes,scrollbars=no,menubar=no,toolbar=no,location=no,status=no');
     toast.success('📺 Mode TV ouvert - Synchronisation automatique active');
-  };
-
-  // ✅ Diagnostic des données métier
-  const handleDiagnostic = async () => {
-    const result = await runDataDiagnostic();
-    const stats = getStats();
-    
-    console.log('📊 STATISTIQUES PLANNING:', stats);
-    toast[result.success ? 'success' : 'error'](
-      `${result.message}\n\n📊 Planning: ${stats.totalAssignments} assignations (${stats.fillRate}% rempli)`, 
-      { duration: 4000 }
-    );
   };
 
   // ✅ Rendu des cartes employés
@@ -194,7 +277,15 @@ const CuisinePlanningInteractive = () => {
 
   const conf = getSessionConfig(currentSession);
   const postesActifs = postes.filter(p => conf.postesActifs.includes(p.nom));
-  const stats = getStats();
+
+  // 🔍 DEBUG : Afficher les détails des postes pour comprendre le problème
+  console.log('🔍 DEBUG POSTES:', {
+    session: currentSession,
+    confPostesActifs: conf.postesActifs,
+    postesDB: postes.map(p => ({ id: p.id, nom: p.nom })),
+    postesActifs: postesActifs.map(p => ({ id: p.id, nom: p.nom })),
+    nombrePostesActifs: postesActifs.length
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -381,6 +472,16 @@ const CuisinePlanningInteractive = () => {
           </div>
         </div>
       </DragDropContext>
+
+      {/* ✅ Pop-up d'explication premium */}
+      {/* {showExplanation && planningExplanationData && (
+        <PlanningExplanationPopup
+          planningData={planningExplanationData}
+          isVisible={showExplanation}
+          onClose={() => setShowExplanation(false)}
+          duration="3.2s"
+        />
+      )} */}
     </div>
   );
 };

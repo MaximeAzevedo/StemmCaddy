@@ -42,7 +42,12 @@
     "test-ia": "node scripts/test-ia-cuisine.js",
     "test-ia-live": "node scripts/test-ia-live.js",
     "add-creneaux": "node scripts/add-new-creneaux.js",
-    "add-postes": "node scripts/add-new-postes.js"
+    "add-postes": "node scripts/add-new-postes.js",
+    "init-competences": "node scripts/init-competences-from-excel.js",
+    "test-ai-planning": "node scripts/test-ai-planning-engine.js",
+    "validate-rules": "node -e \"import('./src/planning/config/rulesValidator.js').then(v => v.printValidationReport())\"",
+    "test-corrections": "node scripts/test-corrections.js",
+    "test-azure-response": "node scripts/test-azure-response.js"
   },
   "eslintConfig": {
     "extends": [

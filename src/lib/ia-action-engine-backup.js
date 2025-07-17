@@ -1,5 +1,7 @@
 import { supabaseAPI } from './supabase.js';
 import { supabaseCuisine } from './supabase-cuisine.js';
+import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
+import { POSTES_RULES, getPosteRules, getPostesByPriority } from '../planning/config/postesRules';
 
 /**
  * Moteur d'Actions IA pour l'Assistant Cuisine
@@ -1021,17 +1023,17 @@ export class IAActionEngine {
       competenceMap[comp.employee_id].push(comp);
     });
 
-    // Contraintes par poste (règles métier cuisine)
-    const posteConstraints = {
-      'Vaisselle': { min: 3, max: 3, priority: 3, sessions: ['matin', 'apres-midi'] },
-      'Self Midi': { min: 2, max: 2, priority: 4, sessions: ['matin'] },
-      'Sandwichs': { min: 5, max: 6, priority: 5, sessions: ['matin', 'apres-midi'] },
-      'Pain': { min: 2, max: 3, priority: 2, sessions: ['matin', 'apres-midi'] },
-      'Jus de fruits': { min: 1, max: 2, priority: 1, sessions: ['matin', 'apres-midi'] },
-      'Cuisine chaude': { min: 1, max: 2, priority: 4, needsCompetence: true, sessions: ['matin', 'apres-midi'] },
-      'Légumerie': { min: 1, max: 2, priority: 2, sessions: ['matin', 'apres-midi'] },
-      'Equipe Pina et Saskia': { min: 2, max: 3, priority: 3, sessions: ['matin', 'apres-midi'] }
-    };
+    // ✅ UTILISE postesRules.js comme source unique de contraintes
+    const posteConstraints = {};
+    getPostesByPriority().forEach(poste => {
+      posteConstraints[poste.name] = {
+        min: poste.min,
+        max: poste.max,
+        priority: poste.priority,
+        needsCompetence: poste.needsCompetence,
+        sessions: ['matin', 'apres-midi'] // Par défaut
+      };
+    });
 
     return {
       employesDisponibles: availableEmployees.length,

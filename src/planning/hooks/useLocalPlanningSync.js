@@ -47,6 +47,24 @@ export const useLocalPlanningSync = (selectedDate) => {
   }, [selectedDate]);
 
   /**
+   * Statistiques du planning
+   */
+  const getStats = useCallback(() => {
+    const totalAssignments = Object.values(board).reduce((sum, cell) => sum + (cell?.length || 0), 0);
+    const filledCells = Object.values(board).filter(cell => cell && cell.length > 0).length;
+    const totalCells = Object.keys(board).filter(key => key !== 'unassigned').length;
+    
+    return {
+      totalAssignments,
+      filledCells,
+      totalCells,
+      fillRate: totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0,
+      lastSaved,
+      hasUnsavedChanges
+    };
+  }, [board, lastSaved, hasUnsavedChanges]);
+
+  /**
    * Sauvegarde MANUELLE du planning en base de données
    */
   const saveToDatabase = useCallback(async () => {
@@ -153,7 +171,7 @@ export const useLocalPlanningSync = (selectedDate) => {
       console.error('❌ Erreur export:', error);
       toast.error('Erreur lors de l\'export');
     }
-  }, [selectedDate, board]);
+  }, [selectedDate, board, getStats]);
 
   /**
    * Mise à jour du board avec marquage "non sauvegardé"
@@ -162,24 +180,6 @@ export const useLocalPlanningSync = (selectedDate) => {
     setBoard(newBoard);
     setHasUnsavedChanges(true);
   }, []);
-
-  /**
-   * Statistiques du planning
-   */
-  const getStats = useCallback(() => {
-    const totalAssignments = Object.values(board).reduce((sum, cell) => sum + (cell?.length || 0), 0);
-    const filledCells = Object.values(board).filter(cell => cell && cell.length > 0).length;
-    const totalCells = Object.keys(board).filter(key => key !== 'unassigned').length;
-    
-    return {
-      totalAssignments,
-      filledCells,
-      totalCells,
-      fillRate: totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0,
-      lastSaved,
-      hasUnsavedChanges
-    };
-  }, [board, lastSaved, hasUnsavedChanges]);
 
   /**
    * Chargement initial depuis la base de données

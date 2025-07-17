@@ -1,63 +1,27 @@
 // Génération Automatique pour la gestion optimisée des plannings
 import { supabaseCuisine } from './supabase-cuisine';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
+import { POSTES_RULES, getPosteRules, getPostesByPriority } from '../planning/config/postesRules';
 
 /**
  * Configuration des règles métier avancées pour la génération automatique
+ * ✅ UTILISE DÉSORMAIS postesRules.js COMME SOURCE UNIQUE
  */
 const PLANNING_RULES = {
-  // Postes prioritaires qui doivent toujours être couverts
-  CRITICAL_POSTES: ['Sandwichs', 'Self Midi', 'Cuisine chaude'],
-  
-  // Nombre minimum/maximum d'employés par poste - NOUVELLES RÈGLES STRICTES
-  MIN_EMPLOYEES_PER_POSTE: {
-    'Sandwichs': 4, // + 1 chef = 5 au total (priorité absolue)
-    'Pain': 2,
-    'Vaisselle': 3, // Exception : 8h = 1 seule personne
-    'Cuisine chaude': 4,
-    'Jus de fruits': 2, // Peut descendre à 1 en pénurie
-    'Self Midi': 2, // TOUJOURS 2 minimum - primordial
-    'Equipe Pina et Saskia': 1,
-    'Légumerie': 2 // Dernière priorité, flexible
-  },
-  
-  MAX_EMPLOYEES_PER_POSTE: {
-    'Sandwichs': 4, // + 1 chef = 5 au total
-    'Pain': 3,
-    'Vaisselle': 3,
-    'Cuisine chaude': 7,
-    'Jus de fruits': 3,
-    'Self Midi': 3,
-    'Equipe Pina et Saskia': 4,
-    'Légumerie': 10
-  },
-
   // Charge de travail maximum par employé (heures par semaine)
   MAX_HOURS_PER_WEEK: 35,
   
   // Repos minimum entre deux services
   MIN_REST_HOURS: 10,
 
-  // NOUVELLES RÈGLES SOPHISTIQUÉES - Préférences par profil
+  // RÈGLES SOPHISTIQUÉES - Préférences par profil
   PROFILE_PREFERENCES: {
     'Fort': ['Cuisine chaude', 'Sandwichs', 'Légumerie'],
     'Moyen': ['Sandwichs', 'Vaisselle', 'Pain', 'Self Midi'],
     'Faible': ['Jus de fruits', 'Pain', 'Vaisselle']
   },
 
-  // NOUVELLES PRIORITÉS STRICTES (1 = plus important)
-  POSTE_PRIORITIES: {
-    'Sandwichs': 1, // PRIORITÉ ABSOLUE + chef
-    'Pain': 2,
-    'Vaisselle': 3,
-    'Cuisine chaude': 4,
-    'Jus de fruits': 5,
-    'Self Midi': 6, // Primordial (toujours 2 min)
-    'Equipe Pina et Saskia': 7,
-    'Légumerie': 8 // Dernière priorité
-  },
-
-  // NOUVELLES RÈGLES SOPHISTIQUÉES - Équilibrage de charge
+  // RÈGLES SOPHISTIQUÉES - Équilibrage de charge
   WORKLOAD_BALANCING: {
     // Éviter qu'un employé ait trop d'heures par rapport aux autres
     MAX_DEVIATION_HOURS: 5, // Écart max entre le plus chargé et le moins chargé
@@ -69,7 +33,7 @@ const PLANNING_RULES = {
     BONUS_POSTE_DIFFICILE: 15
   },
 
-  // NOUVELLES RÈGLES - Préférences temporelles
+  // RÈGLES - Préférences temporelles
   TIME_PREFERENCES: {
     // Certains employés préfèrent le matin
     MORNING_PREFERENCE_BONUS: 10,
@@ -91,22 +55,7 @@ const PLANNING_RULES = {
     TRAINING_BONUS: 20
   },
 
-  // Postes nécessitant des compétences spécifiques
-  COMPETENCE_REQUIRED: ['Cuisine chaude', 'Sandwichs'],
-
-  // Chef requis pour certains postes
-  CHEF_REQUIRED: {
-    'Sandwichs': 'Chef sandwichs'
-  },
-
-  // Règles spéciales par créneau
-  SPECIAL_RULES: {
-    'Vaisselle': {
-      '8h': { min: 1, max: 1 } // Exception pour 8h
-    }
-  },
-
-  // NOUVELLES RÈGLES - Gestion des conflits d'équipe
+  // RÈGLES - Gestion des conflits d'équipe
   TEAM_DYNAMICS: {
     // Éviter certaines combinaisons d'employés si nécessaire
     AVOID_COMBINATIONS: [],
@@ -116,17 +65,14 @@ const PLANNING_RULES = {
     MENTORING_BONUS: 10
   },
 
-  // RÈGLES MÉTÉO ET SAISONNALITÉ
-  SEASONAL_RULES: {
-    // Ajustements selon la période de l'année
-    SUMMER_ADJUSTMENTS: {
-      'Jus de fruits': { multiplier: 1.5 }, // Plus de demande en été
-      'Légumerie': { multiplier: 1.2 }
-    },
-    WINTER_ADJUSTMENTS: {
-      'Cuisine chaude': { multiplier: 1.3 }, // Plus de demande en hiver
-      'Sandwichs': { multiplier: 0.9 }
-    }
+  // RÈGLES AVANCÉES - Respect des contraintes légales
+  LEGAL_CONSTRAINTS: {
+    // Temps de repos quotidien minimum (heures)
+    MIN_DAILY_REST: 11,
+    // Temps de pause minimum pour >6h de travail
+    MIN_BREAK_TIME: 20,
+    // Maximum d'heures consécutives sans pause
+    MAX_CONTINUOUS_HOURS: 6
   }
 };
 
@@ -290,8 +236,9 @@ class PlanningAI {
           const poste = this.postes.find(p => p.nom === posteName);
           if (!poste) continue;
 
-          const minEmployees = PLANNING_RULES.MIN_EMPLOYEES_PER_POSTE[posteName] || 1;
-          const maxEmployees = PLANNING_RULES.MAX_EMPLOYEES_PER_POSTE[posteName] || 2;
+          const posteRules = getPosteRules(posteName);
+          const minEmployees = posteRules.min || 1;
+          const maxEmployees = posteRules.max || 2;
 
           // Pour chaque créneau de cette session
           for (const creneau of sessionConfig.creneaux) {

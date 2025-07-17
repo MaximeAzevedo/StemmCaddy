@@ -9,8 +9,13 @@ const MAX_PER_CELL = 10;
  * Hook pour la gestion du board de planning (drag & drop)
  * Version partagée : données métier de la DB, planning en base partagée
  */
-export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) => {
-  const [board, setBoard] = useState({});
+export const usePlanningBoard = (selectedDate, currentSession, onBoardChange, externalBoard = {}) => {
+  // ✅ CORRECTION : Supprimer le state board interne qui causait le conflit
+  // const [board, setBoard] = useState({});
+  
+  // ✅ UTILISER le board externe au lieu du state interne
+  const board = externalBoard;
+  
   const [availableEmployees, setAvailableEmployees] = useState([]);
 
   /**
@@ -94,9 +99,18 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
     // Si on déplace depuis "unassigned", on CLONE (la personne reste disponible)
     if (src === 'unassigned') {
       const draggedItem = availableEmployees[source.index];
-      const newBoard = { ...board };
       
-      if (!newBoard[dest]) newBoard[dest] = [];
+      // ✅ CORRECTION : Copie profonde pour éviter les mutations
+      const newBoard = {};
+      Object.keys(board).forEach(key => {
+        newBoard[key] = [...(board[key] || [])]; // Copie profonde des tableaux
+      });
+      
+      // ✅ CORRECTION : Préserver le contenu existant au lieu de l'écraser
+      if (!newBoard[dest]) {
+        newBoard[dest] = [];
+      }
+      
       if (newBoard[dest].length >= MAX_PER_CELL) {
         toast.error('Maximum 10 employés par créneau');
         return;
@@ -111,18 +125,27 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
       };
       
       console.log(`✅ Assignation partagée: ${draggedItem.employee.nom} → ${dest}`);
+      console.log(`📊 Avant ajout: ${newBoard[dest].length} employés dans ${dest}`);
       
+      // ✅ AJOUT au lieu d'écrasement
       newBoard[dest].push(clonedItem);
-      setBoard(newBoard);
       
-      // Notifier le changement pour sauvegarde en base partagée
+      console.log(`📊 Après ajout: ${newBoard[dest].length} employés dans ${dest}`);
+      console.log(`🗂️ Contenu complet de ${dest}:`, newBoard[dest].map(emp => emp.prenom || emp.nom));
+      
+      // ✅ CORRECTION : Utiliser onBoardChange au lieu de setBoard pour synchroniser
       if (onBoardChange) {
         onBoardChange(newBoard);
       }
     }
     // Si on déplace entre cellules assignées
     else if (src !== 'unassigned' && dest !== 'unassigned') {
-      const newBoard = { ...board };
+      // ✅ CORRECTION : Copie profonde pour cohérence
+      const newBoard = {};
+      Object.keys(board).forEach(key => {
+        newBoard[key] = [...(board[key] || [])]; // Copie profonde des tableaux
+      });
+      
       const [draggedItem] = newBoard[src].splice(source.index, 1);
       
       if (!newBoard[dest]) newBoard[dest] = [];
@@ -134,7 +157,6 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
       }
 
       newBoard[dest].splice(destination.index, 0, draggedItem);
-      setBoard(newBoard);
       
       console.log(`🔄 Déplacement: ${draggedItem.employee.nom} ${src} → ${dest}`);
       
@@ -144,10 +166,13 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
     }
     // Si on retire depuis une cellule assignée vers unassigned (suppression)
     else if (src !== 'unassigned' && dest === 'unassigned') {
-      const newBoard = { ...board };
-      const [draggedItem] = newBoard[src].splice(source.index, 1);
+      // ✅ CORRECTION : Copie profonde pour cohérence
+      const newBoard = {};
+      Object.keys(board).forEach(key => {
+        newBoard[key] = [...(board[key] || [])]; // Copie profonde des tableaux
+      });
       
-      setBoard(newBoard);
+      const [draggedItem] = newBoard[src].splice(source.index, 1);
       
       console.log(`🗑️ Suppression: ${draggedItem.employee.nom} retiré de ${src}`);
       
@@ -162,7 +187,7 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
    */
   const resetBoard = useCallback(() => {
     // Garder les employés disponibles, vider seulement les assignations
-    const resetBoard = {};
+    const emptyBoard = {}; // ✅ CORRECTION : Renommer pour éviter conflit avec fonction
     // Recréer les cellules vides
     const conf = getSessionConfig(currentSession);
     const postesActifs = conf.postesActifs || [];
@@ -170,13 +195,17 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
     postesActifs.forEach(posteNom => {
       const creneauxForPoste = getCreneauxForPoste(posteNom);
       creneauxForPoste.forEach(creneau => {
-        resetBoard[`${posteNom}-${creneau}`] = [];
+        emptyBoard[`${posteNom}-${creneau}`] = [];
       });
     });
     
-    setBoard(resetBoard);
     console.log('🔄 Board reseté, employés disponibles conservés');
-  }, [currentSession]);
+    
+    // ✅ CORRECTION : Utiliser onBoardChange pour synchroniser
+    if (onBoardChange) {
+      onBoardChange(emptyBoard);
+    }
+  }, [currentSession, onBoardChange]); // ✅ CORRECTION : Ajouter onBoardChange dans les dépendances
 
   /**
    * Recharger les employés disponibles
@@ -220,7 +249,6 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
   const mergeAIBoard = useCallback((aiBoard) => {
     console.log('🤖 Fusion planning IA avec board existant');
     const mergedBoard = { ...board, ...aiBoard };
-    setBoard(mergedBoard);
     
     if (onBoardChange) {
       onBoardChange(mergedBoard);
@@ -231,8 +259,10 @@ export const usePlanningBoard = (selectedDate, currentSession, onBoardChange) =>
    * Mise à jour board
    */
   const updateBoard = useCallback((newBoard) => {
-    setBoard(newBoard);
-  }, []);
+    if (onBoardChange) {
+      onBoardChange(newBoard);
+    }
+  }, [onBoardChange]); // ✅ CORRECTION : Ajouter onBoardChange dans les dépendances
 
   return {
     board,

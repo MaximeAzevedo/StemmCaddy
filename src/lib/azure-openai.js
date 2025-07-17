@@ -64,8 +64,13 @@ export const azureOpenaiAPI = {
       }
     }
 
-    // Dernier fallback vers réponses simulées
-    return await this.getFallbackResponse(userMessage);
+    // Retourner un message par défaut si aucune IA n'est disponible
+    return this.getFallbackResponse();
+  },
+
+  // ✅ NOUVEAU : Alias pour compatibilité avec le moteur IA
+  async chat(userMessage) {
+    return await this.generateResponse(userMessage);
   },
 
   async callAzureOpenAI(userMessage) {
@@ -98,7 +103,7 @@ export const azureOpenaiAPI = {
             content: userMessage
           }
         ],
-        max_tokens: 300,
+        max_tokens: 8000, // 🚀 ULTRA-GÉNÉREUX : Plus jamais de troncature !
         temperature: 0.7,
         presence_penalty: 0.1,
         frequency_penalty: 0.1
@@ -133,7 +138,7 @@ export const azureOpenaiAPI = {
             content: userMessage
           }
         ],
-        max_tokens: 300,
+        max_tokens: 8000, // 🚀 ULTRA-GÉNÉREUX : Plus jamais de troncature !
         temperature: 0.7,
         presence_penalty: 0.1,
         frequency_penalty: 0.1
@@ -148,9 +153,9 @@ export const azureOpenaiAPI = {
     return data.choices[0]?.message?.content || 'Désolé, je n\'ai pas pu traiter votre demande.';
   },
 
-  async getFallbackResponse(userMessage) {
+  async getFallbackResponse(userMessage = '') {
     // Système de réponses simulées intelligent selon le contexte
-    const command = userMessage.toLowerCase();
+    const command = String(userMessage || '').toLowerCase();
     
     if (command.includes('absent') || command.includes('absence')) {
       return `🤖 **Assistant IA Caddy (Mode local)**\n\nJe comprends que vous voulez gérer une absence. En mode local, je ne peux pas accéder aux données temps réel, mais voici la procédure recommandée :\n\n1. **Identifier l'employé** et sa fonction\n2. **Vérifier les règles d'insertion sociale**\n3. **Proposer un remplaçant** avec profil compatible\n\n💡 *Configurez Azure OpenAI pour des réponses intelligentes !*`;

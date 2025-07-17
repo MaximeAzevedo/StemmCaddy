@@ -3,35 +3,22 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { supabaseCuisine } from '../../lib/supabase-cuisine';
 import { getSessionConfig, getCreneauxForPoste } from '../config';
+import { POSTES_RULES } from '../config/postesRules';
 
 /**
- * Règles métier simplifiées pour l'IA (constante globale)
- */
-const SIMPLE_POSTES_RULES = {
-  'Sandwichs': { min: 3, max: 5, priority: 1, allowEveryone: true },
-  'Cuisine chaude': { min: 2, max: 4, priority: 2, allowEveryone: true },
-  'Self Midi': { min: 2, max: 3, priority: 3, allowEveryone: true },
-  'Vaisselle': { min: 2, max: 3, priority: 4, allowEveryone: true },
-  'Pain': { min: 1, max: 2, priority: 5, allowEveryone: true },
-  'Légumerie': { min: 1, max: 2, priority: 6, allowEveryone: true },
-  'Jus de fruits': { min: 1, max: 2, priority: 7, allowEveryone: true },
-  'Equipe Pina et Saskia': { min: 1, max: 2, priority: 8, allowEveryone: true }
-};
-
-/**
- * Hook pour la génération IA de planning
- * Version hybride : données métier de la DB, planning localStorage
+ * Hook pour la génération IA de planning INTELLIGENTE
+ * Utilise les vraies règles métier et distribue équitablement
  */
 export const usePlanningAI = (selectedDate, currentSession, onAIGenerated) => {
   const [aiLoading, setAiLoading] = useState(false);
 
   /**
-   * Génération IA complète du planning (CORRIGÉE)
+   * Génération IA INTELLIGENTE du planning
    */
   const generateAIPlanning = useCallback(async () => {
     setAiLoading(true);
     try {
-      toast.loading('🤖 IA en cours de génération du planning...', { id: 'ai-planning' });
+      toast.loading('🤖 IA INTELLIGENTE en cours de génération...', { id: 'ai-planning' });
       
       // Récupérer les données métier depuis la DB
       const [employeesRes, postesRes, competencesRes, absencesRes] = await Promise.all([
@@ -75,93 +62,178 @@ export const usePlanningAI = (selectedDate, currentSession, onAIGenerated) => {
         }
       });
       
-      console.log('🤖 IA Planning - Données:', {
+      // Map des chefs par compétence spéciale (cuisine_chaude, chef_sandwichs, etc.)
+      const chefsMap = {};
+      employees.forEach(emp => {
+        if (emp.chef_sandwichs) chefsMap['Chef sandwichs'] = emp;
+        if (emp.cuisine_chaude && emp.chef_equipe) chefsMap['Chef cuisine'] = emp;
+      });
+      
+      console.log('🤖 IA INTELLIGENTE - Données:', {
         employés: availableEmployees.length,
         postes: postesActifs.length,
         absents: absentEmployeeIds.length,
-        compétences: Object.keys(competencesMap).length
+        compétences: Object.keys(competencesMap).length,
+        chefs: Object.keys(chefsMap).length
       });
       
-      // 🔧 CORRECTION CRITIQUE : Algorithme IA avec créneaux spécifiques par poste
+      // 🧠 ALGORITHME IA INTELLIGENT
       const newBoard = {};
+      const employeeWorkload = {}; // Track combien d'assignations par employé
       
-      // Priorité aux postes critiques
+      // Initialiser le tracking de charge de travail
+      availableEmployees.forEach(emp => {
+        employeeWorkload[emp.id] = 0;
+      });
+      
+      // Trier les postes par VRAIE priorité (postesRules.js)
       const postesSorted = postesActifs.sort((a, b) => {
-        const ruleA = SIMPLE_POSTES_RULES[a.nom] || { priority: 10 };
-        const ruleB = SIMPLE_POSTES_RULES[b.nom] || { priority: 10 };
+        const ruleA = POSTES_RULES[a.nom] || { priority: 10 };
+        const ruleB = POSTES_RULES[b.nom] || { priority: 10 };
         return ruleA.priority - ruleB.priority;
       });
       
+      console.log('🎯 IA - Ordre de priorité:', postesSorted.map(p => `${p.nom} (P${POSTES_RULES[p.nom]?.priority || 10})`));
+      
+      // Assigner par ordre de priorité avec algorithme intelligent
       postesSorted.forEach(poste => {
-        const rules = SIMPLE_POSTES_RULES[poste.nom] || { min: 1, max: 2, allowEveryone: true };
-        
-        // 🔧 CORRECTION : Utiliser les créneaux spécifiques à chaque poste
+        const rules = POSTES_RULES[poste.nom] || { min: 1, max: 2, allowEveryone: true };
         const creneauxForPoste = getCreneauxForPoste(poste.nom);
-        console.log(`🎯 Poste ${poste.nom} - Créneaux SOURCE:`, creneauxForPoste);
+        
+        console.log(`🎯 IA traite ${poste.nom} - Règles:`, {
+          min: rules.min,
+          max: rules.max,
+          needsCompetence: rules.needsCompetence,
+          needsChef: rules.needsChef,
+          créneaux: creneauxForPoste.length
+        });
         
         creneauxForPoste.forEach(creneau => {
-          console.log(`🔍 IA traite créneau: "${creneau}" (longueur: ${creneau.length}) pour ${poste.nom}`);
-          
           const cellId = `${poste.nom}-${creneau}`;
           newBoard[cellId] = [];
           
-          // Calculer nombre cible d'employés pour ce créneau
-          const targetCount = Math.max(1, Math.min(rules.max, 
-            Math.ceil(rules.min)
-          ));
+          // Calculer nombre cible selon VRAIES règles
+          let targetCount = rules.min;
           
-          let assigned = 0;
-          for (const emp of availableEmployees) {
-            if (assigned >= targetCount) break;
-            
-            // Autoriser assignations multiples (l'employé peut être sur plusieurs créneaux)
-            const hasCompetence = competencesMap[emp.id]?.includes(poste.nom) || rules.allowEveryone;
-            
-            if (hasCompetence || assigned === 0) { // Au moins 1 par créneau
-              newBoard[cellId].push({
-                draggableId: `ai-${Date.now()}-${Math.random()}-${emp.id}`,
-                employeeId: emp.id,
-                employee: {
-                  id: emp.id,
-                  nom: emp.prenom,
-                  profil: emp.langue_parlee || 'Standard'
-                },
-                photo_url: emp.photo_url,
-                nom: emp.prenom,
-                prenom: emp.prenom,
-                isLocal: true
-              });
-              assigned++;
+          // Règles spéciales par créneau (ex: Vaisselle 8h = 1 personne)
+          if (rules.specialRules && rules.specialRules[creneau]) {
+            targetCount = rules.specialRules[creneau].min;
+          }
+          
+          // 🎯 PHASE 1 : CHEF OBLIGATOIRE (si requis)
+          if (rules.needsChef && rules.chefCompetence) {
+            const chef = chefsMap[rules.chefCompetence];
+            if (chef && availableEmployees.find(e => e.id === chef.id)) {
+              newBoard[cellId].push(createEmployeeItem(chef));
+              employeeWorkload[chef.id]++;
+              targetCount--; // Chef compte dans le quota
+              console.log(`👨‍🍳 Chef assigné: ${chef.prenom} → ${cellId}`);
             }
           }
           
-          console.log(`📍 ${cellId}: ${assigned} employés assignés`);
+          // 🎯 PHASE 2 : EMPLOYÉS COMPÉTENTS (si compétences requises)
+          if (rules.needsCompetence && targetCount > 0) {
+            const competentEmployees = availableEmployees
+              .filter(emp => competencesMap[emp.id]?.includes(poste.nom))
+              .sort((a, b) => employeeWorkload[a.id] - employeeWorkload[b.id]); // Les moins chargés d'abord
+            
+            let assigned = 0;
+            for (const emp of competentEmployees) {
+              if (assigned >= targetCount) break;
+              
+              // Éviter surcharge (max 3 assignations par employé)
+              if (employeeWorkload[emp.id] >= 3) continue;
+              
+              // Ne pas assigner le même employé 2 fois dans le même poste
+              const alreadyInPoste = newBoard[cellId].some(item => item.employeeId === emp.id);
+              if (alreadyInPoste) continue;
+              
+              newBoard[cellId].push(createEmployeeItem(emp));
+              employeeWorkload[emp.id]++;
+              assigned++;
+              console.log(`✅ Compétent assigné: ${emp.prenom} → ${cellId} (charge: ${employeeWorkload[emp.id]})`);
+            }
+            
+            targetCount -= assigned;
+          }
+          
+          // 🎯 PHASE 3 : EMPLOYÉS DISPONIBLES (si allowEveryone ou pas assez de compétents)
+          if ((rules.allowEveryone || rules.allowNonValidated) && targetCount > 0) {
+            const otherEmployees = availableEmployees
+              .filter(emp => {
+                // Pas déjà assigné dans ce créneau
+                const alreadyInCell = newBoard[cellId].some(item => item.employeeId === emp.id);
+                return !alreadyInCell;
+              })
+              .sort((a, b) => employeeWorkload[a.id] - employeeWorkload[b.id]); // Les moins chargés d'abord
+            
+            let assigned = 0;
+            for (const emp of otherEmployees) {
+              if (assigned >= targetCount) break;
+              
+              // Éviter surcharge
+              if (employeeWorkload[emp.id] >= 3) continue;
+              
+              newBoard[cellId].push(createEmployeeItem(emp));
+              employeeWorkload[emp.id]++;
+              assigned++;
+              console.log(`🔄 Disponible assigné: ${emp.prenom} → ${cellId} (charge: ${employeeWorkload[emp.id]})`);
+            }
+          }
+          
+          console.log(`📍 ${cellId}: ${newBoard[cellId].length} employés assignés (cible: ${rules.min})`);
         });
       });
       
-      console.log('🤖 Planning IA généré:', {
+      // 📊 Statistiques finales
+      const totalAssignations = Object.values(newBoard).reduce((sum, cell) => sum + cell.length, 0);
+      const employeesUsed = new Set(Object.values(newBoard).flat().map(item => item.employeeId)).size;
+      const avgWorkload = totalAssignations / employeesUsed;
+      
+      console.log('🤖 Planning IA INTELLIGENT généré:', {
         cellules: Object.keys(newBoard).length,
-        assignations: Object.values(newBoard).reduce((sum, cell) => sum + cell.length, 0),
-        cellulesNonVides: Object.values(newBoard).filter(cell => cell.length > 0).length
+        assignations: totalAssignations,
+        employésUtilisés: employeesUsed,
+        chargeMovenne: avgWorkload.toFixed(1),
+        répartition: Object.fromEntries(
+          Object.entries(employeeWorkload).filter(([_, workload]) => workload > 0)
+        )
       });
       
       if (onAIGenerated) {
         onAIGenerated(newBoard);
       }
       
-      toast.success('🎉 Planning généré par IA !', { id: 'ai-planning' });
+      toast.success(`🎉 Planning IA généré ! ${totalAssignations} assignations pour ${employeesUsed} employés`, { id: 'ai-planning' });
       
     } catch (error) {
-      console.error('❌ Erreur génération IA:', error);
+      console.error('❌ Erreur génération IA INTELLIGENTE:', error);
       toast.error('Erreur lors de la génération IA', { id: 'ai-planning' });
     } finally {
       setAiLoading(false);
     }
   }, [selectedDate, currentSession, onAIGenerated]);
 
+  /**
+   * Créer un item employé pour le board
+   */
+  const createEmployeeItem = (emp) => ({
+    draggableId: `ai-${Date.now()}-${Math.random()}-${emp.id}`,
+    employeeId: emp.id,
+    employee: {
+      id: emp.id,
+      nom: emp.prenom,
+      profil: emp.langue_parlee || 'Standard'
+    },
+    photo_url: emp.photo_url,
+    nom: emp.prenom,
+    prenom: emp.prenom,
+    generatedBy: 'ai',
+    isLocal: true
+  });
+
   return {
     aiLoading,
     generateAIPlanning
-    // ❌ Suppression de optimizeExistingPlanning (bouton inutile)
   };
 }; 

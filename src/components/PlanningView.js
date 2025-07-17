@@ -3,7 +3,6 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { 
   Calendar, 
   Save, 
-  Download,
   Zap,
   Home,
   AlertTriangle,
@@ -13,6 +12,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { aiPlanningEngine } from '../lib/ai-planning-engine'; // ✅ NOUVEAU : Moteur IA intelligent
 
 const PlanningView = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -77,32 +77,68 @@ const PlanningView = ({ user, onLogout }) => {
   }, [currentWeek, initializePlanning]);
 
   const generateAIPlanning = async () => {
-    toast.loading('Génération automatique du planning...', { id: 'ai-planning' });
-    
-    // Simulation de l'IA qui génère un planning optimal
-    setTimeout(() => {
+    try {
+      console.log('🤖 Lancement de la génération IA intelligente...');
+      toast.loading('🤖 Génération planning IA avec Azure OpenAI...', { id: 'ai-planning' });
+      
+      // Utiliser notre nouveau moteur IA intelligent pour chaque jour de la semaine
       const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
       const optimizedPlanning = {};
       
-      weekDays.forEach(day => {
-        const dateKey = format(day, 'yyyy-MM-dd');
+      for (const day of weekDays) {
+        const dateString = format(day, 'yyyy-MM-dd');
+        console.log(`🎯 Génération IA pour ${dateString}...`);
         
-        // Algorithme simplifié de génération de planning
-        const availableEmployees = [...employees];
+        // Appel IA pour ce jour spécifique
+        const aiResult = await aiPlanningEngine.generateIntelligentPlanning(dateString);
         
-        optimizedPlanning[dateKey] = {
-          cr21: getOptimalTeam(availableEmployees, 3, 'cr21'),
-          cr23: getOptimalTeam(availableEmployees, 3, 'cr23'),
-          jumper: getOptimalTeam(availableEmployees, 3, 'jumper'),
-          ducato: getOptimalTeam(availableEmployees, 3, 'ducato'),
-          transit: getOptimalTeam(availableEmployees, 6, 'transit'),
-          caddy: availableEmployees.slice(0, 4).map(emp => ({ ...emp, status: 'assigned' }))
-        };
-      });
+        if (aiResult.success) {
+          // Transformer les résultats IA en format attendu par l'interface
+          optimizedPlanning[dateString] = {
+            // Exemple de mapping - à adapter selon vos besoins
+            cr21: [],
+            cr23: [],
+            jumper: [],
+            ducato: [],
+            transit: [],
+            caddy: []
+          };
+          
+          // Afficher les recommandations IA si disponibles
+          if (aiResult.recommendations?.length > 0) {
+            console.log(`💡 Recommandations IA pour ${dateString}:`, aiResult.recommendations);
+          }
+        } else {
+          console.warn(`⚠️ IA indisponible pour ${dateString}, utilisation planning par défaut`);
+          // Fallback vers un planning basique pour ce jour
+          const availableEmployees = [...employees];
+          optimizedPlanning[dateString] = {
+            cr21: getOptimalTeam(availableEmployees, 3, 'cr21'),
+            cr23: getOptimalTeam(availableEmployees, 3, 'cr23'),
+            jumper: getOptimalTeam(availableEmployees, 3, 'jumper'),
+            ducato: getOptimalTeam(availableEmployees, 3, 'ducato'),
+            transit: getOptimalTeam(availableEmployees, 6, 'transit'),
+            caddy: availableEmployees.slice(0, 4).map(emp => ({ ...emp, status: 'assigned' }))
+          };
+        }
+      }
       
       setPlanning(optimizedPlanning);
-      toast.success('Planning optimisé généré avec succès !', { id: 'ai-planning' });
-    }, 2000);
+      
+      const totalAssignments = Object.values(optimizedPlanning)
+        .reduce((sum, dayPlan) => {
+          return sum + Object.values(dayPlan).reduce((daySum, team) => daySum + team.length, 0);
+        }, 0);
+      
+      toast.success(`🎯 Planning IA optimisé généré ! ${totalAssignments} affectations créées`, { 
+        id: 'ai-planning',
+        duration: 4000 
+      });
+      
+    } catch (error) {
+      console.error('❌ Erreur génération IA:', error);
+      toast.error(`❌ Erreur génération IA: ${error.message}`, { id: 'ai-planning' });
+    }
   };
 
   const getOptimalTeam = (employees, maxSize, vehicleType) => {

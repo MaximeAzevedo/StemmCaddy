@@ -1,6 +1,6 @@
 /**
  * Règles métier unifiées pour les postes de cuisine
- * ✅ CORRECTION : Règles cohérentes basées sur les besoins réels
+ * ✅ UNIFICATION COMPLÈTE : Toutes les compétences sont obligatoires
  */
 
 export const POSTES_RULES = {
@@ -23,8 +23,8 @@ export const POSTES_RULES = {
     priority: 2,
     critical: true,
     needsCompetence: true,
-    allowNonValidated: true,
-    description: 'Service clientèle - TOUJOURS 2 minimum (primordial)'
+    allowNonValidated: false, // Compétence obligatoire
+    description: 'Service clientèle - TOUJOURS 2 minimum (compétence obligatoire)'
   },
 
   // 🍳 HAUTE PRIORITÉ - Cuisine principale
@@ -45,9 +45,9 @@ export const POSTES_RULES = {
     specialRules: {
       '8h': { min: 1, max: 1 }
     },
-    needsCompetence: false,
-    allowEveryone: true,
-    description: 'Vaisselle - équipe fixe de 3 (exception 8h: 1 personne)'
+    needsCompetence: true, // ✅ CHANGÉ : Compétence obligatoire
+    strictValidation: false,
+    description: 'Vaisselle - équipe fixe de 3 (compétence requise, exception 8h: 1 personne)'
   },
 
   // 🥖 MOYENNE PRIORITÉ - Boulangerie
@@ -57,8 +57,8 @@ export const POSTES_RULES = {
     priority: 5,
     canRelocateAfter10h: true,
     needsCompetence: true,
-    allowNonValidated: true,
-    description: 'Boulangerie - flexible 2-3 personnes, relocalisation possible après 10h'
+    allowNonValidated: false, // ✅ CHANGÉ : Validation stricte
+    description: 'Boulangerie - flexible 2-3 personnes, compétence obligatoire'
   },
 
   // 🧅 PRÉPARATION
@@ -66,9 +66,9 @@ export const POSTES_RULES = {
     min: 1,
     max: 2,
     priority: 6,
-    needsCompetence: false,
-    allowEveryone: true,
-    description: 'Préparation légumes - 1-2 personnes'
+    needsCompetence: true, // ✅ CHANGÉ : Compétence obligatoire
+    strictValidation: false,
+    description: 'Préparation légumes - 1-2 personnes (compétence requise)'
   },
 
   // 🧃 FLEXIBLE - Boissons
@@ -77,18 +77,20 @@ export const POSTES_RULES = {
     max: 2,
     priority: 7,
     emergencyMin: 1,
-    needsCompetence: false,
-    allowEveryone: true,
-    description: 'Jus de fruits - 1-2 personnes (1 minimum en urgence)'
+    needsCompetence: true, // ✅ CHANGÉ : Compétence obligatoire
+    strictValidation: false,
+    description: 'Jus de fruits - 1-2 personnes (compétence requise)'
   },
 
-  // 👥 ÉQUIPE SPÉCIALISÉE
+  // 👥 ÉQUIPE SPÉCIALISÉE - ✅ AJOUTÉ
   'Equipe Pina et Saskia': {
     min: 2,
     max: 3,
     priority: 8,
     specialTeam: true,
-    description: 'Équipe spécialisée - 2-3 personnes'
+    needsCompetence: true, // ✅ NOUVEAU : Compétence obligatoire
+    strictValidation: true,
+    description: 'Équipe spécialisée - 2-3 personnes (compétence obligatoire)'
   }
 };
 

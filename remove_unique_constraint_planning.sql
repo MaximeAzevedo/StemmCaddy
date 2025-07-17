@@ -28,3 +28,14 @@ WHERE conrelid = 'planning_cuisine_new'::regclass;
 
 -- Message de confirmation
 SELECT 'Contrainte UNIQUE supprimée avec succès! Les assignations multiples sont maintenant possibles.' as status; 
+
+-- Ajout des colonnes manquantes pour les compétences cuisine
+ALTER TABLE employes_cuisine_new 
+ADD COLUMN IF NOT EXISTS pain boolean DEFAULT false,
+ADD COLUMN IF NOT EXISTS jus_de_fruits boolean DEFAULT false,
+ADD COLUMN IF NOT EXISTS self_midi boolean DEFAULT false;
+
+-- Commentaires pour documentation
+COMMENT ON COLUMN employes_cuisine_new.pain IS 'Compétence pour le poste Pain (ID 3)';
+COMMENT ON COLUMN employes_cuisine_new.jus_de_fruits IS 'Compétence pour le poste Jus de fruits (ID 4)';
+COMMENT ON COLUMN employes_cuisine_new.self_midi IS 'Compétence pour le poste Self Midi (ID 7)'; 

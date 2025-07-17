@@ -153,6 +153,7 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
       try {
         if (field === 'valide') {
           if (value) {
+            // VALIDATION : Créer/mettre à jour la compétence
             const competenceData = {
               niveau: 'Expert', // Simplified to binary
               date_validation: new Date().toISOString().split('T')[0]
@@ -162,11 +163,32 @@ const CuisineManagement = ({ user, onLogout, defaultTab = 'planning' }) => {
               dbSaveSuccessful = true;
               console.log('✅ Compétence cuisine validée:', result.data);
             }
+          } else {
+            // SUPPRESSION : Supprimer la compétence
+            const competenceData = {
+              niveau: '', // Niveau vide = suppression
+              date_validation: null
+            };
+            const result = await supabaseCuisine.updateCompetenceCuisine(employeeId, posteId, competenceData);
+            if (!result.error) {
+              dbSaveSuccessful = true;
+              console.log('✅ Compétence cuisine supprimée:', result.data);
+            }
           }
         } else if (field === 'niveau') {
           if (value === 0) {
-            console.log('🗑️ Suppression compétence cuisine niveau 0');
+            // SUPPRESSION : Niveau 0 = supprimer
+            const competenceData = {
+              niveau: '', // Niveau vide = suppression
+              date_validation: null
+            };
+            const result = await supabaseCuisine.updateCompetenceCuisine(employeeId, posteId, competenceData);
+            if (!result.error) {
+              dbSaveSuccessful = true;
+              console.log('✅ Compétence cuisine supprimée (niveau 0):', result.data);
+            }
           } else {
+            // MISE À JOUR : Nouveau niveau
             const niveau = value === 1 ? 'Intermédiaire' : 'Expert';
             const competenceData = {
               niveau: niveau,

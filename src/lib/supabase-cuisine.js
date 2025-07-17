@@ -19,7 +19,9 @@ const POSTES_CUISINE = [
   { id: 5, nom: 'Vaisselle', couleur: '#3b82f6', icone: '🍽️' },
   { id: 6, nom: 'Légumerie', couleur: '#10b981', icone: '🥬' },
   { id: 7, nom: 'Self Midi', couleur: '#8b5cf6', icone: '🍽️' },
-  { id: 8, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥' }
+  { id: 8, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥' },
+  { id: 9, nom: 'Cuisine froide', couleur: '#06b6d4', icone: '❄️' },
+  { id: 10, nom: 'Chef sandwichs', couleur: '#f97316', icone: '👨‍🍳' }
 ];
 
 export const supabaseCuisine = {
@@ -39,11 +41,11 @@ export const supabaseCuisine = {
         .select('*')
         .eq('actif', true)
         .order('prenom');
-
+      
       if (error) {
         console.error('❌ Erreur getEmployeesCuisine:', error);
         throw error;
-      }
+    }
 
       console.log('✅ Employés cuisine chargés:', data?.length || 0);
       return { data: data || [], error: null };
@@ -85,15 +87,15 @@ export const supabaseCuisine = {
       
       let query = supabase
         .from('planning_cuisine_new')
-        .select(`
-          *,
+          .select(`
+            *,
           employe:employes_cuisine_new(id, prenom, photo_url)
         `);
-      
+        
       if (dateDebut) {
         if (dateFin) {
           query = query.gte('date', dateDebut).lte('date', dateFin);
-        } else {
+      } else {
           query = query.eq('date', dateDebut);
         }
       }
@@ -104,7 +106,7 @@ export const supabaseCuisine = {
         console.error('❌ Erreur getPlanningCuisine:', error);
         throw error;
       }
-      
+
       console.log('✅ Planning cuisine chargé:', data?.length || 0);
       return { data: data || [], error: null };
       
@@ -162,7 +164,7 @@ export const supabaseCuisine = {
       if (error) {
         console.error('❌ Erreur getAbsencesCuisine:', error);
         throw error;
-      }
+    }
       
       console.log('✅ Absences cuisine chargées:', data?.length || 0);
       return { data: data || [], error: null };
@@ -268,8 +270,8 @@ export const supabaseCuisine = {
   // ==================== COMPÉTENCES CUISINE ====================
   
   /**
-   * Récupérer les compétences cuisine - VERSION SIMPLIFIÉE
-   * Utilise les colonnes booléennes de la table employes_cuisine_new
+   * Récupérer les compétences cuisine COMPLÈTES - VERSION SIMPLIFIÉE
+   * ✅ COMPATIBLE AVEC LA NOUVELLE STRUCTURE DB (sans cuisine_froide)
    */
   async getCompetencesCuisineSimple() {
     try {
@@ -277,7 +279,7 @@ export const supabaseCuisine = {
       
       const { data: employeesData, error } = await supabase
         .from('employes_cuisine_new')
-        .select('id, prenom, cuisine_chaude, cuisine_froide, chef_sandwichs, sandwichs, vaisselle, legumerie, equipe_pina_saskia')
+        .select('id, prenom, cuisine_chaude, chef_sandwichs, sandwichs, vaisselle, legumerie, equipe_pina_saskia, pain, jus_de_fruits, self_midi')
         .eq('actif', true);
       
       if (error) throw error;
@@ -286,17 +288,23 @@ export const supabaseCuisine = {
       const competences = [];
       employeesData.forEach(emp => {
         const competencesEmp = [];
-        
+
+        // Mapping complet des postes vers les colonnes (SANS cuisine_froide)
         if (emp.cuisine_chaude) competencesEmp.push({ employee_id: emp.id, poste_id: 1, niveau: 'Expert' });
         if (emp.sandwichs) competencesEmp.push({ employee_id: emp.id, poste_id: 2, niveau: 'Expert' });
+        if (emp.pain) competencesEmp.push({ employee_id: emp.id, poste_id: 3, niveau: 'Expert' });
+        if (emp.jus_de_fruits) competencesEmp.push({ employee_id: emp.id, poste_id: 4, niveau: 'Expert' });
         if (emp.vaisselle) competencesEmp.push({ employee_id: emp.id, poste_id: 5, niveau: 'Expert' });
         if (emp.legumerie) competencesEmp.push({ employee_id: emp.id, poste_id: 6, niveau: 'Expert' });
+        if (emp.self_midi) competencesEmp.push({ employee_id: emp.id, poste_id: 7, niveau: 'Expert' });
         if (emp.equipe_pina_saskia) competencesEmp.push({ employee_id: emp.id, poste_id: 8, niveau: 'Expert' });
+        // ✅ SUPPRIMÉ : cuisine_froide n'existe plus
+        if (emp.chef_sandwichs) competencesEmp.push({ employee_id: emp.id, poste_id: 10, niveau: 'Expert' });
         
         competences.push(...competencesEmp);
       });
       
-      console.log('✅ Compétences cuisine chargées:', competences.length);
+      console.log('✅ Compétences cuisine chargées (NOUVELLE STRUCTURE):', competences.length);
       return { data: competences, error: null };
       
     } catch (error) {
@@ -306,21 +314,89 @@ export const supabaseCuisine = {
   },
 
   /**
-   * Mettre à jour une compétence cuisine
+   * Mettre à jour une compétence cuisine - VERSION COMPLÈTE + DEBUG
+   * Gère l'ajout ET la suppression des compétences avec validation stricte (TOUS LES POSTES)
    */
   async updateCompetenceCuisine(employeeId, posteId, competenceData) {
     try {
-      // Mise à jour des colonnes booléennes selon le poste
+      console.log('🔧 updateCompetenceCuisine - Données reçues:', {
+        employeeId,
+        posteId,
+        competenceData
+      });
+      
+      // Validation des paramètres
+      if (!employeeId || !posteId) {
+        console.error('❌ Paramètres manquants:', { employeeId, posteId });
+        return { data: null, error: { message: 'Paramètres employeeId et posteId requis' } };
+      }
+      
+      // Déterminer si c'est une validation ou une suppression
+      // Gestion robuste des différents formats de niveau
+      let isValidation = false;
+      
+      if (competenceData.niveau) {
+        const niveau = competenceData.niveau.toString().toLowerCase();
+        // Accepter "expert", "intermédiaire", ou toute valeur non-vide sauf "nv", "", "non validé"
+        isValidation = niveau !== '' && 
+                      niveau !== 'nv' && 
+                      niveau !== 'non validé' && 
+                      niveau !== 'false' && 
+                      niveau !== '0';
+      }
+      
+      console.log(`🎯 Validation déterminée: ${isValidation} (niveau: "${competenceData.niveau}")`);
+      
+      // Mise à jour des colonnes booléennes selon le poste (MAPPING COMPLET)
       const updates = {};
       
-      switch (posteId) {
-        case 1: updates.cuisine_chaude = true; break;
-        case 2: updates.sandwichs = true; break;
-        case 5: updates.vaisselle = true; break;
-        case 6: updates.legumerie = true; break;
-        case 8: updates.equipe_pina_saskia = true; break;
-        default: console.warn('Poste non reconnu:', posteId);
+      switch (parseInt(posteId)) {
+        case 1: 
+          updates.cuisine_chaude = isValidation; 
+          console.log('🔥 Mise à jour cuisine_chaude:', isValidation);
+          break;
+        case 2: 
+          updates.sandwichs = isValidation; 
+          console.log('🥪 Mise à jour sandwichs:', isValidation);
+          break;
+        case 3: 
+          updates.pain = isValidation; 
+          console.log('🍞 Mise à jour pain:', isValidation);
+          break;
+        case 4: 
+          updates.jus_de_fruits = isValidation; 
+          console.log('🧃 Mise à jour jus_de_fruits:', isValidation);
+          break;
+        case 5: 
+          updates.vaisselle = isValidation; 
+          console.log('🍽️ Mise à jour vaisselle:', isValidation);
+          break;
+        case 6: 
+          updates.legumerie = isValidation; 
+          console.log('🥬 Mise à jour légumerie:', isValidation);
+          break;
+        case 7: 
+          updates.self_midi = isValidation; 
+          console.log('🍽️ Mise à jour self_midi:', isValidation);
+          break;
+        case 8: 
+          updates.equipe_pina_saskia = isValidation; 
+          console.log('👥 Mise à jour equipe_pina_saskia:', isValidation);
+          break;
+        case 9: 
+          updates.cuisine_froide = isValidation; 
+          console.log('❄️ Mise à jour cuisine_froide:', isValidation);
+          break;
+        case 10: 
+          updates.chef_sandwichs = isValidation; 
+          console.log('👨‍🍳 Mise à jour chef_sandwichs:', isValidation);
+          break;
+        default: 
+          console.warn('⚠️ Poste non reconnu:', posteId);
+          return { data: null, error: { message: `Poste ${posteId} non reconnu` } };
       }
+      
+      console.log('💾 Updates à appliquer:', updates);
       
       if (Object.keys(updates).length > 0) {
         const { data, error } = await supabase
@@ -329,12 +405,17 @@ export const supabaseCuisine = {
           .eq('id', employeeId)
           .select();
         
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Erreur Supabase updateCompetenceCuisine:', error);
+          throw error;
+        }
         
-        console.log('✅ Compétence cuisine mise à jour:', data);
+        const action = isValidation ? 'validée' : 'supprimée';
+        console.log(`✅ Compétence cuisine ${action} (employé ${employeeId}, poste ${posteId}):`, data);
         return { data, error: null };
       }
       
+      console.log('⚠️ Aucune mise à jour nécessaire');
       return { data: [], error: null };
       
     } catch (error) {
@@ -348,17 +429,41 @@ export const supabaseCuisine = {
   /**
    * Sauvegarder le planning complet en base de données
    * Remplace localStorage pour partage multi-utilisateurs
-   * 🔧 CORRECTION : Gestion des contraintes uniques
+   * 🔧 CORRECTION : Nettoyage complet des anciennes données
    */
   async savePlanningPartage(boardData, selectedDate) {
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       
-      // 1. Supprimer les anciennes assignations du jour
-      await supabase
+      // ✅ CORRECTION : Supprimer TOUTES les anciennes données de planning (pas seulement la date courante)
+      console.log('🧹 Nettoyage complet des anciennes données de planning...');
+      
+      // Option 1 : Supprimer toutes les données (table planning réinitialisée)
+      const { data: existingData, error: selectError } = await supabase
         .from('planning_cuisine_new')
-        .delete()
-        .eq('date', dateStr);
+        .select('date')
+        .limit(1);
+      
+      if (!selectError && existingData?.length > 0) {
+        // Il y a des données existantes, les supprimer toutes
+        const { error: deleteError } = await supabase
+          .from('planning_cuisine_new')
+          .delete()
+          .gte('date', '2020-01-01'); // Supprime tout depuis 2020 (pratiquement tout)
+        
+        if (deleteError) {
+          console.warn('⚠️ Erreur suppression complète, fallback suppression date courante:', deleteError);
+          // Fallback : supprimer seulement la date courante
+          await supabase
+            .from('planning_cuisine_new')
+            .delete()
+            .eq('date', dateStr);
+        } else {
+          console.log('✅ Toutes les anciennes données supprimées');
+        }
+      } else {
+        console.log('✅ Aucune donnée existante à supprimer');
+      }
       
       // 2. Préparer les nouvelles assignations (ASSIGNATIONS MULTIPLES AUTORISÉES)
       const insertions = [];
@@ -377,68 +482,62 @@ export const supabaseCuisine = {
           // 🔧 DEBUG : Vérifier le créneau reçu
           console.log(`🔍 DEBUG Créneau: "${creneau}" pour ${poste}`);
           
-          // Parser créneau → heures début/fin (robuste contre troncatures)
+          // ✅ CORRECTION : Parser créneau → heures début/fin (logique robuste)
           let heure_debut, heure_fin;
           
           try {
-            if (creneau.includes('-') && creneau.length > 3) {
+            // Créneaux spéciaux prédéfinis
+            if (creneau === 'midi') {
+              heure_debut = '12:00:00';
+              heure_fin = '16:00:00';
+            } else if (creneau === '8h') {
+              heure_debut = '08:00:00';
+              heure_fin = '10:00:00';
+            } else if (creneau === '10h') {
+              heure_debut = '10:00:00';
+              heure_fin = '12:00:00';
+            } else if (creneau.includes('-')) {
               // Format "8h-16h" ou "11h-11h45" ou "11h45-12h45"
               const parts = creneau.split('-');
               
               // Parser heure de début
-              if (parts[0].includes('h')) {
-                const hourMinutes = parts[0].split('h');
-                const hours = hourMinutes[0] || '8';
-                const minutes = hourMinutes[1] || '00';
-                heure_debut = hours.padStart(2, '0') + ':' + minutes.padStart(2, '0');
+              if (parts[0] && parts[0].includes('h')) {
+                const startParts = parts[0].split('h');
+                const hours = parseInt(startParts[0]) || 8;
+                const minutes = parseInt(startParts[1]) || 0;
+                heure_debut = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':00';
               } else {
-                heure_debut = '08:00'; // fallback
+                heure_debut = '08:00:00'; // fallback
               }
               
               // Parser heure de fin
               if (parts[1] && parts[1].includes('h')) {
-                const hourMinutes = parts[1].split('h');
-                const hours = hourMinutes[0] || '16';
-                const minutes = hourMinutes[1] || '00';
-                heure_fin = hours.padStart(2, '0') + ':' + minutes.padStart(2, '0');
-              } else if (parts[1]) {
-                // Fallback pour heure de fin sans 'h'
-                const endHour = parseInt(parts[1]) || 16;
-                heure_fin = endHour.toString().padStart(2, '0') + ':00';
+                const endParts = parts[1].split('h');
+                const hours = parseInt(endParts[0]) || 16;
+                const minutes = parseInt(endParts[1]) || 0;
+                heure_fin = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':00';
               } else {
-                heure_fin = '16:00'; // fallback
+                heure_fin = '16:00:00'; // fallback
               }
+            } else if (creneau.endsWith('h')) {
+              // Format générique "Xh" (ex: "14h")
+              const hour = parseInt(creneau.replace('h', '')) || 8;
+              heure_debut = hour.toString().padStart(2, '0') + ':00:00';
+              heure_fin = (hour + 2).toString().padStart(2, '0') + ':00:00';
             } else {
-              // Créneaux spéciaux simples (8h, 10h, midi)
-              if (creneau === 'midi') {
-                heure_debut = '12:00';
-                heure_fin = '16:00';
-              } else if (creneau === '8h') {
-                heure_debut = '08:00';
-                heure_fin = '10:00';
-              } else if (creneau === '10h') {
-                heure_debut = '10:00';
-                heure_fin = '12:00';
-              } else if (creneau.endsWith('h')) {
-                // Format générique "Xh"
-                const hour = parseInt(creneau.replace('h', '')) || 8;
-                heure_debut = hour.toString().padStart(2, '0') + ':00';
-                heure_fin = (hour + 2).toString().padStart(2, '0') + ':00';
-              } else {
-                // Fallback total
-                console.warn(`⚠️ Créneau non reconnu: "${creneau}", utilisation fallback`);
-                heure_debut = '08:00';
-                heure_fin = '10:00';
-              }
+              // Fallback total pour créneaux non reconnus
+              console.warn(`⚠️ Créneau non reconnu: "${creneau}", utilisation fallback`);
+              heure_debut = '08:00:00';
+              heure_fin = '10:00:00';
             }
             
             // 🔍 DEBUG : Vérifier le résultat du parsing
             console.log(`⏰ Parsing "${creneau}" → ${heure_debut} - ${heure_fin}`);
-            
+
           } catch (error) {
             console.error(`❌ Erreur parsing créneau "${creneau}":`, error);
-            heure_debut = '08:00';
-            heure_fin = '10:00';
+            heure_debut = '08:00:00';
+            heure_fin = '10:00:00';
           }
           
           insertions.push({
@@ -473,13 +572,13 @@ export const supabaseCuisine = {
       
       console.log(`💾 Planning partagé sauvegardé: ${insertions.length} assignations`);
       return { success: true };
-      
+
     } catch (error) {
       console.error('❌ Erreur sauvegarde planning partagé:', error);
       return { success: false, error };
     }
   },
-  
+
   /**
    * Charger le planning complet depuis la base de données
    * Remplace localStorage pour partage multi-utilisateurs
@@ -507,7 +606,7 @@ export const supabaseCuisine = {
         
         if (!board[cellId]) {
           board[cellId] = [];
-        }
+    }
         
         board[cellId].push({
           draggableId: `db-${entry.id}`,
@@ -535,7 +634,7 @@ export const supabaseCuisine = {
       return { data: {}, error };
     }
   },
-  
+
   /**
    * Vérifier s'il y a eu des changements depuis la dernière sync
    * Pour polling automatique

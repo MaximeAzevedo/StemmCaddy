@@ -167,7 +167,7 @@ const CuisinePlanningBoard = () => {
     }
   };
 
-  // ---------------- RENDU DÉRIVE ----------------
+  // ---------------- RENDU DÉRIVE PREMIUM ----------------
   const renderEmployeeItem = (item, index) => (
     <Draggable draggableId={item.draggableId} index={index} key={item.draggableId}>
       {(provided, snapshot) => (
@@ -175,15 +175,31 @@ const CuisinePlanningBoard = () => {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`p-2 mb-1 rounded-lg text-sm bg-white border border-gray-200 shadow-sm flex items-center space-x-2 transition-transform ${
-            snapshot.isDragging ? 'rotate-2 shadow-lg' : ''
+          className={`p-3 mb-2 rounded-xl text-sm bg-white/80 backdrop-blur-sm border border-white/50 shadow-lg flex items-center space-x-3 transition-all duration-300 ${
+            snapshot.isDragging 
+              ? 'rotate-2 shadow-2xl bg-gradient-to-r from-blue-50 to-purple-50 scale-105' 
+              : 'hover:shadow-xl hover:-translate-y-0.5'
           }`}
         >
-          <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-700">
-            {item.employee.prenom?.[0]}
-            {item.employee.nom?.[0]}
+          {/* Photo Premium avec bordure dégradée */}
+          <div className="w-8 h-8 rounded-full relative">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 p-0.5">
+              <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                {item.photo_url ? (
+                  <img 
+                    src={item.photo_url} 
+                    alt={`${item.employee.prenom} ${item.employee.nom}`}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xs font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    {item.employee.prenom?.[0]}{item.employee.nom?.[0]}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <span className="truncate">{item.employee.prenom} {item.employee.nom}</span>
+          <span className="truncate font-medium text-gray-800">{item.employee.prenom} {item.employee.nom}</span>
         </div>
       )}
     </Draggable>
@@ -195,14 +211,16 @@ const CuisinePlanningBoard = () => {
         <div
           ref={provided.innerRef}
           {...provided.droppableProps}
-          className={`${isCell ? 'min-h-[80px]' : 'min-h-[300px]'} p-2 rounded-lg border-2 ${
-            snapshot.isDraggingOver ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-gray-50'
-          }`}
+          className={`${isCell ? 'min-h-[100px]' : 'min-h-[350px]'} p-3 rounded-2xl border-2 transition-all duration-300 ${
+            snapshot.isDraggingOver 
+              ? 'border-gradient-to-r from-blue-400 to-purple-500 bg-gradient-to-br from-blue-50/80 to-purple-50/80 backdrop-blur-sm' 
+              : 'border-white/30 bg-white/40 backdrop-blur-sm'
+          } shadow-lg`}
         >
           {items.map((item, idx) => renderEmployeeItem(item, idx))}
           {provided.placeholder}
           {items.length === 0 && isCell && (
-            <div className="text-center text-gray-400 text-xs py-2">Vide</div>
+            <div className="text-center text-gray-500 text-xs py-4 italic">Vide</div>
           )}
         </div>
       )}
@@ -211,73 +229,117 @@ const CuisinePlanningBoard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+      <div className="min-h-[400px] bg-gradient-to-br from-slate-50 via-blue-50 to-violet-100 flex items-center justify-center rounded-3xl">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mx-auto mb-4 shadow-lg"></div>
+          <h2 className="text-xl font-bold text-gray-700 mb-2">Chargement du Planning</h2>
+          <p className="text-gray-500">Préparation de l'interface...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Sélecteur de date */}
-      <div className="flex items-center space-x-2">
-        <CalendarIcon className="w-5 h-5 text-gray-600" />
-        <input
-          type="date"
-          value={format(selectedDate, 'yyyy-MM-dd')}
-          onChange={(e) => setSelectedDate(new Date(e.target.value))}
-          className="border rounded-lg px-3 py-1 text-sm"
-        />
-        <button
-          onClick={loadData}
-          className="ml-2 px-3 py-1 text-sm rounded-lg bg-orange-600 text-white hover:bg-orange-700"
-        >
-          Recharger
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-violet-100 p-6 space-y-8">
+      {/* Header Premium avec glassmorphism */}
+      <div className="bg-white/70 backdrop-blur-md border border-white/20 shadow-xl rounded-3xl p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl shadow-lg">
+              <CalendarIcon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-red-500 bg-clip-text text-transparent">
+                Planning Cuisine Interactive
+              </h1>
+              <p className="text-gray-600 font-medium">Glisser-déposer pour organiser les équipes</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-3 shadow-lg border border-white/30">
+              <input
+                type="date"
+                value={format(selectedDate, 'yyyy-MM-dd')}
+                onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                className="bg-transparent border-none outline-none text-gray-700 font-medium"
+              />
+            </div>
+            <button
+              onClick={loadData}
+              className="bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white rounded-2xl px-6 py-3 font-medium transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
+              🔄 Recharger
+            </button>
+          </div>
+        </div>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex space-x-4 overflow-x-auto">
-          {/* Colonne employés libres */}
-          <div className="w-64 shrink-0">
-            <h3 className="text-sm font-semibold mb-2">Employés non affectés</h3>
-            {renderDroppableColumn('unassigned', board.unassigned || [])}
+        <div className="flex space-x-6 overflow-x-auto">
+          {/* Colonne employés libres Premium */}
+          <div className="w-80 shrink-0">
+            <div className="bg-white/70 backdrop-blur-md border border-white/20 shadow-xl rounded-3xl p-6">
+              <h3 className="text-lg font-bold mb-4 bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent flex items-center">
+                <span className="mr-2">👥</span>
+                Employés non affectés
+                <span className="ml-2 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full font-medium">
+                  {(board.unassigned || []).length}
+                </span>
+              </h3>
+              {renderDroppableColumn('unassigned', board.unassigned || [])}
+            </div>
           </div>
 
-          {/* Grille planning */}
+          {/* Grille planning Premium */}
           <div className="flex-1 overflow-x-auto">
-            <table className="min-w-max w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="w-48 text-left p-2 border-b"></th>
-                  {creneaux.map((c) => (
-                    <th key={c.id} className="text-center p-2 border-b text-sm font-medium">
-                      {c.nom}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {postes.map((poste) => (
-                  <tr key={poste.id}>
-                    <td className="p-2 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center space-x-2">
-                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: poste.couleur }}></span>
-                        <span>{poste.nom}</span>
-                      </div>
-                    </td>
-                    {creneaux.map((c) => {
-                      const cellId = `${poste.id}-${c.nom}`;
-                      return (
-                        <td key={cellId} className="p-1 align-top">
-                          {renderDroppableColumn(cellId, board[cellId] || [], true)}
-                        </td>
-                      );
-                    })}
+            <div className="bg-white/70 backdrop-blur-md border border-white/20 shadow-xl rounded-3xl p-6">
+              <table className="min-w-max w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className="w-64 text-left p-4 border-b-2 border-white/30"></th>
+                    {creneaux.map((c) => (
+                      <th key={c.id} className="text-center p-4 border-b-2 border-white/30">
+                        <div className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 px-4 py-2 rounded-2xl font-bold shadow-sm">
+                          {c.nom}
+                        </div>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {postes.map((poste) => (
+                    <tr key={poste.id} className="hover:bg-white/30 transition-colors duration-200">
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-3">
+                          <div 
+                            className="h-4 w-4 rounded-full shadow-sm border-2 border-white"
+                            style={{ backgroundColor: poste.couleur }}
+                          ></div>
+                          <span className="font-bold text-gray-800 text-lg">{poste.nom}</span>
+                        </div>
+                      </td>
+                      {creneaux.map((c) => {
+                        const cellId = `${poste.id}-${c.nom}`;
+                        const cellItems = board[cellId] || [];
+                        return (
+                          <td key={cellId} className="p-2 align-top">
+                            <div className="relative">
+                              {cellItems.length > 0 && (
+                                <div className="absolute -top-2 -right-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold shadow-lg z-10">
+                                  {cellItems.length}
+                                </div>
+                              )}
+                              {renderDroppableColumn(cellId, cellItems, true)}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </DragDropContext>
