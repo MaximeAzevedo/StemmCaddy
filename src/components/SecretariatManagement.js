@@ -21,6 +21,222 @@ import { supabaseSecretariat } from '../lib/supabase-secretariat';
 // Configuration Chart.js
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
+// Composant de comparaison 2024/2025
+const ComparisonSection = ({ selectedFournisseurs, loadComparisonData, mois, getFournisseurColor }) => {
+  const [comparisonData, setComparisonData] = useState({ data2024: [], data2025: [] });
+  const [loadingComparison, setLoadingComparison] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingComparison(true);
+      const data = await loadComparisonData();
+      setComparisonData(data);
+      setLoadingComparison(false);
+    };
+    loadData();
+  }, [selectedFournisseurs, loadComparisonData]);
+
+  // Calculer les métriques de comparaison
+  const total2024 = comparisonData.data2024.reduce((sum, val) => sum + val, 0);
+  const total2025 = comparisonData.data2025.reduce((sum, val) => sum + val, 0);
+  const croissance = total2024 > 0 ? ((total2025 - total2024) / total2024 * 100) : 0;
+  const isPositive = croissance >= 0;
+
+  return (
+    <motion.div 
+      className="mt-16 mb-8"
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, delay: 0.8 }}
+    >
+      <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden">
+        {/* Header Premium avec gradient */}
+        <div className="bg-gradient-to-r from-slate-50/90 to-blue-50/90 backdrop-blur-xl px-10 py-8 border-b border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl">
+                <span className="text-2xl">📊</span>
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Comparaison 2024 vs 2025</h2>
+                <p className="text-gray-600 text-lg">Analyse comparative des performances annuelles</p>
+              </div>
+            </div>
+            
+            {/* Métrique principale */}
+            <div className="text-right">
+              <div className="text-sm font-medium text-gray-500 mb-2 uppercase tracking-wide">Évolution globale</div>
+              <div className={`flex items-center justify-end space-x-3 ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                <span className="text-4xl">{isPositive ? '↗️' : '↘️'}</span>
+                <div>
+                  <div className="text-4xl font-bold">
+                    {Math.abs(croissance).toFixed(1)}%
+                  </div>
+                  <div className="text-sm font-medium opacity-80">
+                    {isPositive ? 'Croissance' : 'Décroissance'} vs 2024
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-10">
+          {/* Graphique de comparaison */}
+          <div className="mb-10">
+            <div className="h-96 bg-white/50 backdrop-blur rounded-2xl p-6 shadow-lg border border-white/20">
+              {loadingComparison ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="animate-pulse flex items-center space-x-4">
+                    <div className="w-5 h-5 bg-blue-400 rounded-full animate-bounce"></div>
+                    <div className="w-5 h-5 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-5 h-5 bg-emerald-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    <span className="text-gray-600 ml-4 text-lg">Chargement de la comparaison...</span>
+                  </div>
+                </div>
+              ) : (
+                <Bar 
+                  data={{
+                    labels: mois,
+                    datasets: [
+                      {
+                        label: '2024',
+                        data: comparisonData.data2024,
+                        backgroundColor: 'rgba(148, 163, 184, 0.8)',
+                        borderColor: 'rgba(148, 163, 184, 1)',
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false,
+                      },
+                      {
+                        label: '2025',
+                        data: comparisonData.data2025,
+                        backgroundColor: 'rgba(34, 197, 94, 0.9)',
+                        borderColor: 'rgba(34, 197, 94, 1)',
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false,
+                      }
+                    ]
+                  }}
+                  options={{ 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    interaction: {
+                      mode: 'index',
+                      intersect: false,
+                    },
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                        labels: {
+                          usePointStyle: true,
+                          padding: 25,
+                          font: {
+                            size: 14,
+                            weight: '600'
+                          }
+                        }
+                      },
+                      tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                        titleFont: { size: 15, weight: 'bold' },
+                        bodyFont: { size: 14 },
+                        cornerRadius: 12,
+                        padding: 12,
+                        displayColors: true,
+                        callbacks: {
+                          label: function(context) {
+                            return `${context.dataset.label}: ${context.formattedValue} kg`;
+                          },
+                          afterLabel: function(context) {
+                            if (context.datasetIndex === 1 && comparisonData.data2024[context.dataIndex] > 0) {
+                              const diff = context.parsed.y - comparisonData.data2024[context.dataIndex];
+                              const pct = (diff / comparisonData.data2024[context.dataIndex] * 100);
+                              return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs 2024`;
+                            }
+                            return '';
+                          }
+                        }
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        grid: {
+                          color: 'rgba(0, 0, 0, 0.08)'
+                        },
+                        ticks: {
+                          font: { size: 12 },
+                          color: '#6B7280',
+                          callback: function(value) {
+                            return value.toLocaleString() + ' kg';
+                          }
+                        }
+                      },
+                      x: {
+                        grid: { display: false },
+                        ticks: {
+                          font: { size: 12 },
+                          color: '#6B7280'
+                        }
+                      }
+                    }
+                  }} 
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Statistiques détaillées Premium */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-gradient-to-br from-slate-50/70 to-slate-100/70 backdrop-blur rounded-2xl p-8 text-center border border-white/20 shadow-lg">
+              <div className="w-14 h-14 bg-gradient-to-br from-slate-400 to-slate-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <span className="text-2xl">📈</span>
+              </div>
+              <div className="text-3xl font-bold text-slate-700 mb-2">
+                {total2024.toLocaleString()}
+              </div>
+              <div className="text-lg font-semibold text-slate-600 mb-1">Total 2024 (kg)</div>
+              <div className="text-sm text-slate-500">
+                {selectedFournisseurs.length > 0 ? 'Fournisseurs sélectionnés' : 'Tous fournisseurs'}
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-emerald-50/70 to-emerald-100/70 backdrop-blur rounded-2xl p-8 text-center border border-white/20 shadow-lg">
+              <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <span className="text-2xl">🚀</span>
+              </div>
+              <div className="text-3xl font-bold text-emerald-700 mb-2">
+                {total2025.toLocaleString()}
+              </div>
+              <div className="text-lg font-semibold text-emerald-600 mb-1">Total 2025 (kg)</div>
+              <div className="text-sm text-emerald-500">
+                Période Janvier-Juin
+              </div>
+            </div>
+            
+            <div className={`backdrop-blur rounded-2xl p-8 text-center border border-white/20 shadow-lg ${isPositive ? 'bg-gradient-to-br from-emerald-50/70 to-emerald-100/70' : 'bg-gradient-to-br from-red-50/70 to-red-100/70'}`}>
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg ${isPositive ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-gradient-to-br from-red-400 to-red-600'}`}>
+                <span className="text-2xl">{isPositive ? '✨' : '⚠️'}</span>
+              </div>
+              <div className={`text-3xl font-bold mb-2 ${isPositive ? 'text-emerald-700' : 'text-red-700'}`}>
+                {isPositive ? '+' : ''}{(total2025 - total2024).toLocaleString()}
+              </div>
+              <div className={`text-lg font-semibold mb-1 ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                Différence (kg)
+              </div>
+              <div className={`text-sm ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
+                {isPositive ? 'Amélioration' : 'Diminution'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 const statsAccueil = [
   {
     label: "Dossiers traités",
@@ -65,6 +281,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedFournisseurs, setSelectedFournisseurs] = useState([]); // Nouveau filtre fournisseur
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [availableYears, setAvailableYears] = useState([]);
@@ -85,6 +302,23 @@ const SecretariatManagement = ({ user, onLogout }) => {
   ];
   const unites = ['kg', 'tonnes', 'palettes', 'colis'];
 
+  // Système de couleurs premium par fournisseur
+  const fournisseurColors = {
+    'Auchan': { bg: 'from-blue-500 to-blue-600', light: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
+    'Delhaize': { bg: 'from-red-500 to-red-600', light: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
+    'Aldi': { bg: 'from-emerald-500 to-emerald-600', light: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+    'Provençale': { bg: 'from-amber-500 to-amber-600', light: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+    'Kirchberg': { bg: 'from-emerald-500 to-emerald-600', light: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+    'Cloche d\'Or': { bg: 'from-blue-500 to-blue-600', light: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
+    'Dudelange': { bg: 'from-red-500 to-red-600', light: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
+    'Opkorn': { bg: 'from-amber-500 to-amber-600', light: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+    'Banque Alimentaire': { bg: 'from-purple-500 to-purple-600', light: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500' }
+  };
+
+  const getFournisseurColor = (fournisseur) => {
+    return fournisseurColors[fournisseur] || { bg: 'from-gray-500 to-gray-600', light: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' };
+  };
+
   // Charger les données depuis Supabase
   const loadData = async () => {
     try {
@@ -92,9 +326,9 @@ const SecretariatManagement = ({ user, onLogout }) => {
       
       // Charger les données en parallèle
       const [denreesRes, anneesRes, fournisseursRes] = await Promise.all([
-        supabaseSecretariat.getDenreesAlimentaires(),
+        supabaseSecretariat.getDenreesAlimentaires(selectedYear),
         supabaseSecretariat.getAnneesDisponibles(),
-        supabaseSecretariat.getFournisseurs()
+        supabaseSecretariat.getFournisseurs(selectedYear)
       ]);
 
       if (denreesRes.error) {
@@ -128,7 +362,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedYear, selectedFournisseurs]);
 
   // Initialiser le formulaire avec le premier fournisseur disponible
   useEffect(() => {
@@ -183,7 +417,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
 
       let result;
       if (editingItem) {
-        result = await supabaseSecretariat.updateDenreeAlimentaire(editingItem.id, denreeData);
+        result = await supabaseSecretariat.updateDenreeAlimentaire(editingItem.id, denreeData, denreeData.annee);
         if (!result.error) {
           toast.success('Entrée modifiée avec succès');
         }
@@ -217,7 +451,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
     }
 
     try {
-      const result = await supabaseSecretariat.deleteDenreeAlimentaire(id);
+      const result = await supabaseSecretariat.deleteDenreeAlimentaire(id, selectedYear);
       
       if (result.error) {
         const errorMessage = supabaseSecretariat.formatError(result.error);
@@ -266,7 +500,9 @@ const SecretariatManagement = ({ user, onLogout }) => {
   // Calculer les statistiques à partir des données Supabase
   const calculateStats = () => {
     const currentYearData = denrees.filter(item => 
-      item.annee === selectedYear && item.fournisseur !== 'Total général'
+      item.annee === selectedYear && 
+      item.fournisseur !== 'Total général' &&
+      (selectedFournisseurs.length === 0 || selectedFournisseurs.includes(item.fournisseur))
     );
     
     const totalQuantite = currentYearData.reduce((sum, item) => sum + parseFloat(item.quantite), 0);
@@ -286,6 +522,52 @@ const SecretariatManagement = ({ user, onLogout }) => {
     const moyenneMensuelle = moisAvecDonnees > 0 ? totalQuantite / moisAvecDonnees : 0;
 
     return { totalQuantite, parFournisseur, parMois, moyenneMensuelle };
+  };
+
+  // Charger les données de comparaison 2024/2025
+  const loadComparisonData = async () => {
+    try {
+      const [data2024, data2025] = await Promise.all([
+        supabaseSecretariat.getDenreesAlimentaires(2024),
+        supabaseSecretariat.getDenreesAlimentaires(2025)
+      ]);
+
+      const processData = (data, year) => {
+        if (!data.data) return Array(12).fill(0);
+        
+        const filteredData = data.data.filter(item => 
+          item.fournisseur !== 'Total général' &&
+          (selectedFournisseurs.length === 0 || selectedFournisseurs.includes(item.fournisseur))
+        );
+        
+        return Array.from({ length: 12 }, (_, i) => {
+          const moisData = filteredData.filter(item => item.mois === i + 1);
+          return moisData.reduce((sum, item) => sum + parseFloat(item.quantite), 0);
+        });
+      };
+
+      return {
+        data2024: processData(data2024, 2024),
+        data2025: processData(data2025, 2025)
+      };
+    } catch (error) {
+      console.error('Erreur loadComparisonData:', error);
+      return { data2024: Array(12).fill(0), data2025: Array(12).fill(0) };
+    }
+  };
+
+  // Toggle fournisseur dans le filtre
+  const toggleFournisseur = (fournisseur) => {
+    setSelectedFournisseurs(prev => 
+      prev.includes(fournisseur) 
+        ? prev.filter(f => f !== fournisseur)
+        : [...prev, fournisseur]
+    );
+  };
+
+  // Reset tous les fournisseurs
+  const resetFournisseurs = () => {
+    setSelectedFournisseurs([]);
   };
 
   const stats = calculateStats();
@@ -389,14 +671,21 @@ const SecretariatManagement = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
+      {/* Fond décoratif */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-200/30 to-purple-200/30 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-emerald-200/30 to-teal-200/30 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gradient-to-br from-amber-200/20 to-orange-200/20 rounded-full blur-3xl"></div>
+      </div>
+
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-100">
+      <header className="relative bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <ScaleIcon className="w-8 h-8 text-gray-800 mr-3" />
-              <h1 className="text-2xl font-bold text-gray-900">Gestion Denrées Alimentaires</h1>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">Gestion Denrées Alimentaires</h1>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-600">{user?.email}</span>
@@ -413,7 +702,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
       </header>
 
       {/* Navigation tabs */}
-      <div className="bg-white border-b border-gray-100">
+      <div className="relative bg-white/70 backdrop-blur-lg border-b border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8" aria-label="Tabs">
             {[
@@ -427,9 +716,9 @@ const SecretariatManagement = ({ user, onLogout }) => {
                   onClick={() => setActiveTab(tab.id)}
                   className={`${
                     activeTab === tab.id
-                      ? 'border-gray-900 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+                      ? 'border-gray-900 text-gray-900 bg-white/30 backdrop-blur'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-white/20'
+                  } whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm flex items-center space-x-2 transition-all duration-200 rounded-t-lg`}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{tab.name}</span>
@@ -440,7 +729,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <motion.div
@@ -448,20 +737,92 @@ const SecretariatManagement = ({ user, onLogout }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              {/* Sélecteur d'année */}
-              <div className="mb-8">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Année de consultation
-                </label>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="border border-gray-300 rounded-lg px-4 py-2 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+              {/* Filtres Premium */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+                {/* Filtre Année */}
+                <motion.div 
+                  className="bg-white/70 backdrop-blur-lg p-8 rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-200 group"
+                  whileHover={{ scale: 1.01 }}
+                  transition={{ duration: 0.15 }}
                 >
-                  {availableYears.map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg transition-shadow">
+                          <span className="text-xl">📅</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Année de consultation</p>
+                          <p className="text-lg font-semibold text-gray-900">Période d'analyse</p>
+                        </div>
+                      </div>
+                      <select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        className="w-full border-0 bg-white/80 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200 text-lg font-semibold text-gray-900"
+                      >
+                        {availableYears.map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Filtre Fournisseurs */}
+                <motion.div 
+                  className="bg-white/70 backdrop-blur-lg p-8 rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-200 group"
+                  whileHover={{ scale: 1.01 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg transition-shadow">
+                            <span className="text-xl">🏪</span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Fournisseurs</p>
+                            <p className="text-lg font-semibold text-gray-900">Sélection multiple</p>
+                          </div>
+                        </div>
+                        {selectedFournisseurs.length > 0 && (
+                          <button
+                            onClick={resetFournisseurs}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors bg-blue-50/50 backdrop-blur px-2 py-1 rounded-lg"
+                          >
+                            Réinitialiser
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                        {availableFournisseurs.map(fournisseur => {
+                          const isSelected = selectedFournisseurs.includes(fournisseur);
+                          const colors = getFournisseurColor(fournisseur);
+                          
+                          return (
+                            <button
+                              key={fournisseur}
+                              onClick={() => toggleFournisseur(fournisseur)}
+                              className={`
+                                flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 transform hover:scale-105
+                                ${isSelected 
+                                  ? `bg-gradient-to-r ${colors.bg} text-white shadow-lg`
+                                  : 'bg-white/80 text-gray-700 border border-gray-200 hover:bg-gray-50'
+                                }
+                              `}
+                            >
+                              <div className={`w-2 h-2 rounded-full ${colors.dot} ${isSelected ? 'bg-white/80' : ''}`}></div>
+                              <span>{fournisseur}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
 
               {/* Message informatif si pas de données */}
@@ -488,22 +849,22 @@ const SecretariatManagement = ({ user, onLogout }) => {
                 </div>
               )}
 
-              {/* KPIs Premium */}
+              {/* KPIs Premium avec Glassmorphism */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 <motion.div 
-                  className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
+                  className="bg-white/70 backdrop-blur-lg p-8 rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-300 group"
                   whileHover={{ scale: 1.02, y: -4 }}
                   transition={{ duration: 0.2 }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                          <ScaleIcon className="w-6 h-6 text-emerald-600" />
+                        <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                          <ScaleIcon className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Récupéré</p>
-                          <p className="text-3xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Total Récupéré</p>
+                          <p className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                             {loading ? '...' : stats.totalQuantite.toLocaleString()}
                           </p>
                         </div>
@@ -511,15 +872,15 @@ const SecretariatManagement = ({ user, onLogout }) => {
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">kg récupérés en {selectedYear}</p>
                         <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100/80 text-emerald-800 backdrop-blur">
                             🌱 Anti-gaspillage
                           </span>
                         </div>
                         {!loading && stats.totalQuantite > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="mt-3 pt-3 border-t border-gray-200/50">
                             <div className="flex justify-between text-xs text-gray-500">
                               <span>≈ {(stats.totalQuantite / 1000).toFixed(1)} tonnes</span>
-                              <span className="text-emerald-600 font-medium">📈 Objectif dépassé</span>
+                              <span className="text-emerald-600 font-medium">📈 Impact positif</span>
                             </div>
                           </div>
                         )}
@@ -529,19 +890,19 @@ const SecretariatManagement = ({ user, onLogout }) => {
                 </motion.div>
 
                 <motion.div 
-                  className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
+                  className="bg-white/70 backdrop-blur-lg p-8 rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-300 group"
                   whileHover={{ scale: 1.02, y: -4 }}
                   transition={{ duration: 0.2 }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                          <BuildingStorefrontIcon className="w-6 h-6 text-blue-600" />
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                          <BuildingStorefrontIcon className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Partenaires</p>
-                          <p className="text-3xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Partenaires</p>
+                          <p className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                             {loading ? '...' : Object.keys(stats.parFournisseur).length}
                           </p>
                         </div>
@@ -549,14 +910,14 @@ const SecretariatManagement = ({ user, onLogout }) => {
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">Fournisseurs actifs</p>
                         <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100/80 text-blue-800 backdrop-blur">
                             🤝 Réseau solidaire
                           </span>
                         </div>
                         {!loading && Object.keys(stats.parFournisseur).length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="mt-3 pt-3 border-t border-gray-200/50">
                             <div className="text-xs text-gray-500">
-                              Principaux : {Object.keys(stats.parFournisseur).slice(0, 2).join(', ')}
+                              Top : {Object.keys(stats.parFournisseur).slice(0, 2).join(', ')}
                             </div>
                           </div>
                         )}
@@ -566,19 +927,19 @@ const SecretariatManagement = ({ user, onLogout }) => {
                 </motion.div>
 
                 <motion.div 
-                  className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
+                  className="bg-white/70 backdrop-blur-lg p-8 rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-300 group"
                   whileHover={{ scale: 1.02, y: -4 }}
                   transition={{ duration: 0.2 }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                          <ChartBarIcon className="w-6 h-6 text-purple-600" />
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                          <ChartBarIcon className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Moyenne</p>
-                          <p className="text-3xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Moyenne</p>
+                          <p className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                             {loading ? '...' : Math.round(stats.moyenneMensuelle).toLocaleString()}
                           </p>
                         </div>
@@ -586,12 +947,12 @@ const SecretariatManagement = ({ user, onLogout }) => {
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">kg/mois en moyenne</p>
                         <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100/80 text-purple-800 backdrop-blur">
                             📊 Performance
                           </span>
                         </div>
                         {!loading && stats.moyenneMensuelle > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="mt-3 pt-3 border-t border-gray-200/50">
                             <div className="text-xs text-gray-500">
                               ≈ {Math.round(stats.moyenneMensuelle / 30)} kg/jour
                             </div>
@@ -603,32 +964,32 @@ const SecretariatManagement = ({ user, onLogout }) => {
                 </motion.div>
 
                 <motion.div 
-                  className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
+                  className="bg-white/70 backdrop-blur-lg p-8 rounded-2xl shadow-xl border border-white/20 hover:shadow-2xl transition-all duration-300 group"
                   whileHover={{ scale: 1.02, y: -4 }}
                   transition={{ duration: 0.2 }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                          <TrophyIcon className="w-6 h-6 text-amber-600" />
+                        <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow">
+                          <TrophyIcon className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Record</p>
-                          <p className="text-3xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Record</p>
+                          <p className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                             {loading ? '...' : Math.round(Math.max(...stats.parMois)).toLocaleString()}
-          </p>
-        </div>
+                          </p>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">Meilleur mois (kg)</p>
                         <div className="flex items-center space-x-2">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100/80 text-amber-800 backdrop-blur">
                             🏆 Excellence
                           </span>
                         </div>
                         {!loading && Math.max(...stats.parMois) > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="mt-3 pt-3 border-t border-gray-200/50">
                             <div className="text-xs text-gray-500">
                               {mois[stats.parMois.indexOf(Math.max(...stats.parMois))]} - Performance max
                             </div>
@@ -639,6 +1000,14 @@ const SecretariatManagement = ({ user, onLogout }) => {
                   </div>
                 </motion.div>
               </div>
+
+              {/* Comparaison 2024/2025 Premium */}
+              <ComparisonSection 
+                selectedFournisseurs={selectedFournisseurs}
+                loadComparisonData={loadComparisonData}
+                mois={mois}
+                getFournisseurColor={getFournisseurColor}
+              />
 
               {/* En-tête avec titre et export */}
               {stats.totalQuantite > 0 && (
@@ -661,7 +1030,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
                 {/* Répartition par fournisseur */}
                 <motion.div 
-                  className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8"
+                  className="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 p-8"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.2 }}
@@ -680,12 +1049,25 @@ const SecretariatManagement = ({ user, onLogout }) => {
                           labels: Object.keys(stats.parFournisseur),
                           datasets: [{
                             data: Object.values(stats.parFournisseur),
-                            backgroundColor: [
-                              '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#F97316'
-                            ],
+                            backgroundColor: Object.keys(stats.parFournisseur).map(fournisseur => {
+                              const colors = getFournisseurColor(fournisseur);
+                              return colors.dot.replace('bg-', '').replace('-500', '') === 'blue' ? '#3B82F6' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'red' ? '#EF4444' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'emerald' ? '#10B981' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'amber' ? '#F59E0B' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'purple' ? '#8B5CF6' : '#6B7280';
+                            }),
                             borderWidth: 3,
                             borderColor: '#ffffff',
-                            hoverBorderWidth: 4
+                            hoverBorderWidth: 4,
+                            hoverBackgroundColor: Object.keys(stats.parFournisseur).map(fournisseur => {
+                              const colors = getFournisseurColor(fournisseur);
+                              return colors.dot.replace('bg-', '').replace('-500', '') === 'blue' ? '#2563EB' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'red' ? '#DC2626' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'emerald' ? '#059669' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'amber' ? '#D97706' :
+                                     colors.dot.replace('bg-', '').replace('-500', '') === 'purple' ? '#7C3AED' : '#4B5563';
+                            })
                           }]
                         }}
                         options={{ 
@@ -700,6 +1082,38 @@ const SecretariatManagement = ({ user, onLogout }) => {
                                 font: {
                                   size: 12,
                                   weight: '500'
+                                },
+                                generateLabels: function(chart) {
+                                  const data = chart.data;
+                                  if (data.labels.length && data.datasets.length) {
+                                    const dataset = data.datasets[0];
+                                    return data.labels.map((label, i) => {
+                                      const colors = getFournisseurColor(label);
+                                      return {
+                                        text: label,
+                                        fillStyle: dataset.backgroundColor[i],
+                                        strokeStyle: dataset.borderColor,
+                                        lineWidth: dataset.borderWidth,
+                                        hidden: false,
+                                        index: i,
+                                        pointStyle: 'circle'
+                                      };
+                                    });
+                                  }
+                                  return [];
+                                }
+                              }
+                            },
+                            tooltip: {
+                              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                              titleFont: { size: 14, weight: 'bold' },
+                              bodyFont: { size: 13 },
+                              cornerRadius: 12,
+                              callbacks: {
+                                label: function(context) {
+                                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                  const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                  return `${context.label}: ${context.formattedValue} kg (${percentage}%)`;
                                 }
                               }
                             }
@@ -720,7 +1134,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
 
                 {/* Evolution mensuelle */}
                 <motion.div 
-                  className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8"
+                  className="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 p-8"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.5, delay: 0.4 }}
@@ -739,11 +1153,20 @@ const SecretariatManagement = ({ user, onLogout }) => {
                         datasets: [{
                           label: 'Quantité récupérée (kg)',
                           data: stats.parMois,
-                          backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                          backgroundColor: stats.parMois.map((value, index) => {
+                            // Gradient de couleur basé sur la performance
+                            const maxValue = Math.max(...stats.parMois);
+                            const intensity = value / maxValue;
+                            const opacity = 0.3 + (intensity * 0.5);
+                            return `rgba(34, 197, 94, ${opacity})`;
+                          }),
                           borderColor: 'rgba(34, 197, 94, 1)',
                           borderWidth: 2,
                           borderRadius: 8,
                           borderSkipped: false,
+                          hoverBackgroundColor: stats.parMois.map(() => 'rgba(34, 197, 94, 0.9)'),
+                          hoverBorderColor: 'rgba(34, 197, 94, 1)',
+                          hoverBorderWidth: 3
                         }]
                       }}
                       options={{ 
@@ -752,6 +1175,23 @@ const SecretariatManagement = ({ user, onLogout }) => {
                         plugins: {
                           legend: {
                             display: false
+                          },
+                          tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 13 },
+                            cornerRadius: 12,
+                            callbacks: {
+                              label: function(context) {
+                                return `${context.formattedValue} kg récupérés`;
+                              },
+                              afterLabel: function(context) {
+                                const monthlyAvg = stats.moyenneMensuelle;
+                                const diff = context.parsed.y - monthlyAvg;
+                                const pct = monthlyAvg > 0 ? (diff / monthlyAvg * 100) : 0;
+                                return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs moyenne`;
+                              }
+                            }
                           }
                         },
                         scales: {
@@ -764,7 +1204,10 @@ const SecretariatManagement = ({ user, onLogout }) => {
                               font: {
                                 size: 11
                               },
-                              color: '#6B7280'
+                              color: '#6B7280',
+                              callback: function(value) {
+                                return value.toLocaleString() + ' kg';
+                              }
                             }
                           },
                           x: {
@@ -787,12 +1230,12 @@ const SecretariatManagement = ({ user, onLogout }) => {
 
               {/* Tableau détaillé Premium */}
               <motion.div 
-                className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+                className="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 overflow-hidden"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.6 }}
               >
-                <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-50">
+                <div className="px-8 py-6 border-b border-gray-100/50 bg-gradient-to-r from-gray-50/50 to-gray-50/50 backdrop-blur">
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="text-xl font-bold text-gray-900">Détail par fournisseur ({selectedYear})</h3>
@@ -805,8 +1248,8 @@ const SecretariatManagement = ({ user, onLogout }) => {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-100/50">
+                    <thead className="bg-gray-50/50 backdrop-blur">
                       <tr>
                         <th className="px-8 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                           Fournisseur
@@ -824,25 +1267,20 @@ const SecretariatManagement = ({ user, onLogout }) => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-50">
+                    <tbody className="bg-white/30 backdrop-blur divide-y divide-gray-50/50">
                       {Object.keys(stats.parFournisseur).length > 0 ? (
                         Object.keys(stats.parFournisseur)
                           .sort((a, b) => stats.parFournisseur[b] - stats.parFournisseur[a])
                           .map((fournisseur, index) => {
                             const totalFournisseur = stats.parFournisseur[fournisseur];
                             const pourcentage = stats.totalQuantite > 0 ? (totalFournisseur / stats.totalQuantite * 100) : 0;
+                            const colors = getFournisseurColor(fournisseur);
                             
                             return (
-                              <tr key={fournisseur} className={`hover:bg-gray-25 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+                              <tr key={fournisseur} className={`hover:bg-white/40 transition-all duration-200 ${index % 2 === 0 ? 'bg-white/20' : 'bg-white/10'}`}>
                                 <td className="px-8 py-6 whitespace-nowrap">
                                   <div className="flex items-center">
-                                    <div className={`w-4 h-4 rounded-full mr-3 shadow-sm ${
-                                      fournisseur === 'Kirchberg' ? 'bg-emerald-500' :
-                                      fournisseur === 'Cloche d\'Or' ? 'bg-blue-500' :
-                                      fournisseur === 'Dudelange' ? 'bg-red-500' :
-                                      fournisseur === 'Opkorn' ? 'bg-amber-500' :
-                                      'bg-gray-500'
-                                    }`}></div>
+                                    <div className={`w-4 h-4 rounded-full mr-3 shadow-sm ${colors.dot}`}></div>
                                     <div>
                                       <div className="text-sm font-semibold text-gray-900">{fournisseur}</div>
                                       <div className="text-xs text-gray-500">Partenaire alimentaire</div>
@@ -886,9 +1324,9 @@ const SecretariatManagement = ({ user, onLogout }) => {
                                     <span className="text-sm font-semibold text-gray-700">
                                       {pourcentage.toFixed(1)}%
                                     </span>
-                                    <div className="w-full bg-gray-100 rounded-full h-2">
+                                    <div className="w-full bg-gray-100/50 backdrop-blur rounded-full h-2">
                                       <div 
-                                        className="bg-gradient-to-r from-gray-600 to-gray-800 h-2 rounded-full transition-all duration-500" 
+                                        className={`bg-gradient-to-r ${colors.bg} h-2 rounded-full transition-all duration-500 shadow-sm`}
                                         style={{width: `${pourcentage}%`}}
                                       ></div>
                                     </div>
@@ -901,7 +1339,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
                         <tr>
                           <td colSpan="15" className="px-8 py-16 text-center text-gray-500">
                             <div className="flex flex-col items-center">
-                              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <div className="w-20 h-20 bg-gray-100/50 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-4">
                                 <ScaleIcon className="w-10 h-10 text-gray-400" />
                               </div>
                               <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -917,10 +1355,10 @@ const SecretariatManagement = ({ user, onLogout }) => {
                       
                       {/* Ligne de total Premium */}
                       {Object.keys(stats.parFournisseur).length > 0 && (
-                        <tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-t-2 border-gray-200">
+                        <tr className="bg-gradient-to-r from-gray-50/70 to-gray-100/70 backdrop-blur border-t-2 border-gray-200/50">
                           <td className="px-8 py-6 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="w-4 h-4 rounded-full mr-3 bg-gradient-to-r from-gray-600 to-gray-800"></div>
+                              <div className="w-4 h-4 rounded-full mr-3 bg-gradient-to-r from-gray-600 to-gray-800 shadow-sm"></div>
                               <div>
                                 <div className="text-sm font-bold text-gray-900">TOTAL GÉNÉRAL</div>
                                 <div className="text-xs text-gray-600">Toutes récupérations</div>
@@ -961,7 +1399,7 @@ const SecretariatManagement = ({ user, onLogout }) => {
                 
                 {/* Footer Premium avec insights */}
                 {Object.keys(stats.parFournisseur).length > 0 && (
-                  <div className="px-8 py-6 bg-gradient-to-r from-gray-50 to-gray-50 border-t border-gray-100">
+                  <div className="px-8 py-6 bg-gradient-to-r from-gray-50/50 to-gray-50/50 backdrop-blur border-t border-gray-100/50">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="text-center">
                         <div className="text-2xl font-bold text-gray-900 mb-1">
@@ -996,6 +1434,14 @@ const SecretariatManagement = ({ user, onLogout }) => {
                   </div>
                 )}
               </motion.div>
+
+              {/* Comparaison 2024/2025 Premium - Placée en bas */}
+              <ComparisonSection 
+                selectedFournisseurs={selectedFournisseurs}
+                loadComparisonData={loadComparisonData}
+                mois={mois}
+                getFournisseurColor={getFournisseurColor}
+              />
             </motion.div>
           )}
 
@@ -1023,10 +1469,10 @@ const SecretariatManagement = ({ user, onLogout }) => {
               </div>
 
               {/* Liste des entrées Premium */}
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+              <div className="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-100/50">
+                    <thead className="bg-gray-50/50 backdrop-blur">
                       <tr>
                         <th className="px-8 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                           Fournisseur
@@ -1042,21 +1488,17 @@ const SecretariatManagement = ({ user, onLogout }) => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-50">
+                    <tbody className="bg-white/30 backdrop-blur divide-y divide-gray-50/50">
                       {denrees
                         .filter(item => item.fournisseur !== 'Total général')
                         .sort((a, b) => b.annee - a.annee || b.mois - a.mois)
-                        .map((item, index) => (
-                        <tr key={item.id} className={`hover:bg-gray-25 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+                        .map((item, index) => {
+                          const colors = getFournisseurColor(item.fournisseur);
+                          return (
+                        <tr key={item.id} className={`hover:bg-white/40 transition-all duration-200 ${index % 2 === 0 ? 'bg-white/20' : 'bg-white/10'}`}>
                           <td className="px-8 py-6 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className={`w-4 h-4 rounded-full mr-3 shadow-sm ${
-                                item.fournisseur === 'Kirchberg' ? 'bg-emerald-500' :
-                                item.fournisseur === 'Cloche d\'Or' ? 'bg-blue-500' :
-                                item.fournisseur === 'Dudelange' ? 'bg-red-500' :
-                                item.fournisseur === 'Opkorn' ? 'bg-amber-500' :
-                                'bg-gray-500'
-                              }`}></div>
+                              <div className={`w-4 h-4 rounded-full mr-3 shadow-sm ${colors.dot}`}></div>
                               <div>
                                 <div className="text-sm font-semibold text-gray-900">{item.fournisseur}</div>
                                 <div className="text-xs text-gray-500">Partenaire alimentaire</div>
@@ -1083,29 +1525,30 @@ const SecretariatManagement = ({ user, onLogout }) => {
                             <div className="flex items-center justify-center space-x-3">
                               <button
                                 onClick={() => openModal(item)}
-                                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-white/50 backdrop-blur rounded-lg transition-all duration-200"
                                 title="Modifier"
                               >
                                 <PencilIcon className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDelete(item.id)}
-                                className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50/50 backdrop-blur rounded-lg transition-all duration-200"
                                 title="Supprimer"
                               >
                                 <TrashIcon className="w-4 h-4" />
                               </button>
-            </div>
+                            </div>
                           </td>
                         </tr>
-          ))}
+                          );
+                        })}
                     </tbody>
                   </table>
-        </div>
+                </div>
 
                 {denrees.filter(item => item.fournisseur !== 'Total général').length === 0 && (
                   <div className="text-center py-16">
-                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="w-20 h-20 bg-gray-100/50 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-4">
                       <ScaleIcon className="w-10 h-10 text-gray-400" />
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucune donnée</h3>
@@ -1118,36 +1561,39 @@ const SecretariatManagement = ({ user, onLogout }) => {
         </AnimatePresence>
       </div>
 
-      {/* Modal de saisie */}
+      {/* Modal de saisie Premium */}
       <AnimatePresence>
         {showModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={closeModal}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-lg p-6 w-full max-w-md mx-4"
+              className="bg-white/90 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8 w-full max-w-md mx-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                {editingItem ? 'Modifier l\'entrée' : 'Nouvelle entrée'}
-              </h3>
+              <div className="flex items-center mb-6">
+                <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full mr-3"></div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingItem ? 'Modifier l\'entrée' : 'Nouvelle entrée'}
+                </h3>
+              </div>
               
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fournisseur
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    🏪 Fournisseur
                   </label>
                   <select
                     value={formData.fournisseur}
                     onChange={(e) => setFormData({...formData, fournisseur: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"
+                    className="w-full border-0 bg-white/70 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200"
                     required
                   >
                     <option value="">Sélectionner un fournisseur</option>
@@ -1159,98 +1605,105 @@ const SecretariatManagement = ({ user, onLogout }) => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mois
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      📅 Mois
                     </label>
                     <select
                       value={formData.mois}
                       onChange={(e) => setFormData({...formData, mois: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"
+                      className="w-full border-0 bg-white/70 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200"
                       required
                     >
                       {mois.map((m, index) => (
                         <option key={index} value={index + 1}>{m}</option>
                       ))}
                     </select>
-            </div>
+                  </div>
 
-            <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Année
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      📆 Année
                     </label>
                     <input
                       type="number"
                       value={formData.annee}
                       onChange={(e) => setFormData({...formData, annee: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"
+                      className="w-full border-0 bg-white/70 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200"
                       min="2020"
                       max="2030"
                       required
                     />
-            </div>
-          </div>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quantité
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      ⚖️ Quantité
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       value={formData.quantite}
                       onChange={(e) => setFormData({...formData, quantite: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"
+                      className="w-full border-0 bg-white/70 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200"
                       placeholder="0.00"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Unité
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      📦 Unité
                     </label>
                     <select
                       value={formData.unite}
                       onChange={(e) => setFormData({...formData, unite: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"
+                      className="w-full border-0 bg-white/70 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200"
                       required
                     >
                       {unites.map(u => (
                         <option key={u} value={u}>{u}</option>
                       ))}
                     </select>
-        </div>
-      </div>
+                  </div>
+                </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes (optionnel)
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    📝 Notes (optionnel)
                   </label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"
-                    rows="2"
+                    className="w-full border-0 bg-white/70 backdrop-blur rounded-xl px-4 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white transition-all duration-200 resize-none"
+                    rows="3"
                     placeholder="Remarques ou précisions..."
                   />
                 </div>
 
-                <div className="flex justify-end space-x-3 mt-6">
+                <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200/50">
                   <button
                     type="button"
                     onClick={closeModal}
-                    className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="px-6 py-3 text-gray-700 bg-white/70 backdrop-blur border border-gray-200 rounded-xl hover:bg-white transition-all duration-200"
                     disabled={submitting}
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 shadow-lg hover:shadow-xl transition-all duration-200"
                     disabled={submitting}
                   >
-                    {submitting ? 'Sauvegarde...' : (editingItem ? 'Modifier' : 'Ajouter')}
+                    {submitting ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Sauvegarde...</span>
+                      </div>
+                    ) : (
+                      editingItem ? 'Modifier' : 'Ajouter'
+                    )}
                   </button>
                 </div>
               </form>
