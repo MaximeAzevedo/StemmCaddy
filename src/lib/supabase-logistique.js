@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { format } from 'date-fns';
 
 /**
  * ========================================
@@ -238,25 +237,44 @@ export const supabaseLogistique = {
       
       Object.entries(planningData).forEach(([dateKey, vehiclesPlanning]) => {
         Object.entries(vehiclesPlanning).forEach(([vehicleId, employees]) => {
+          // 🔧 CORRECTION : Ignorer la section "absents" qui n'est pas un véhicule
+          if (vehicleId === 'absents' || !Array.isArray(employees)) {
+            return; // Passer à l'itération suivante
+          }
+          
+          const parsedVehicleId = parseInt(vehicleId);
+          if (isNaN(parsedVehicleId)) {
+            console.warn(`⚠️ ID véhicule invalide ignoré: ${vehicleId}`);
+            return;
+          }
+          
           employees.forEach((employee, index) => {
+            // Vérifier que l'employé a un ID valide
+            if (!employee.id || isNaN(parseInt(employee.id))) {
+              console.warn(`⚠️ Employé avec ID invalide ignoré:`, employee);
+              return;
+            }
+            
             // Créer une entrée pour le matin
             insertData.push({
-              employee_id: employee.id,
-              vehicule_id: parseInt(vehicleId),
+              employee_id: parseInt(employee.id),
+              vehicule_id: parsedVehicleId,
               date: dateKey,
               creneau: 'matin',
               role: mapRole(employee.role),
-              notes: null
+              notes: null,
+              absent: false // S'assurer que ce ne sont pas des absents
             });
             
             // Créer une entrée pour l'après-midi
             insertData.push({
-              employee_id: employee.id,
-              vehicule_id: parseInt(vehicleId),
+              employee_id: parseInt(employee.id),
+              vehicule_id: parsedVehicleId,
               date: dateKey,
               creneau: 'apres-midi',
               role: mapRole(employee.role),
-              notes: null
+              notes: null,
+              absent: false // S'assurer que ce ne sont pas des absents
             });
           });
         });
@@ -322,7 +340,9 @@ export const supabaseLogistique = {
       const planningFormatted = {};
       
       weekDates.forEach(date => {
-        planningFormatted[date] = {};
+        planningFormatted[date] = {
+          absents: [] // 🔧 CORRECTION : Initialiser la section absents pour chaque jour
+        };
       });
       
       if (data && data.length > 0) {
@@ -330,6 +350,11 @@ export const supabaseLogistique = {
         const employeeAssignments = new Map();
         
         data.forEach(assignment => {
+          // 🔧 CORRECTION : Ignorer les lignes marquées comme absentes dans le planning normal
+          if (assignment.absent === true) {
+            return; // Les absents sont gérés séparément par getAbsencesLogistique
+          }
+          
           const key = `${assignment.date}-${assignment.employee_id}-${assignment.vehicule_id}`;
           
           if (!employeeAssignments.has(key)) {
@@ -343,12 +368,19 @@ export const supabaseLogistique = {
         
         // Répartir les assignations uniques dans le planning
         data.forEach(assignment => {
+          // 🔧 CORRECTION : Ignorer les absents dans le planning normal
+          if (assignment.absent === true) {
+            return;
+          }
+          
           const dateKey = assignment.date;
           const vehicleId = assignment.vehicule_id;
           const key = `${assignment.date}-${assignment.employee_id}-${assignment.vehicule_id}`;
           
           if (!planningFormatted[dateKey]) {
-            planningFormatted[dateKey] = {};
+            planningFormatted[dateKey] = {
+              absents: []
+            };
           }
           
           if (!planningFormatted[dateKey][vehicleId]) {
@@ -414,149 +446,139 @@ export const supabaseLogistique = {
     }
   },
 
-  // ==================== ABSENCES LOGISTIQUE ====================
+  // =================== ABSENCES LOGISTIQUE ===================
   
   /**
-   * Récupérer les absences logistique
+   * Obtenir toutes les absences de la semaine depuis la vraie table absences
+   * 👁️ LECTURE SEULE - Affichage uniquement dans le planning
    */
   async getAbsencesLogistique(dateDebut = null, dateFin = null) {
     try {
-      console.log('📊 getAbsencesLogistique - Chargement absences...');
-      
-      let query = supabase
+      // Si aucune date fournie, prendre une plage large pour avoir toutes les absences
+      if (!dateDebut || !dateFin) {
+        const today = new Date();
+        const past = new Date(today);
+        past.setDate(past.getDate() - 365); // 1 an en arrière
+        const future = new Date(today);
+        future.setDate(future.getDate() + 365); // 1 an en avant
+        
+        dateDebut = past.toISOString().split('T')[0];
+        dateFin = future.toISOString().split('T')[0];
+      }
+
+      const { data, error } = await supabase
         .from('absences_logistique_new')
         .select(`
-          *,
-          employe:employes_logistique_new(id, nom, profil)
-        `);
-      
-      if (dateDebut && dateFin) {
-        query = query.or(`date_debut.lte.${dateFin},date_fin.gte.${dateDebut}`);
-      } else if (dateDebut) {
-        query = query.lte('date_debut', dateDebut).gte('date_fin', dateDebut);
-      }
-      
-      const { data, error } = await query.order('date_debut');
-      
-      if (error) {
-        console.error('❌ Erreur getAbsencesLogistique:', error);
-        throw error;
-      }
-      
-      console.log('✅ Absences logistique chargées:', data?.length || 0);
-      return { data: data || [], error: null };
-      
+          id,
+          employee_id,
+          date_debut,
+          date_fin,
+          type_absence,
+          motif,
+          employes_logistique_new (
+            id,
+            nom,
+            profil
+          )
+        `)
+        .gte('date_debut', dateDebut)
+        .lte('date_fin', dateFin)
+        .order('date_debut', { ascending: false });
+
+      if (error) throw error;
+
+      // Formatter pour l'affichage dans le planning
+      const formattedData = data.map(item => ({
+        id: item.id,
+        employee_id: item.employee_id,
+        date_debut: item.date_debut,
+        date_fin: item.date_fin,
+        type_absence: item.type_absence || 'Absent',
+        motif: item.motif,
+        employee_name: item.employes_logistique_new?.nom || 'Inconnu',
+        employee: item.employes_logistique_new // Données complètes employé pour affichage
+      }));
+
+      console.log('✅ Absences logistique chargées (lecture seule):', formattedData.length);
+      return { data: formattedData, error: null };
     } catch (error) {
-      console.error('💥 Erreur critique getAbsencesLogistique:', error);
+      console.error('❌ Erreur getAbsencesLogistique:', error);
       return { data: [], error };
     }
   },
 
   /**
-   * Créer une absence logistique
+   * Ajouter une nouvelle absence
    */
-  async createAbsenceLogistique(absenceData) {
+  async addAbsence(absenceData) {
     try {
-      console.log('➕ Création absence logistique...');
-      
       const { data, error } = await supabase
         .from('absences_logistique_new')
-        .insert(absenceData)
+        .insert([absenceData])
         .select(`
           *,
-          employe:employes_logistique_new(id, nom, profil)
+          employes_logistique_new (
+            id,
+            nom,
+            profil
+          )
         `);
-      
-      if (error) {
-        console.error('❌ Erreur création absence:', error);
-        throw error;
-      }
-      
-      console.log('✅ Absence créée:', data);
-      return { data, error: null };
-      
+
+      if (error) throw error;
+
+      console.log('✅ Absence ajoutée:', data);
+      return { data: data[0], error: null };
     } catch (error) {
-      console.error('💥 Erreur critique création absence:', error);
+      console.error('❌ Erreur addAbsence:', error);
       return { data: null, error };
     }
   },
 
   /**
-   * Mettre à jour une absence logistique
+   * Modifier une absence existante
    */
-  async updateAbsenceLogistique(id, updates) {
+  async updateAbsence(absenceId, updates) {
     try {
-      console.log('🔄 Mise à jour absence logistique...');
-      
       const { data, error } = await supabase
         .from('absences_logistique_new')
         .update(updates)
-        .eq('id', id)
+        .eq('id', absenceId)
         .select(`
           *,
-          employe:employes_logistique_new(id, nom, profil)
+          employes_logistique_new (
+            id,
+            nom,
+            profil
+          )
         `);
-      
-      if (error) {
-        console.error('❌ Erreur mise à jour absence:', error);
-        throw error;
-      }
-      
-      console.log('✅ Absence mise à jour:', data);
-      return { data, error: null };
-      
+
+      if (error) throw error;
+
+      console.log('✅ Absence modifiée:', data);
+      return { data: data[0], error: null };
     } catch (error) {
-      console.error('💥 Erreur critique mise à jour absence:', error);
+      console.error('❌ Erreur updateAbsence:', error);
       return { data: null, error };
     }
   },
 
   /**
-   * Supprimer une absence logistique
+   * Supprimer une absence
    */
-  async deleteAbsenceLogistique(id) {
+  async deleteAbsence(absenceId) {
     try {
-      console.log('🗑️ Suppression absence logistique...');
-      
       const { data, error } = await supabase
         .from('absences_logistique_new')
         .delete()
-        .eq('id', id);
-      
-      if (error) {
-        console.error('❌ Erreur suppression absence:', error);
-        throw error;
-      }
-      
+        .eq('id', absenceId);
+
+      if (error) throw error;
+
       console.log('✅ Absence supprimée');
       return { data, error: null };
-      
     } catch (error) {
-      console.error('💥 Erreur critique suppression absence:', error);
+      console.error('❌ Erreur deleteAbsence:', error);
       return { data: null, error };
-    }
-  },
-
-  /**
-   * Vérifier si un employé est absent à une date donnée
-   */
-  async isEmployeeAbsent(employeeId, date) {
-    try {
-      const { data, error } = await supabase
-        .from('absences_logistique_new')
-        .select('id')
-        .eq('employee_id', employeeId)
-        .lte('date_debut', date)
-        .gte('date_fin', date)
-        .limit(1);
-      
-      if (error) throw error;
-      
-      return { data: data && data.length > 0, error: null };
-      
-    } catch (error) {
-      console.error('❌ Erreur vérification absence:', error);
-      return { data: false, error };
     }
   }
 

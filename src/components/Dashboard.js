@@ -1,8 +1,10 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Users, Calendar, UserMinus, Settings } from 'lucide-react';
+import { Truck, Users, Calendar, UserMinus, Settings, Package } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = ({ user, onLogout }) => {
+  const navigate = useNavigate();
   // Statistiques fictives (à remplacer par vos données réelles)
   const stats = {
     totalEmployees: 21,
@@ -27,10 +29,17 @@ const Dashboard = ({ user, onLogout }) => {
     },
     {
       title: 'Gestion des Absences',
-      description: 'Gérer les absences et indisponibilités',
+      description: 'Déclarer et gérer les absences des employés',
       icon: UserMinus,
       color: 'from-red-500 to-red-600',
-      onClick: () => window.location.assign('/absences')
+      onClick: () => navigate('/logistique/absences')
+    },
+    {
+      title: 'Modération Collectes',
+      description: 'Valider les collectes des chauffeurs',
+      icon: Package,
+      color: 'from-orange-500 to-orange-600',
+      onClick: () => navigate('/logistique/collectes')
     }
   ];
 
@@ -75,7 +84,7 @@ const Dashboard = ({ user, onLogout }) => {
       {/* Actions Rapides premium */}
       <div className="max-w-5xl mx-auto px-4">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Actions Rapides</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {quickActions.map((action, index) => (
             <motion.div
               key={action.title}

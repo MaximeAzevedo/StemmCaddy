@@ -205,7 +205,7 @@ const CuisinePlanningInteractive = () => {
         
         // Utiliser l'ancienne méthode en secours
         await reloadAvailableEmployees(data.employees, data.absences);
-        await generateAIPlanning();
+      await generateAIPlanning();
       }
       
     } catch (error) {

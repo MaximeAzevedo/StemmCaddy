@@ -711,11 +711,11 @@ export class IAActionEngine {
    */
   async handleGenererPlanningManual(params) {
     // Conserver l'ancienne logique en fallback
-    return {
+      return {
       message: `⚠️ **Planning généré en mode manuel**\n\nL'IA n'était pas disponible, génération avec règles prédéfinies.\n\n🔧 Vérifiez votre configuration Azure OpenAI pour l'optimisation IA.`,
       type: 'warning',
       data: { source: 'MANUAL_FALLBACK' }
-    };
+      };
   }
 }
 

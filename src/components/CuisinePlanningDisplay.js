@@ -85,13 +85,13 @@ const CuisinePlanningDisplay = () => {
       
       // ✅ UTILISER notre méthode robuste qui gère déjà tout
       const result = await supabaseCuisine.loadPlanningPartage(new Date(dateParam));
-      
+
       if (result.error) {
         console.error('❌ Erreur chargement planning TV:', result.error);
         setPlanningData({});
         return;
       }
-      
+
       const boardData = result.data || {};
       console.log('📺 Board data reçu:', Object.keys(boardData).length, 'cellules');
       
@@ -104,22 +104,22 @@ const CuisinePlanningDisplay = () => {
         // Parser cellId → poste + créneau  
         const [poste, creneau] = cellId.split('-', 2);
         if (!poste || !employees?.length) return;
-        
-        if (!planningByPoste[poste]) {
-          planningByPoste[poste] = [];
-        }
-        
+            
+            if (!planningByPoste[poste]) {
+              planningByPoste[poste] = [];
+            }
+            
         // Ajouter tous les employés de cette cellule
         employees.forEach(emp => {
-          planningByPoste[poste].push({
+            planningByPoste[poste].push({
             id: emp.employeeId || emp.employee?.id,
             prenom: emp.prenom || emp.nom || emp.employee?.nom,
             photo_url: emp.photo_url,
             creneau: creneau,
             poste: poste
-          });
+            });
         });
-      });
+        });
       
       setPlanningData(planningByPoste);
       console.log('📺 Planning final par poste:', planningByPoste);

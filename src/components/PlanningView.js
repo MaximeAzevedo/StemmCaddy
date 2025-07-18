@@ -75,7 +75,9 @@ const PlanningView = ({ user, onLogout }) => {
     
     weekDays.forEach(day => {
       const dateKey = format(day, 'yyyy-MM-dd');
-      newPlanning[dateKey] = {};
+      newPlanning[dateKey] = {
+        absents: [] // Ajouter la section absents
+      };
       
       vehicles.forEach(vehicle => {
         newPlanning[dateKey][vehicle.id] = [];
@@ -83,7 +85,7 @@ const PlanningView = ({ user, onLogout }) => {
     });
     
     setPlanning(newPlanning);
-    console.log('📅 Planning vide initialisé');
+    console.log('📅 Planning vide initialisé avec section absents');
   }, [currentWeek, vehicles]);
 
   /**
@@ -95,36 +97,56 @@ const PlanningView = ({ user, onLogout }) => {
     try {
       console.log('🔄 Initialisation planning...');
       
-      // D'abord créer un planning vide
-      createEmptyPlanning();
+      // Calculer les dates de la semaine
+      const weekDates = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+      const dateDebut = format(weekDates[0], 'yyyy-MM-dd');
+      const dateFin = format(weekDates[4], 'yyyy-MM-dd');
       
-      // Ensuite essayer de charger le planning existant
-      const result = await supabaseLogistique.loadPlanningHebdomadaire(currentWeek);
+      // Charger planning existant et absences en parallèle
+      const [planningResult, absencesResult] = await Promise.all([
+        supabaseLogistique.loadPlanningHebdomadaire(currentWeek),
+        supabaseLogistique.getAbsencesLogistique(dateDebut, dateFin)
+      ]);
       
-      if (result.error) {
-        console.warn('⚠️ Erreur chargement planning existant:', result.error);
-        // Le planning vide créé précédemment reste
-      } else if (result.data && Object.keys(result.data).length > 0) {
-        // Merger le planning existant avec la structure vide
-        const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
-        const mergedPlanning = {};
+      const planningData = planningResult.data || {};
+      const absents = absencesResult.data || [];
+      
+      console.log('📅 Absences chargées pour la semaine:', absents.length);
+      
+      // Créer le planning final avec absences
+      const finalPlanning = {};
+      
+      weekDates.forEach(day => {
+        const dateKey = format(day, 'yyyy-MM-dd');
+        finalPlanning[dateKey] = {
+          absents: [] // Initialiser la section absents
+        };
         
-        weekDays.forEach(day => {
-          const dateKey = format(day, 'yyyy-MM-dd');
-          mergedPlanning[dateKey] = {};
-          
-          // Initialiser toutes les cases véhicules
-          vehicles.forEach(vehicle => {
-            mergedPlanning[dateKey][vehicle.id] = result.data[dateKey]?.[vehicle.id] || [];
-          });
+        // Initialiser toutes les cases véhicules avec les données existantes ou vide
+        vehicles.forEach(vehicle => {
+          finalPlanning[dateKey][vehicle.id] = planningData[dateKey]?.[vehicle.id] || [];
         });
         
-        console.log('✅ Planning existant mergé avec structure complète');
-        setPlanning(mergedPlanning);
-      } else {
-        console.log('ℹ️ Pas de planning existant, utilisation du planning vide');
-        // Le planning vide créé précédemment reste
-      }
+        // Ajouter les employés absents pour ce jour (tenir compte des plages de dates)
+        absents.forEach(absence => {
+          if (absence.employee) {
+            // Vérifier si ce jour se trouve dans la plage d'absence
+            if (dateKey >= absence.date_debut && dateKey <= absence.date_fin) {
+              finalPlanning[dateKey].absents.push({
+                ...absence.employee,
+                status: 'absent',
+                type_absence: absence.type_absence,
+                motif: absence.motif,
+                isReadOnly: true // 👁️ Lecture seule - géré par interface absences
+              });
+            }
+          }
+        });
+      });
+      
+      setPlanning(finalPlanning);
+      console.log('✅ Planning initialisé avec absences automatiques');
+      
     } catch (error) {
       console.error('❌ Erreur initialisation planning:', error);
       createEmptyPlanning();
@@ -133,7 +155,7 @@ const PlanningView = ({ user, onLogout }) => {
 
   useEffect(() => {
     if (!loading && vehicles.length > 0) {
-      initializePlanning();
+    initializePlanning();
     }
   }, [loading, vehicles, currentWeek, initializePlanning]);
 
@@ -148,7 +170,7 @@ const PlanningView = ({ user, onLogout }) => {
 
     try {
       toast.loading('🤖 Génération IA...', { id: 'ai-planning' });
-      
+    
       const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
       const optimizedPlanning = {};
       
@@ -226,9 +248,38 @@ const PlanningView = ({ user, onLogout }) => {
   };
 
   /**
+   * Section Absents pour un jour donné
+   * 👁️ AFFICHAGE SEULEMENT - Pas de drag & drop possible
+   */
+  const getAbsentsSection = (day) => {
+    const dateKey = format(day, 'yyyy-MM-dd');
+    const absentEmployees = planning[dateKey]?.absents || [];
+    
+    return (
+      <div className="min-h-[80px] p-2 transition-all duration-200 border-2 rounded-lg border-red-200 bg-red-50">
+        <div className="space-y-1 h-full">
+          {absentEmployees.map((employee, index) => (
+            <div
+              key={`absent-readonly-${dateKey}-${employee.id}-${index}`}
+              className="px-2 py-1 text-xs rounded bg-red-100 text-red-800 border border-red-300 cursor-not-allowed opacity-75"
+              title={`${employee.nom} est absent ce jour`}
+            >
+              {getFirstName(employee.nom)}
+            </div>
+          ))}
+        </div>
+        
+        <div className="text-xs text-red-600 text-center mt-1">
+          {absentEmployees.length} absent{absentEmployees.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+    );
+  };
+
+  /**
    * Drag & Drop
    */
-  const onDragEnd = (result) => {
+  const onDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
     
     if (!destination) return;
@@ -236,7 +287,7 @@ const PlanningView = ({ user, onLogout }) => {
     if (destination.droppableId === source.droppableId && destination.index === source.index) {
       return;
     }
-
+    
     // Vérification que les données sont chargées
     if (employees.length === 0 || vehicles.length === 0) {
       toast.error('Données non chargées, veuillez patienter');
@@ -249,6 +300,18 @@ const PlanningView = ({ user, onLogout }) => {
       return;
     }
 
+    // =================== GESTION DES ABSENTS ===================
+    
+    // 👁️ SECTION ABSENTS = AFFICHAGE SEULEMENT
+    // Les absences se gèrent uniquement via l'interface dédiée
+    
+    if (destination.droppableId.startsWith('absents_') || source.droppableId.startsWith('absents_')) {
+      toast.error('👁️ Section absents en lecture seule - Utilisez la gestion des absences', { 
+        duration: 3000 
+      });
+      return;
+    }
+    
     // Déplacement depuis la liste des employés vers le planning
     if (source.droppableId === 'employees-pool' && draggableId.startsWith('employee-')) {
       // Extraire l'ID de l'employé depuis le draggableId
@@ -283,8 +346,8 @@ const PlanningView = ({ user, onLogout }) => {
       if (destVehicleInfo && planning[destDate][destVehicle].length >= destVehicleInfo.capacite) {
         toast.error(`Capacité max atteinte pour ${destVehicleInfo.nom}`);
         return;
-      }
-      
+    }
+    
       const newPlanning = { ...planning };
       
       // Assigner l'employé avec rôle par défaut (equipier)
@@ -304,7 +367,7 @@ const PlanningView = ({ user, onLogout }) => {
       
       return;
     }
-
+    
     // Déplacement depuis le planning vers la sidebar employés (désassignation)
     if (destination.droppableId === 'employees-pool' && draggableId.startsWith('planning-')) {
       // Parser avec underscore comme séparateur
@@ -341,7 +404,7 @@ const PlanningView = ({ user, onLogout }) => {
       
       return;
     }
-
+    
     // Déplacement entre cases du planning
     if (draggableId.startsWith('planning-')) {
       // Parser avec underscore comme séparateur
@@ -369,9 +432,9 @@ const PlanningView = ({ user, onLogout }) => {
       if (!newPlanning[destDate]) newPlanning[destDate] = {};
       if (!newPlanning[destDate][destVehicle]) newPlanning[destDate][destVehicle] = [];
       
-      const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
-      if (!draggedEmployee) {
-        console.error('❌ Employé non trouvé à l\'index:', source.index);
+    const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
+    if (!draggedEmployee) {
+      console.error('❌ Employé non trouvé à l\'index:', source.index);
         toast.error('Employé non trouvé');
         return;
       }
@@ -390,7 +453,7 @@ const PlanningView = ({ user, onLogout }) => {
       
       return;
     }
-
+    
     console.warn('⚠️ Type de drag non reconnu:', draggableId);
     toast.error('Type de déplacement non reconnu');
   };
@@ -531,6 +594,7 @@ const PlanningView = ({ user, onLogout }) => {
             <div className="space-y-1 h-full overflow-y-auto">
               {employees.map((employee, index) => {
                 const roleStyles = getRoleStyles(employee.role);
+                const isAbsent = employee.absent === true; // Lire directement la colonne absent
                 
                 return (
                   <Draggable 
@@ -547,15 +611,28 @@ const PlanningView = ({ user, onLogout }) => {
                         className={`px-2 py-1 text-xs rounded transition-all cursor-grab active:cursor-grabbing relative ${roleStyles.border} ${
                           snapshot.isDragging
                             ? 'bg-blue-500 text-white shadow-lg transform rotate-1'
-                            : employee.profil === 'Fort' ? 'bg-emerald-100 text-emerald-800' :
-                              employee.profil === 'Moyen' ? 'bg-amber-100 text-amber-800' :
-                              'bg-rose-100 text-rose-800'
+                            : isAbsent
+                              ? 'bg-gray-200 text-gray-600 opacity-75 border border-red-300' // Style pour absent
+                              : employee.profil === 'Fort' ? 'bg-emerald-100 text-emerald-800' :
+                                employee.profil === 'Moyen' ? 'bg-amber-100 text-amber-800' :
+                                'bg-rose-100 text-rose-800'
                         }`}
-                        title={`Clic droit pour changer le rôle (${employee.role || 'equipier'})`}
+                        title={
+                          isAbsent 
+                            ? `⚠️ ${employee.nom} est absent ce jour - Réassigner urgence !`
+                            : `Clic droit pour changer le rôle (${employee.role || 'equipier'})`
+                        }
                       >
                         <div className="flex items-center justify-between">
-                          <span>{getFirstName(employee.nom)}</span>
-                          {roleStyles.badge && (
+                          <span className="flex items-center">
+                            {getFirstName(employee.nom)}
+                            {isAbsent && (
+                              <span className="ml-1 text-xs bg-red-500 text-white px-1 rounded">
+                                Absent
+                              </span>
+                            )}
+                          </span>
+                          {roleStyles.badge && !isAbsent && (
                             <span className={`w-4 h-4 rounded-full text-xs flex items-center justify-center ${roleStyles.badge}`}>
                               {roleStyles.text}
                             </span>
@@ -571,7 +648,7 @@ const PlanningView = ({ user, onLogout }) => {
             
             <div className="text-xs text-gray-400 text-center mt-1">
               {employees.length}/{vehicle.capacite}
-            </div>
+              </div>
           </div>
         )}
       </Droppable>
@@ -579,7 +656,7 @@ const PlanningView = ({ user, onLogout }) => {
   };
 
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
-
+      
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -654,7 +731,7 @@ const PlanningView = ({ user, onLogout }) => {
               <h2 className="font-semibold text-gray-900 flex items-center">
                 <User className="w-4 h-4 mr-2" />
                 Employés ({employees.length})
-              </h2>
+                  </h2>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
@@ -669,36 +746,43 @@ const PlanningView = ({ user, onLogout }) => {
                         : ''
                     }`}
                   >
-                    {employees.map((employee, index) => (
-                      <Draggable key={employee.id} draggableId={`employee-${employee.id}`} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`p-3 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${
-                              snapshot.isDragging
-                                ? 'bg-blue-500 text-white shadow-xl transform rotate-2'
-                                : employee.profil === 'Fort' ? 'bg-emerald-50 border-emerald-200' :
-                                  employee.profil === 'Moyen' ? 'bg-amber-50 border-amber-200' :
-                                  'bg-rose-50 border-rose-200'
-                            }`}
-                          >
-                            <div className="font-medium text-sm">
-                              {getFirstName(employee.nom)}
+                    {employees.map((employee, index) => {
+                      return (
+                        <Draggable 
+                          key={employee.id} 
+                          draggableId={`employee-${employee.id}`} 
+                          index={index}
+                        >
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`p-3 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${
+                                snapshot.isDragging
+                                  ? 'bg-blue-500 text-white shadow-xl transform rotate-2'
+                                  : employee.profil === 'Fort' ? 'bg-emerald-50 border-emerald-200' :
+                                    employee.profil === 'Moyen' ? 'bg-amber-50 border-amber-200' :
+                                    'bg-rose-50 border-rose-200'
+                              }`}
+                              title={`Employé ${employee.nom}`}
+                            >
+                              <div className="font-medium text-sm">
+                                {getFirstName(employee.nom)}
+                              </div>
+                              <div className={`text-xs mt-1 ${
+                                snapshot.isDragging ? 'text-blue-100' :
+                                employee.profil === 'Fort' ? 'text-emerald-600' :
+                                employee.profil === 'Moyen' ? 'text-amber-600' :
+                                'text-rose-600'
+                              }`}>
+                                {employee.profil}
+                              </div>
                             </div>
-                            <div className={`text-xs mt-1 ${
-                              snapshot.isDragging ? 'text-blue-100' :
-                              employee.profil === 'Fort' ? 'text-emerald-600' :
-                              employee.profil === 'Moyen' ? 'text-amber-600' :
-                              'text-rose-600'
-                            }`}>
-                              {employee.profil}
-                            </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
+                          )}
+                        </Draggable>
+                      );
+                    })}
                     {provided.placeholder}
                     
                     {/* Texte d'aide quand on survole */}
@@ -710,9 +794,9 @@ const PlanningView = ({ user, onLogout }) => {
                   </div>
                 )}
               </Droppable>
-            </div>
-          </div>
-
+                  </div>
+                </div>
+                
           {/* Zone Planning Full-Width */}
           <div className="flex-1 flex flex-col">
             {/* Navigation Semaine */}
@@ -736,9 +820,9 @@ const PlanningView = ({ user, onLogout }) => {
                   </button>
                 </div>
                 <Calendar className="w-5 h-5 text-gray-400" />
+                </div>
               </div>
-            </div>
-
+              
             {/* Grille Planning */}
             <div className="flex-1 overflow-auto p-6">
               <div className="min-w-full">
@@ -762,7 +846,7 @@ const PlanningView = ({ user, onLogout }) => {
 
                 {/* Lignes véhicules */}
                 <div className="space-y-3">
-                  {vehicles.map(vehicle => (
+                {vehicles.map(vehicle => (
                     <div key={vehicle.id} className="grid grid-cols-6 gap-4">
                       <div className="flex items-center space-x-3 py-2">
                         <div className={`w-3 h-3 rounded-full ${getVehicleColor(vehicle.id)}`}></div>
@@ -770,20 +854,36 @@ const PlanningView = ({ user, onLogout }) => {
                           <div className="text-sm font-medium text-gray-900">{vehicle.nom}</div>
                           <div className="text-xs text-gray-500">{vehicle.capacite} places</div>
                         </div>
-                      </div>
-                      {weekDays.map(day => (
-                        <div key={`${vehicle.id}-${day.toISOString()}`}>
-                          {getVehicleColumn(vehicle, day)}
-                        </div>
-                      ))}
                     </div>
-                  ))}
+                    {weekDays.map(day => (
+                      <div key={`${vehicle.id}-${day.toISOString()}`}>
+                        {getVehicleColumn(vehicle, day)}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                  
+                  {/* LIGNE ABSENTS */}
+                  <div className="grid grid-cols-6 gap-4 border-t-2 border-red-200 pt-3">
+                    <div className="flex items-center space-x-3 py-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <div>
+                        <div className="text-sm font-medium text-red-700">Absents</div>
+                        <div className="text-xs text-red-500">Employés absents</div>
+                      </div>
+                    </div>
+                    {weekDays.map(day => (
+                      <div key={`absents-${day.toISOString()}`}>
+                        {getAbsentsSection(day)}
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              </div>
               </div>
             </div>
           </div>
-        </div>
-      </DragDropContext>
+        </DragDropContext>
 
       {/* Menu contextuel */}
       {contextMenu && (

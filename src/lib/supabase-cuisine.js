@@ -454,10 +454,10 @@ export const supabaseCuisine = {
         if (deleteError) {
           console.warn('⚠️ Erreur suppression complète, fallback suppression date courante:', deleteError);
           // Fallback : supprimer seulement la date courante
-          await supabase
-            .from('planning_cuisine_new')
-            .delete()
-            .eq('date', dateStr);
+      await supabase
+        .from('planning_cuisine_new')
+        .delete()
+        .eq('date', dateStr);
         } else {
           console.log('✅ Toutes les anciennes données supprimées');
         }
@@ -506,7 +506,7 @@ export const supabaseCuisine = {
                 const hours = parseInt(startParts[0]) || 8;
                 const minutes = parseInt(startParts[1]) || 0;
                 heure_debut = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':00';
-              } else {
+      } else {
                 heure_debut = '08:00:00'; // fallback
               }
               
@@ -518,7 +518,7 @@ export const supabaseCuisine = {
                 heure_fin = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':00';
               } else {
                 heure_fin = '16:00:00'; // fallback
-              }
+    }
             } else if (creneau.endsWith('h')) {
               // Format générique "Xh" (ex: "14h")
               const hour = parseInt(creneau.replace('h', '')) || 8;
@@ -526,7 +526,7 @@ export const supabaseCuisine = {
               heure_fin = (hour + 2).toString().padStart(2, '0') + ':00:00';
             } else {
               // Fallback total pour créneaux non reconnus
-              console.warn(`⚠️ Créneau non reconnu: "${creneau}", utilisation fallback`);
+                console.warn(`⚠️ Créneau non reconnu: "${creneau}", utilisation fallback`);
               heure_debut = '08:00:00';
               heure_fin = '10:00:00';
             }
@@ -534,11 +534,11 @@ export const supabaseCuisine = {
             // 🔍 DEBUG : Vérifier le résultat du parsing
             console.log(`⏰ Parsing "${creneau}" → ${heure_debut} - ${heure_fin}`);
 
-          } catch (error) {
+    } catch (error) {
             console.error(`❌ Erreur parsing créneau "${creneau}":`, error);
             heure_debut = '08:00:00';
             heure_fin = '10:00:00';
-          }
+    }
           
           insertions.push({
             employee_id: emp.employeeId,

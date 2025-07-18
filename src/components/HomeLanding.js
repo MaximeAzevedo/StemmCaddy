@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { TruckIcon } from '@heroicons/react/24/solid';
 import { FireIcon } from '@heroicons/react/24/solid';
 import { DocumentTextIcon } from '@heroicons/react/24/solid';
+// ✅ NOUVEAU : Import d'une icône pour les collectes
+import { CubeIcon } from '@heroicons/react/24/solid';
 
 const Card = ({ title, icon: Icon, color, onClick }) => (
   <button
@@ -23,7 +25,7 @@ const HomeLanding = () => {
         Bienvenue sur la plateforme interne <span className="text-orange-600">Caddy</span>
       </h1>
 
-      <div className="flex flex-col sm:flex-row items-center gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 items-center gap-8">
         <Card
           title="Logistique"
           icon={TruckIcon}
@@ -41,6 +43,12 @@ const HomeLanding = () => {
           icon={DocumentTextIcon}
           color="from-green-500 to-emerald-600"
           onClick={() => navigate('/secretariat')}
+        />
+        <Card
+          title="Chauffeurs"
+          icon={CubeIcon}
+          color="from-purple-600 to-pink-600"
+          onClick={() => navigate('/collectes')}
         />
       </div>
 

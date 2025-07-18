@@ -15,25 +15,38 @@ export const supabaseSecretariat = {
   // Exposer le client Supabase pour les tests
   supabase,
   
+  // ==================== FONCTIONS HELPER ====================
+  
+  /**
+   * Détermine le nom de la table selon l'année
+   * @param {number} annee - Année (2024, 2025, etc.)
+   * @returns {string} Nom de la table
+   */
+  getTableName(annee = null) {
+    if (!annee) {
+      // Par défaut, utiliser l'année courante (2025)
+      return 'denrees_alimentaires_2025';
+    }
+    return `denrees_alimentaires_${annee}`;
+  },
+  
   // ==================== DENRÉES ALIMENTAIRES ====================
   
   /**
    * Récupérer toutes les denrées alimentaires
-   * @param {number} annee - Année à filtrer (optionnel)
+   * @param {number} annee - Année à filtrer (optionnel, défaut: 2025)
    * @returns {Promise} Résultat de la requête
    */
-  async getDenreesAlimentaires(annee = null) {
+  async getDenreesAlimentaires(annee = 2025) {
     try {
+      const tableName = this.getTableName(annee);
+      
       let query = supabase
-        .from('denrees_alimentaires')
+        .from(tableName)
         .select('*')
         .order('annee', { ascending: false })
         .order('mois', { ascending: false })
         .order('fournisseur');
-
-      if (annee) {
-        query = query.eq('annee', annee);
-      }
 
       const { data, error } = await query;
       
@@ -56,8 +69,10 @@ export const supabaseSecretariat = {
    */
   async createDenreeAlimentaire(denree) {
     try {
+      const tableName = this.getTableName(denree.annee);
+      
       const { data, error } = await supabase
-        .from('denrees_alimentaires')
+        .from(tableName)
         .insert([{
           fournisseur: denree.fournisseur,
           mois: denree.mois,
@@ -85,12 +100,15 @@ export const supabaseSecretariat = {
    * Mettre à jour une denrée alimentaire
    * @param {number} id - ID de la denrée à modifier
    * @param {Object} updates - Modifications à apporter
+   * @param {number} annee - Année pour déterminer la table (défaut: 2025)
    * @returns {Promise} Résultat de la modification
    */
-  async updateDenreeAlimentaire(id, updates) {
+  async updateDenreeAlimentaire(id, updates, annee = 2025) {
     try {
+      const tableName = this.getTableName(annee);
+      
       const { data, error } = await supabase
-        .from('denrees_alimentaires')
+        .from(tableName)
         .update({
           fournisseur: updates.fournisseur,
           mois: updates.mois,
@@ -118,12 +136,15 @@ export const supabaseSecretariat = {
   /**
    * Supprimer une denrée alimentaire
    * @param {number} id - ID de la denrée à supprimer
+   * @param {number} annee - Année pour déterminer la table (défaut: 2025)
    * @returns {Promise} Résultat de la suppression
    */
-  async deleteDenreeAlimentaire(id) {
+  async deleteDenreeAlimentaire(id, annee = 2025) {
     try {
+      const tableName = this.getTableName(annee);
+      
       const { error } = await supabase
-        .from('denrees_alimentaires')
+        .from(tableName)
         .delete()
         .eq('id', id);
 
@@ -135,7 +156,7 @@ export const supabaseSecretariat = {
       return { error: null };
     } catch (err) {
       console.error('Erreur technique deleteDenreeAlimentaire:', err);
-      return { error: err };
+      return { data: null, error: err };
     }
   },
 
@@ -305,12 +326,15 @@ export const supabaseSecretariat = {
 
   /**
    * Obtenir la liste des fournisseurs uniques
+   * @param {number} annee - Année pour laquelle obtenir les fournisseurs (défaut: 2025)
    * @returns {Promise} Liste des fournisseurs
    */
-  async getFournisseurs() {
+  async getFournisseurs(annee = 2025) {
     try {
+      const tableName = this.getTableName(annee);
+      
       const { data, error } = await supabase
-        .from('denrees_alimentaires')
+        .from(tableName)
         .select('fournisseur')
         .neq('fournisseur', 'Total général') // Exclure la ligne de synthèse
         .order('fournisseur');
@@ -336,23 +360,14 @@ export const supabaseSecretariat = {
    */
   async getAnneesDisponibles() {
     try {
-      const { data, error } = await supabase
-        .from('denrees_alimentaires')
-        .select('annee')
-        .order('annee', { ascending: false });
-
-      if (error) {
-        console.error('Erreur getAnneesDisponibles:', error);
-        return { data: [], error };
-      }
-
-      // Extraire les années uniques
-      const anneesUniques = [...new Set(data.map(item => item.annee))];
+      // Retourner les années connues (2024 et 2025)
+      // On pourrait aussi interroger les métadonnées pour découvrir automatiquement les tables
+      const anneesDisponibles = [2024, 2025];
       
-      return { data: anneesUniques, error: null };
+      return { data: anneesDisponibles, error: null };
     } catch (err) {
       console.error('Erreur technique getAnneesDisponibles:', err);
-      return { data: [], error: err };
+      return { data: [2025], error: err }; // Au minimum 2025
     }
   },
 
@@ -366,8 +381,10 @@ export const supabaseSecretariat = {
    */
   async checkDuplicateEntry(fournisseur, mois, annee, excludeId = null) {
     try {
+      const tableName = this.getTableName(annee);
+      
       let query = supabase
-        .from('denrees_alimentaires')
+        .from(tableName)
         .select('id')
         .eq('fournisseur', fournisseur)
         .eq('mois', mois)

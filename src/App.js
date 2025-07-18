@@ -8,6 +8,7 @@ import Dashboard from './components/Dashboard';
 import HomeLanding from './components/HomeLanding';
 import EmployeeManagement from './components/EmployeeManagement';
 import LogistiqueManagement from './components/LogistiqueManagement';
+import AbsenceManagementLogistique from './components/AbsenceManagementLogistique';
 import PlanningView from './components/PlanningView';
 import LogistiqueTVView from './components/LogistiqueTVView';
 import AbsenceManagement from './components/AbsenceManagement';
@@ -16,22 +17,27 @@ import DashboardCuisine from './components/DashboardCuisine';
 import CuisinePlanningDisplay from './components/CuisinePlanningDisplay';
 import SecretariatManagement from './components/SecretariatManagement';
 import MainHeader from './components/MainHeader';
+// ✅ NOUVEAU : Import de l'application de collectes chauffeurs
+import CollectesApp from './components/CollectesApp';
+// ✅ NOUVEAU : Import de la modération des collectes
+import ModerationCollectes from './components/ModerationCollectes';
 import './index.css';
 
 // Composant interne pour gérer la location
 const AppContent = ({ user, handleLogin, handleLogout }) => {
   const location = useLocation();
   
-  // Vérifier si on est en mode TV
+  // Vérifier si on est en mode TV ou sur l'app collectes (pas de header)
   const isTVMode = location?.pathname === '/cuisine/tv' || location?.pathname === '/logistique/tv';
+  const isCollectesApp = location?.pathname === '/collectes';
   
   return (
     <>
-      {/* Afficher le header seulement si on n'est pas en mode TV */}
-      {!isTVMode && <MainHeader />}
+      {/* Afficher le header seulement si on n'est pas en mode TV ou collectes */}
+      {!isTVMode && !isCollectesApp && <MainHeader />}
       
       {/* Wrapper avec marge pour compenser le header flottant seulement si header visible */}
-      <div className={isTVMode ? '' : 'pt-20'}>
+      <div className={isTVMode || isCollectesApp ? '' : 'pt-20'}>
         <Routes>
           <Route 
             path="/login" 
@@ -42,6 +48,11 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
           <Route 
             path="/" 
             element={user ? <HomeLanding /> : <Navigate to="/login" />}
+          />
+          {/* ✅ NOUVEAU : Route pour l'application de collectes chauffeurs */}
+          <Route 
+            path="/collectes" 
+            element={<CollectesApp onReturnToMain={() => window.location.href = '/'} />}
           />
           <Route 
             path="/logistique"
@@ -54,6 +65,15 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
           <Route 
             path="/logistique/planning"
             element={user ? <PlanningView user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+          />
+          <Route 
+            path="/logistique/absences"
+            element={user ? <AbsenceManagementLogistique user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+          />
+          {/* ✅ NOUVEAU : Route pour la modération des collectes en logistique */}
+          <Route 
+            path="/logistique/collectes"
+            element={user ? <ModerationCollectes user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
           <Route path="/logistique/tv" element={<LogistiqueTVView />} />
           <Route 

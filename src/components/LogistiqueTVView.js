@@ -7,7 +7,7 @@ import { supabaseLogistique } from '../lib/supabase-logistique';
 
 const LogistiqueTVView = () => {
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState('vehicles'); // 'vehicles', 'employees1', 'employees2'
+  const [currentView, setCurrentView] = useState('vehicles'); // 'vehicles', 'employees'
   const [currentWeek, setCurrentWeek] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [loading, setLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
@@ -67,10 +67,10 @@ const LogistiqueTVView = () => {
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          // Cycle entre les 3 vues : vehicles -> employees1 -> employees2 -> vehicles
+          // Cycle entre les 2 vues : vehicles -> employees -> vehicles
           setCurrentView(prevView => {
-            if (prevView === 'vehicles') return 'employees1';
-            if (prevView === 'employees1') return 'employees2';
+            if (prevView === 'vehicles') return 'employees';
+            if (prevView === 'employees') return 'vehicles';
             return 'vehicles';
           });
           return 15;
@@ -91,8 +91,8 @@ const LogistiqueTVView = () => {
 
   const switchView = () => {
     setCurrentView(prev => {
-      if (prev === 'vehicles') return 'employees1';
-      if (prev === 'employees1') return 'employees2';
+      if (prev === 'vehicles') return 'employees';
+      if (prev === 'employees') return 'vehicles';
       return 'vehicles';
     });
     setTimeLeft(15); // Reset timer
@@ -259,138 +259,78 @@ const LogistiqueTVView = () => {
   };
 
   /**
-   * Vue planning par employés - Partie 1 (première moitié)
+   * Vue planning par employés - Vue fusionnée (utilisant l'espace vertical)
    */
-  const renderEmployeeView1 = () => {
+  const renderEmployeeView = () => {
     const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
-    const halfEmployees = Math.ceil(employees.length / 2);
-    const employees1 = employees.slice(0, halfEmployees);
+    
+    // Diviser les employés en groupes pour utiliser l'espace vertical
+    const employeesPerGroup = 12; // Nombre d'employés par ligne
+    const employeeGroups = [];
+    for (let i = 0; i < employees.length; i += employeesPerGroup) {
+      employeeGroups.push(employees.slice(i, i + employeesPerGroup));
+    }
 
     return (
-      <div className="h-full p-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Planning Employés (1/2)</h1>
-          <p className="text-xl text-gray-600">
+      <div className="h-full p-4">
+        <div className="mb-4 text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Planning Employés</h1>
+          <p className="text-lg text-gray-600">
             Semaine du {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
           </p>
         </div>
 
-        <div className="overflow-auto h-[calc(100vh-200px)]">
-          <table className="w-full text-lg">
-            <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="text-left p-4 text-2xl font-bold text-gray-700 w-48">Date</th>
-                {employees1.map(employee => (
-                  <th key={employee.id} className="text-center p-4 min-w-[150px]">
-                    <div className="text-xl font-bold text-gray-900">
-                      {getFirstName(employee.nom)}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {weekDays.map(day => {
-                const dateKey = format(day, 'yyyy-MM-dd');
-                
-                return (
-                  <tr key={day.toISOString()} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="p-4">
-                      <div className="text-xl font-bold text-gray-900">
-                        {format(day, 'EEEE', { locale: fr })}
-                      </div>
-                      <div className="text-lg text-gray-600">
-                        {format(day, 'dd/MM')}
-                      </div>
-                    </td>
-                    {employees1.map(employee => {
-                      const status = getEmployeeStatus(employee.id, dateKey);
-                      
-                      return (
-                        <td key={employee.id} className="p-4 text-center">
-                          <div 
-                            className={`px-3 py-2 rounded-lg text-white font-bold text-sm ${status.color}`}
-                            style={status.type === 'vehicle' ? { backgroundColor: status.color } : {}}
-                          >
-                            {status.display}
+        <div className="space-y-6 overflow-auto h-[calc(100vh-140px)]">
+          {employeeGroups.map((employeeGroup, groupIndex) => (
+            <div key={groupIndex} className="bg-white rounded-lg shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b-2 border-gray-300">
+                    <th className="text-left p-2 text-lg font-bold text-gray-700 w-24">Date</th>
+                    {employeeGroup.map(employee => (
+                      <th key={employee.id} className="text-center p-2 min-w-[80px]">
+                        <div className="text-sm font-bold text-gray-900">
+                          {getFirstName(employee.nom)}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekDays.map(day => {
+                    const dateKey = format(day, 'yyyy-MM-dd');
+                    
+                    return (
+                      <tr key={`${groupIndex}-${day.toISOString()}`} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="p-2">
+                          <div className="text-sm font-bold text-gray-900">
+                            {format(day, 'EEEE', { locale: fr })}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {format(day, 'dd/MM')}
                           </div>
                         </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  /**
-   * Vue planning par employés - Partie 2 (deuxième moitié)
-   */
-  const renderEmployeeView2 = () => {
-    const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
-    const halfEmployees = Math.ceil(employees.length / 2);
-    const employees2 = employees.slice(halfEmployees);
-
-    return (
-      <div className="h-full p-8">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Planning Employés (2/2)</h1>
-          <p className="text-xl text-gray-600">
-            Semaine du {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
-          </p>
-        </div>
-
-        <div className="overflow-auto h-[calc(100vh-200px)]">
-          <table className="w-full text-lg">
-            <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="text-left p-4 text-2xl font-bold text-gray-700 w-48">Date</th>
-                {employees2.map(employee => (
-                  <th key={employee.id} className="text-center p-4 min-w-[150px]">
-                    <div className="text-xl font-bold text-gray-900">
-                      {getFirstName(employee.nom)}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {weekDays.map(day => {
-                const dateKey = format(day, 'yyyy-MM-dd');
-                
-                return (
-                  <tr key={day.toISOString()} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="p-4">
-                      <div className="text-xl font-bold text-gray-900">
-                        {format(day, 'EEEE', { locale: fr })}
-                      </div>
-                      <div className="text-lg text-gray-600">
-                        {format(day, 'dd/MM')}
-                      </div>
-                    </td>
-                    {employees2.map(employee => {
-                      const status = getEmployeeStatus(employee.id, dateKey);
-                      
-                      return (
-                        <td key={employee.id} className="p-4 text-center">
-                          <div 
-                            className={`px-3 py-2 rounded-lg text-white font-bold text-sm ${status.color}`}
-                            style={status.type === 'vehicle' ? { backgroundColor: status.color } : {}}
-                          >
-                            {status.display}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        {employeeGroup.map(employee => {
+                          const status = getEmployeeStatus(employee.id, dateKey);
+                          
+                          return (
+                            <td key={employee.id} className="p-1 text-center">
+                              <div 
+                                className={`px-1 py-1 rounded text-white font-bold text-xs ${status.color}`}
+                                style={status.type === 'vehicle' ? { backgroundColor: status.color } : {}}
+                              >
+                                {status.display}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -453,15 +393,13 @@ const LogistiqueTVView = () => {
         <div className="flex items-center space-x-2 text-white">
           <Monitor className="w-4 h-4" />
           <span className="text-sm font-medium">
-            {currentView === 'vehicles' ? 'Véhicules' : 
-             currentView === 'employees1' ? 'Employés 1/2' : 'Employés 2/2'}
+            {currentView === 'vehicles' ? 'Véhicules' : 'Employés'}
           </span>
         </div>
       </div>
 
-      {/* Contenu alternatif avec 3 vues */}
-      {currentView === 'vehicles' ? renderVehicleView() : 
-       currentView === 'employees1' ? renderEmployeeView1() : renderEmployeeView2()}
+      {/* Contenu alternatif avec 2 vues */}
+      {currentView === 'vehicles' ? renderVehicleView() : renderEmployeeView()}
     </div>
   );
 };
