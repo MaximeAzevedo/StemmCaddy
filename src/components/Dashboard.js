@@ -45,7 +45,7 @@ const Dashboard = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-slate-50 pb-16">
-      {/* Header central premium */}
+      {/* Header central premium - EN HAUT */}
       <div className="flex flex-col items-center pt-12 pb-6">
         <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-4 shadow-xl">
           <Truck className="w-8 h-8 text-white" />
@@ -82,7 +82,7 @@ const Dashboard = ({ user, onLogout }) => {
       </div>
 
       {/* Actions Rapides premium */}
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-5xl mx-auto px-4 mb-16">
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Actions Rapides</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {quickActions.map((action, index) => (
@@ -103,6 +103,33 @@ const Dashboard = ({ user, onLogout }) => {
             </motion.div>
           ))}
         </div>
+      </div>
+
+      {/* Section image centrée avec titre - EN BAS */}
+      <div className="flex flex-col items-center pt-8 pb-8">
+        <h2 className="text-5xl font-bold text-gray-800 mb-8 text-center">Le mieux c'est maintenant</h2>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="relative group cursor-pointer"
+        >
+          {/* Effet de glow en arrière-plan */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 rounded-3xl opacity-20 group-hover:opacity-30 transition-opacity duration-300 blur-2xl scale-110"></div>
+          
+          {/* Image principale - GROSSE TAILLE */}
+          <img
+            src="/images/logistique-team.jpg"
+            alt="Le mieux c'est maintenant - Équipe logistique"
+            className="relative w-[500px] h-96 object-cover rounded-3xl shadow-2xl group-hover:shadow-3xl transition-all duration-500 group-hover:scale-105 border-4 border-white/70"
+          />
+          
+          {/* Overlay avec effet au hover */}
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          
+          {/* Effet de brillance */}
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-white/10 to-transparent opacity-50"></div>
+        </motion.div>
       </div>
     </div>
   );

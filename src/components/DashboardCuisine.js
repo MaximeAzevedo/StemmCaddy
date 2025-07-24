@@ -9,6 +9,7 @@ import {
 import CuisineManagement from './CuisineManagement';
 import AbsenceManagementCuisine from './AbsenceManagementCuisine';
 import CuisineAIAssistant from './CuisineAIAssistant';
+import CuisinePlanningInteractive from './CuisinePlanningInteractive';
 
 const DashboardCuisine = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -51,8 +52,12 @@ const DashboardCuisine = ({ user, onLogout }) => {
   };
 
   // Si un onglet spécifique est actif, afficher le composant correspondant
-  if (activeTab === 'planning' || activeTab === 'employees') {
-    return <CuisineManagement user={user} onLogout={onLogout} defaultTab={activeTab} />;
+  if (activeTab === 'planning') {
+    return <CuisinePlanningInteractive user={user} onLogout={onLogout} />;
+  }
+  
+  if (activeTab === 'employees') {
+    return <CuisineManagement user={user} onLogout={onLogout} />;
   }
   
   if (activeTab === 'absences') {

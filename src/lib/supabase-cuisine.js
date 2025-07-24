@@ -661,6 +661,324 @@ export const supabaseCuisine = {
       console.error('❌ Erreur vérification changements:', error);
       return { hasChanges: false, changes: [], error };
     }
+  },
+
+  // ==================== NOUVELLES FONCTIONS : SUPPRESSION ET CRÉATION ====================
+
+  /**
+   * Supprimer un employé cuisine (avec vérifications de sécurité)
+   */
+  async deleteEmployeeCuisine(employeeId) {
+    try {
+      console.log('🗑️ deleteEmployeeCuisine - Suppression employé:', employeeId);
+      
+      // 1. Vérifier que l'employé existe
+      const { data: employee, error: getError } = await supabase
+        .from('employes_cuisine_new')
+        .select('*')
+        .eq('id', employeeId)
+        .single();
+        
+      if (getError || !employee) {
+        console.error('❌ Employé non trouvé:', getError);
+        return { data: null, error: { message: 'Employé non trouvé' } };
+      }
+      
+      // 2. Vérifier s'il est assigné dans le planning futur (sécurité)
+      const today = new Date().toISOString().split('T')[0];
+      const { data: futureAssignments, error: planningError } = await supabase
+        .from('planning_cuisine_new')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .gte('date', today);
+        
+      if (planningError) {
+        console.warn('⚠️ Impossible de vérifier le planning:', planningError);
+      }
+      
+      if (futureAssignments && futureAssignments.length > 0) {
+        return { 
+          data: null, 
+          error: { 
+            message: `Impossible de supprimer: ${employee.prenom} est assigné dans ${futureAssignments.length} planning(s) futur(s)`,
+            code: 'EMPLOYEE_HAS_FUTURE_ASSIGNMENTS',
+            details: futureAssignments
+          } 
+        };
+      }
+      
+      // 3. Supprimer les absences liées (cascade)
+      const { error: absencesError } = await supabase
+        .from('absences_cuisine_new')
+        .delete()
+        .eq('employee_id', employeeId);
+        
+      if (absencesError) {
+        console.warn('⚠️ Erreur suppression absences:', absencesError);
+      }
+      
+      // 4. Supprimer l'employé (définitivement)
+      const { error } = await supabase
+        .from('employes_cuisine_new')
+        .delete()
+        .eq('id', employeeId);
+      
+      if (error) {
+        console.error('❌ Erreur suppression employé:', error);
+        throw error;
+      }
+      
+      console.log('✅ Employé cuisine supprimé avec succès:', employee.prenom);
+      return { data: { deletedEmployee: employee }, error: null };
+      
+    } catch (error) {
+      console.error('💥 Erreur critique deleteEmployeeCuisine:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
+   * Créer un nouvel employé cuisine
+   */
+  async createEmployeeCuisine(employeeData) {
+    try {
+      console.log('➕ createEmployeeCuisine - Création employé:', employeeData);
+      
+      // Validation des données requises
+      if (!employeeData.prenom) {
+        return { data: null, error: { message: 'Le prénom est requis' } };
+      }
+      
+      // Vérifier que le nom n'existe pas déjà
+      const { data: existing, error: checkError } = await supabase
+        .from('employes_cuisine_new')
+        .select('id, prenom')
+        .ilike('prenom', employeeData.prenom);
+        
+      if (checkError) {
+        console.warn('⚠️ Impossible de vérifier les doublons:', checkError);
+      }
+      
+      if (existing && existing.length > 0) {
+        return { 
+          data: null, 
+          error: { 
+            message: `Un employé avec le prénom "${employeeData.prenom}" existe déjà`,
+            code: 'EMPLOYEE_ALREADY_EXISTS',
+            existing: existing[0]
+          } 
+        };
+      }
+      
+      // Préparer les données avec valeurs par défaut
+      const newEmployeeData = {
+        prenom: employeeData.prenom.trim(),
+        langue_parlee: employeeData.langue_parlee || 'Français',
+        photo_url: employeeData.photo_url || null,
+        
+        // Horaires par défaut (8h-16h)
+        lundi_debut: employeeData.lundi_debut || '08:00:00',
+        lundi_fin: employeeData.lundi_fin || '16:00:00',
+        mardi_debut: employeeData.mardi_debut || '08:00:00',
+        mardi_fin: employeeData.mardi_fin || '16:00:00',
+        mercredi_debut: employeeData.mercredi_debut || '08:00:00',
+        mercredi_fin: employeeData.mercredi_fin || '16:00:00',
+        jeudi_debut: employeeData.jeudi_debut || '08:00:00',
+        jeudi_fin: employeeData.jeudi_fin || '16:00:00',
+        vendredi_debut: employeeData.vendredi_debut || '08:00:00',
+        vendredi_fin: employeeData.vendredi_fin || '16:00:00',
+        
+        // Compétences par défaut (toutes fausses) - selon structure DB vérifiée via MCP
+        cuisine_chaude: employeeData.cuisine_chaude || false,
+        chef_sandwichs: employeeData.chef_sandwichs || false,
+        sandwichs: employeeData.sandwichs || false,
+        vaisselle: employeeData.vaisselle || false,
+        legumerie: employeeData.legumerie || false,
+        equipe_pina_saskia: employeeData.equipe_pina_saskia || false,
+        pain: employeeData.pain || false,
+        jus_de_fruits: employeeData.jus_de_fruits || false, // Correct : jus_de_fruits (underscore)
+        self_midi: employeeData.self_midi || false,
+        
+        // Métadonnées
+        actif: true,
+        notes: employeeData.notes || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      // Créer l'employé
+      const { data, error } = await supabase
+        .from('employes_cuisine_new')
+        .insert(newEmployeeData)
+        .select();
+      
+      if (error) {
+        console.error('❌ Erreur création employé:', error);
+        throw error;
+      }
+      
+      console.log('✅ Employé cuisine créé avec succès:', data[0]);
+      return { data: data[0], error: null };
+      
+    } catch (error) {
+      console.error('💥 Erreur critique createEmployeeCuisine:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
+   * Mettre à jour un employé cuisine
+   */
+  async updateEmployeeCuisine(employeeId, updates) {
+    try {
+      console.log('📝 updateEmployeeCuisine - Mise à jour employé:', employeeId, updates);
+      
+      // Ajouter updated_at automatiquement
+      const updateData = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { data, error } = await supabase
+        .from('employes_cuisine_new')
+        .update(updateData)
+        .eq('id', employeeId)
+        .select();
+      
+      if (error) {
+        console.error('❌ Erreur mise à jour employé:', error);
+        throw error;
+      }
+      
+      console.log('✅ Employé cuisine mis à jour:', data[0]);
+      return { data: data[0], error: null };
+      
+    } catch (error) {
+      console.error('💥 Erreur critique updateEmployeeCuisine:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
+   * Désactiver un employé (alternative à la suppression)
+   */
+  async deactivateEmployeeCuisine(employeeId) {
+    try {
+      console.log('💤 deactivateEmployeeCuisine - Désactivation employé:', employeeId);
+      
+      const result = await this.updateEmployeeCuisine(employeeId, { actif: false });
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      console.log('✅ Employé cuisine désactivé:', result.data);
+      return result;
+      
+    } catch (error) {
+      console.error('💥 Erreur critique deactivateEmployeeCuisine:', error);
+      return { data: null, error };
+    }
+  },
+
+  // ==================== GESTION PHOTOS ====================
+  
+  /**
+   * Upload d'une photo employé vers Supabase Storage
+   */
+  async uploadEmployeePhoto(file, employeeId) {
+    try {
+      console.log('📸 uploadEmployeePhoto - Upload photo pour employé:', employeeId);
+      
+      // Validation du fichier
+      if (!file) {
+        return { data: null, error: { message: 'Aucun fichier fourni' } };
+      }
+      
+      // Vérifier le type de fichier
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        return { 
+          data: null, 
+          error: { message: 'Format non supporté. Utilisez JPG, PNG ou WebP.' } 
+        };
+      }
+      
+      // Vérifier la taille (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        return { 
+          data: null, 
+          error: { message: 'Fichier trop volumineux. Maximum 5MB.' } 
+        };
+      }
+      
+      // Créer un nom unique pour le fichier
+      const fileExt = file.name.split('.').pop();
+      const fileName = `employee_${employeeId}_${Date.now()}.${fileExt}`;
+      const filePath = `photos/${fileName}`;
+      
+      // Upload vers Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('stemmcaddy')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (error) {
+        console.error('❌ Erreur upload Storage:', error);
+        throw error;
+      }
+      
+      // Récupérer l'URL publique
+      const { data: { publicUrl } } = supabase.storage
+        .from('stemmcaddy')
+        .getPublicUrl(filePath);
+      
+      console.log('✅ Photo uploadée:', publicUrl);
+      return { data: { url: publicUrl, path: filePath }, error: null };
+      
+    } catch (error) {
+      console.error('💥 Erreur critique uploadEmployeePhoto:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
+   * Supprimer une ancienne photo employé
+   */
+  async deleteEmployeePhoto(photoUrl) {
+    try {
+      if (!photoUrl) return { data: null, error: null };
+      
+      console.log('🗑️ deleteEmployeePhoto - Suppression photo:', photoUrl);
+      
+      // Extraire le path depuis l'URL
+      const urlParts = photoUrl.split('/stemmcaddy/');
+      if (urlParts.length < 2) {
+        console.warn('⚠️ URL photo invalide pour suppression:', photoUrl);
+        return { data: null, error: null };
+      }
+      
+      const filePath = urlParts[1];
+      
+      // Supprimer de Supabase Storage
+      const { error } = await supabase.storage
+        .from('stemmcaddy')
+        .remove([filePath]);
+      
+      if (error) {
+        console.warn('⚠️ Erreur suppression Storage (non bloquant):', error);
+      } else {
+        console.log('✅ Ancienne photo supprimée');
+      }
+      
+      return { data: null, error: null };
+      
+    } catch (error) {
+      console.warn('⚠️ Erreur suppression photo (non bloquant):', error);
+      return { data: null, error: null };
+    }
   }
 
 };
