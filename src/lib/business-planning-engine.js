@@ -31,15 +31,15 @@ export class BusinessPlanningEngine {
       // 2. Réinitialiser les assignations
       this.assignedEmployees.clear();
 
-      // 3. Générer planning selon priorités exactes
-      const planning = await this.generateBusinessLogicPlanning();
+      // 3. Générer planning selon priorités exactes (nouveau format)
+      const planning = await this.generateBusinessLogicPlanning(date);
 
       console.log('✅ Planning métier généré avec succès');
       return {
         success: true,
-        planning_optimal: planning,
+        planning: planning, // ✅ Nouveau format direct
         statistiques: {
-          postes_couverts: planning.length,
+          postes_couverts: Object.keys(planning[Object.keys(planning)[0]]).length - 1, // -1 pour absents
           employes_utilises: this.assignedEmployees.size,
           score_global: 100, // Logique métier = toujours optimal
           methode: 'Logique Métier Pure'
@@ -121,44 +121,53 @@ export class BusinessPlanningEngine {
 
   /**
    * 🎯 LOGIQUE MÉTIER PRINCIPALE - Génération Planning
+   * ✅ NOUVEAU FORMAT : Compatible avec CuisinePlanningSimple
    */
-  async generateBusinessLogicPlanning() {
-    const planning = [];
+  async generateBusinessLogicPlanning(selectedDate) {
+    // ✅ Structure finale comme logistique: planning[dateKey][posteId] = [employees]
+    const dateKey = selectedDate.toISOString().split('T')[0];
+    const planning = {};
+    planning[dateKey] = {};
 
-    // 🔥 PRIORITÉ 1: Pain = 2 personnes exactement
-    planning.push(...this.assignEmployeesToPoste('Pain', 2, 2));
+    // 🔥 PRIORITÉ 1: Pain = 2 personnes exactement (ID 8)
+    planning[dateKey][8] = this.assignEmployeesToPosteId('Pain', 2, 2);
 
-    // 🔥 PRIORITÉ 2: Sandwichs = 5 personnes exactement  
-    planning.push(...this.assignEmployeesToPoste('Sandwichs', 5, 5));
+    // 🔥 PRIORITÉ 2: Sandwichs = 5 personnes exactement (ID 1)
+    planning[dateKey][1] = this.assignEmployeesToPosteId('Sandwichs', 5, 5);
 
     // 🔥 PRIORITÉ 3: Self Midi = 4 personnes (2+2 créneaux)
-    planning.push(...this.assignEmployeesToPosteCreneau('Self Midi 11h-11h45', 2, 2));
-    planning.push(...this.assignEmployeesToPosteCreneau('Self Midi 11h45-12h45', 2, 2));
+    planning[dateKey][2] = this.assignEmployeesToPosteId('Self Midi', 2, 2); // 11h-11h45
+    planning[dateKey][3] = this.assignEmployeesToPosteId('Self Midi', 2, 2); // 11h45-12h45
 
     // 🔥 PRIORITÉ 4: Vaisselle = 7 personnes (1+3+3 créneaux)
-    planning.push(...this.assignEmployeesToPosteCreneau('Vaisselle 8h', 1, 1));
-    planning.push(...this.assignEmployeesToPosteCreneau('Vaisselle 10h', 3, 3));
-    planning.push(...this.assignEmployeesToPosteCreneau('Vaisselle midi', 3, 3));
+    planning[dateKey][5] = this.assignEmployeesToPosteId('Vaisselle', 1, 1); // 8h
+    planning[dateKey][6] = this.assignEmployeesToPosteId('Vaisselle', 3, 3); // 10h
+    planning[dateKey][7] = this.assignEmployeesToPosteId('Vaisselle', 3, 3); // midi
 
-    // 🔥 PRIORITÉ 5: Cuisine chaude = 4 à 7 personnes
-    planning.push(...this.assignEmployeesToPoste('Cuisine chaude', 4, 7));
+    // 🔥 PRIORITÉ 5: Cuisine chaude = 4 à 7 personnes (ID 4)
+    planning[dateKey][4] = this.assignEmployeesToPosteId('Cuisine chaude', 4, 7);
 
-    // 🔥 PRIORITÉ 6: Jus de fruits = 2 à 3 personnes
-    planning.push(...this.assignEmployeesToPoste('Jus de fruits', 2, 3));
+    // 🔥 PRIORITÉ 6: Jus de fruits = 2 à 3 personnes (ID 10)
+    planning[dateKey][10] = this.assignEmployeesToPosteId('Jus de fruits', 2, 3);
 
-    // 🔥 PRIORITÉ 7: Légumerie = 2 à 10 personnes
-    planning.push(...this.assignEmployeesToPoste('Légumerie', 2, 10));
+    // 🔥 PRIORITÉ 7: Légumerie = 2 à 10 personnes (ID 9)
+    planning[dateKey][9] = this.assignEmployeesToPosteId('Légumerie', 2, 10);
 
-    // 🔥 PRIORITÉ 8: Equipe Pina et Saskia = minimum 1 personne (restants)
-    planning.push(...this.assignEmployeesToPoste('Equipe Pina et Saskia', 1, 5));
+    // 🔥 PRIORITÉ 8: Equipe Pina et Saskia = minimum 1 personne (ID 11)
+    planning[dateKey][11] = this.assignEmployeesToPosteId('Equipe Pina et Saskia', 1, 5);
 
+    // Ajouter absents (comme logistique)
+    planning[dateKey].absents = [];
+
+    console.log('✅ Planning métier généré (nouveau format):', planning);
     return planning;
   }
 
   /**
-   * 👥 Assigner employés à un poste (avec vérification compétences)
+   * 👥 Assigner employés à un poste (NOUVEAU FORMAT SIMPLE)
+   * Retourne directement un array d'employés comme attendu par le planning
    */
-  assignEmployeesToPoste(posteName, minEmployees, maxEmployees) {
+  assignEmployeesToPosteId(posteName, minEmployees, maxEmployees) {
     const basePosteName = posteName.includes(' 8h') || posteName.includes(' 10h') || posteName.includes(' midi') || posteName.includes(' 11h') ? 
       posteName.split(' ')[0] + (posteName.includes('Self Midi') ? ' Midi' : '') : posteName;
 
@@ -186,24 +195,23 @@ export class BusinessPlanningEngine {
       console.log(`✅ ${emp.prenom} (${emp.profil}) → ${posteName}`);
     });
 
-    // Construire résultat
-    return [{
-      poste: posteName,
-      employes_assignes: selectedEmployees.map(emp => ({
-        prenom: emp.prenom,
-        role: this.determineRole(emp, posteName),
-        score_adequation: this.calculateAdequationScore(emp, basePosteName),
-        raison: `${emp.profil} + Compétent`
-      }))
-    }];
+    // ✅ NOUVEAU FORMAT : Retourner directement les employés au format interface
+    return selectedEmployees.map(emp => ({
+      id: emp.id,
+      prenom: emp.prenom,
+      nom: emp.prenom,
+      photo_url: emp.photo_url,
+      langue_parlee: emp.langue_parlee,
+      role: this.determineRole(emp, posteName),
+      status: 'assigned',
+      // Métadonnées génération pour debug
+      _generated: true,
+      _score: this.calculateAdequationScore(emp, basePosteName),
+      _raison: `${emp.profil} + Compétent`
+    }));
   }
 
-  /**
-   * 👥 Assigner employés à un poste avec créneau spécifique
-   */
-  assignEmployeesToPosteCreneau(posteCreneauName, minEmployees, maxEmployees) {
-    return this.assignEmployeesToPoste(posteCreneauName, minEmployees, maxEmployees);
-  }
+
 
   /**
    * 🎖️ Déterminer le rôle selon le profil

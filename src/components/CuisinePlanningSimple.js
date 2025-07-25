@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { businessPlanningEngine } from '../lib/business-planning-engine';
 
 const CuisinePlanningSimple = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   const [planning, setPlanning] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   
   // Données cuisine
   const [employees, setEmployees] = useState([]);
@@ -71,6 +73,43 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   useEffect(() => {
     loadCuisineData();
   }, [loadCuisineData]);
+
+  /**
+   * 🎯 GÉNÉRATION PLANNING MÉTIER - Compatible nouveau format
+   */
+  const handleGenerateAI = async () => {
+    try {
+      setAiLoading(true);
+      console.log('🎯 Démarrage génération planning métier...');
+      
+      // Génération métier
+      const result = await businessPlanningEngine.generateOptimalPlanning(selectedDate);
+      
+      if (result.success && result.planning) {
+        // ✅ Résultat déjà au bon format planning[dateKey][posteId] = [employees]
+        setPlanning(result.planning);
+        
+        const stats = result.statistiques;
+        toast.success(
+          `✅ Planning métier généré !\n` +
+          `📊 ${stats.employes_utilises} employés assignés\n` +
+          `🎯 ${stats.postes_couverts} postes couverts\n` +
+          `⚡ Méthode: ${stats.methode}`,
+          { duration: 4000 }
+        );
+        
+        console.log('✅ Planning métier appliqué:', result.planning);
+      } else {
+        throw new Error(result.error || 'Erreur génération métier');
+      }
+      
+    } catch (error) {
+      console.error('❌ Erreur génération métier:', error);
+      toast.error(`❌ Erreur génération métier: ${error.message}`);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   /**
    * ✅ COPIE EXACTE LOGISTIQUE : Créer un planning vide
@@ -557,6 +596,15 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
             >
               <Save className="w-4 h-4" />
               <span>{saving ? 'Sauvegarde...' : 'Sauvegarder'}</span>
+            </button>
+            
+            <button
+              onClick={handleGenerateAI}
+              disabled={aiLoading}
+              className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg transition-all duration-200 shadow-lg"
+            >
+              <span className="text-lg">{aiLoading ? '⚡' : '🎯'}</span>
+              <span>{aiLoading ? 'Génération Métier...' : 'Générer Planning Métier'}</span>
             </button>
             
             <button
