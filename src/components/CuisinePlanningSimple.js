@@ -59,8 +59,37 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         console.warn('⚠️ Erreur chargement absences:', absencesResult.error);
       }
       
-      setEmployees(employeesResult.data || []);
-      setAbsences(absencesResult.data || []);
+      const employees = employeesResult.data || [];
+      const absences = absencesResult.data || [];
+      
+      console.log('📊 Employés chargés:', employees.length);
+      console.log('📊 Absences chargées:', absences.length);
+      
+      // 🔍 DEBUG: Chercher Azmera spécifiquement
+      const azmera = employees.find(emp => 
+        emp.prenom && emp.prenom.toLowerCase().includes('azmera')
+      );
+      if (azmera) {
+        console.log('✅ Azmera trouvée dans employees:', {
+          id: azmera.id,
+          prenom: azmera.prenom,
+          actif: azmera.actif
+        });
+        
+        // Vérifier si elle est dans les absences
+        const azmeraAbsence = absences.find(abs => abs.employee_id === azmera.id);
+        if (azmeraAbsence) {
+          console.log('⚠️ Azmera marquée absente:', azmeraAbsence);
+        } else {
+          console.log('✅ Azmera PAS absente');
+        }
+      } else {
+        console.log('❌ Azmera NON trouvée dans employees');
+        console.log('📋 Tous les employés:', employees.map(e => e.prenom));
+      }
+      
+      setEmployees(employees);
+      setAbsences(absences);
       
     } catch (error) {
       console.error('❌ Erreur chargement données cuisine:', error);
@@ -261,7 +290,10 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         employeeWithRole
       ];
       
-      setPlanning(newPlanning);
+      // ✅ SOLUTION SIMPLE : Délai minimal pour éviter conflit avec react-beautiful-dnd
+      setTimeout(() => {
+        setPlanning(newPlanning);
+      }, 50);
       
       const posteInfo = postes.find(p => p.id === destPoste);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} assigné à ${posteInfo?.nom}`);
@@ -299,7 +331,10 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       // Retirer l'employé du planning
       newPlanning[sourceDate][sourcePoste].splice(source.index, 1);
       
-      setPlanning(newPlanning);
+      // ✅ SOLUTION SIMPLE : Délai minimal pour éviter conflit avec react-beautiful-dnd
+      setTimeout(() => {
+        setPlanning(newPlanning);
+      }, 50);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} désassigné`);
       
       return;
@@ -341,7 +376,10 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       newPlanning[sourceDate][sourcePoste].splice(source.index, 1);
       newPlanning[destDate][destPoste].splice(destination.index, 0, draggedEmployee);
       
-      setPlanning(newPlanning);
+      // ✅ SOLUTION SIMPLE : Délai minimal pour éviter conflit avec react-beautiful-dnd
+      setTimeout(() => {
+        setPlanning(newPlanning);
+      }, 50);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} déplacé`);
       
       return;

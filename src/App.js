@@ -23,6 +23,14 @@ import CollectesApp from './components/CollectesApp';
 import ModerationCollectes from './components/ModerationCollectes';
 import './index.css';
 
+// Composant pour protéger les routes avec authentification obligatoire
+const ProtectedRoute = ({ children, user }) => {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
 // Composant interne pour gérer la location
 const AppContent = ({ user, handleLogin, handleLogout }) => {
   const location = useLocation();
@@ -33,110 +41,166 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
   
   return (
     <>
-      {/* Afficher le header seulement si on n'est pas en mode TV ou collectes */}
-      {!isTVMode && !isCollectesApp && <MainHeader />}
+      {/* Afficher le header seulement si on n'est pas en mode TV ou collectes ET si l'utilisateur est connecté */}
+      {user && !isTVMode && !isCollectesApp && <MainHeader />}
       
       {/* Wrapper avec marge pour compenser le header flottant seulement si header visible */}
-      <div className={isTVMode || isCollectesApp ? '' : 'pt-20'}>
+      <div className={!user || isTVMode || isCollectesApp ? '' : 'pt-20'}>
         <Routes>
           <Route 
             path="/login" 
             element={
-              user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />
+              user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />
             } 
           />
+          
+          {/* 🔒 SÉCURISÉ : Route principale protégée */}
           <Route 
             path="/" 
-            element={user ? <HomeLanding /> : <Navigate to="/login" />}
+            element={
+              <ProtectedRoute user={user}>
+                <HomeLanding />
+              </ProtectedRoute>
+            }
           />
-          {/* ✅ NOUVEAU : Route pour l'application de collectes chauffeurs */}
+          
+          {/* 🔒 SÉCURISÉ : Application de collectes chauffeurs maintenant protégée */}
           <Route 
             path="/collectes" 
-            element={<CollectesApp onReturnToMain={() => window.location.href = '/'} />}
+            element={
+              <ProtectedRoute user={user}>
+                <CollectesApp onReturnToMain={() => window.location.href = '/'} />
+              </ProtectedRoute>
+            }
           />
+          
+          {/* 🔒 SÉCURISÉ : Toutes les routes logistique protégées */}
           <Route 
             path="/logistique"
-            element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+            element={
+              <ProtectedRoute user={user}>
+                <Dashboard user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/logistique/gestion"
-            element={user ? <LogistiqueManagement user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+            element={
+              <ProtectedRoute user={user}>
+                <LogistiqueManagement user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/logistique/planning"
-            element={user ? <PlanningView user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+            element={
+              <ProtectedRoute user={user}>
+                <PlanningView user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/logistique/absences"
-            element={user ? <AbsenceManagementLogistique user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+            element={
+              <ProtectedRoute user={user}>
+                <AbsenceManagementLogistique user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            }
           />
-          {/* ✅ NOUVEAU : Route pour la modération des collectes en logistique */}
           <Route 
             path="/logistique/collectes"
-            element={user ? <ModerationCollectes user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
+            element={
+              <ProtectedRoute user={user}>
+                <ModerationCollectes user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            }
           />
-          <Route path="/logistique/tv" element={<LogistiqueTVView />} />
+          
+          {/* 🔒 SÉCURISÉ : Mode TV logistique maintenant protégé */}
+          <Route 
+            path="/logistique/tv" 
+            element={
+              <ProtectedRoute user={user}>
+                <LogistiqueTVView />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* 🔒 SÉCURISÉ : Gestion des employés protégée */}
           <Route 
             path="/employees" 
             element={
-              user ? (
+              <ProtectedRoute user={user}>
                 <EmployeeManagement user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
+              </ProtectedRoute>
             } 
           />
+          
+          {/* 🔒 SÉCURISÉ : Planning protégé */}
           <Route 
             path="/planning" 
             element={
-              user ? (
+              <ProtectedRoute user={user}>
                 <PlanningView user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
+              </ProtectedRoute>
             } 
           />
+          
+          {/* 🔒 SÉCURISÉ : Absences protégées */}
           <Route 
             path="/absences" 
             element={
-              user ? (
+              <ProtectedRoute user={user}>
                 <AbsenceManagement user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
+              </ProtectedRoute>
             } 
           />
+          
+          {/* 🔒 SÉCURISÉ : Toutes les routes cuisine protégées */}
           <Route 
             path="/cuisine" 
             element={
-              user ? (
+              <ProtectedRoute user={user}>
                 <DashboardCuisine user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
+              </ProtectedRoute>
             } 
           />
+          
+          {/* 🔒 SÉCURISÉ : Secrétariat protégé */}
           <Route 
             path="/secretariat" 
             element={
-              user ? (
+              <ProtectedRoute user={user}>
                 <SecretariatManagement user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
+              </ProtectedRoute>
             } 
           />
+          
+          {/* 🔒 SÉCURISÉ : Absences cuisine protégées */}
           <Route 
             path="/cuisine/absences" 
             element={
-              user ? (
+              <ProtectedRoute user={user}>
                 <AbsenceManagementCuisine user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" />
-              )
+              </ProtectedRoute>
             } 
           />
-          <Route path="/cuisine/tv" element={<CuisinePlanningDisplay tvMode={true} />} />
+          
+          {/* 🔒 SÉCURISÉ : Mode TV cuisine maintenant protégé */}
+          <Route 
+            path="/cuisine/tv" 
+            element={
+              <ProtectedRoute user={user}>
+                <CuisinePlanningDisplay tvMode={true} />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* 🔒 SÉCURISÉ : Redirection par défaut vers login pour toute route non définie */}
+          <Route 
+            path="*" 
+            element={<Navigate to="/login" replace />}
+          />
         </Routes>
       </div>
     </>
@@ -151,7 +215,12 @@ function App() {
     // Vérifier si l'utilisateur est déjà connecté
     const savedUser = localStorage.getItem('caddy_user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (error) {
+        // Si erreur de parsing, nettoyer le localStorage
+        localStorage.removeItem('caddy_user');
+      }
     }
     setLoading(false);
   }, []);
@@ -164,12 +233,17 @@ function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('caddy_user');
+    // Rediriger vers login après déconnexion
+    window.location.href = '/login';
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+          <p className="text-primary-600 font-medium">Vérification de l'authentification...</p>
+        </div>
       </div>
     );
   }
@@ -183,9 +257,6 @@ function App() {
             handleLogin={handleLogin} 
             handleLogout={handleLogout} 
           />
-          
-          {/* Assistant IA flottant disponible partout */}
-          
         </Router>
       </PlanningDataProvider>
     </NotificationProvider>
