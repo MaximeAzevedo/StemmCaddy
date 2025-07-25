@@ -220,8 +220,7 @@ export const supabaseIACuisine = {
       const { data, error } = await supabase
         .rpc('get_employes_disponibles', {
           p_date: date,
-          p_heure_debut: heureDebut,
-          p_heure_fin: heureFin,
+                      // Plus besoin des heures - utilisation du créneau uniquement
           p_poste: poste
         });
 
@@ -251,7 +250,7 @@ export const supabaseIACuisine = {
         .select('*')
         .eq('semaine', semaine)
         .order('jour', { ascending: true })
-        .order('heure_debut', { ascending: true });
+        .order('creneau', { ascending: true });
 
       if (error) {
         console.error('Erreur getPlanningsIA:', error);
@@ -309,8 +308,7 @@ export const supabaseIACuisine = {
                 employe_nom: employe.employe_nom,
                 poste,
                 jour,
-                heure_debut: horaire.debut,
-                heure_fin: horaire.fin,
+                            // Structure simplifiée - créneau uniquement
                 statut: 'propose',
                 confidence_ia: 0.8,
                 raison_ia: `Assigné selon compétences disponibles pour ${poste}`

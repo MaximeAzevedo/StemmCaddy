@@ -134,7 +134,7 @@ export const unifiedSupabase = {
           }
         }
         
-        const { data, error } = await query.order('date').order('heure_debut');
+        const { data, error } = await query.order('date').order('creneau');
         
         return { data, error };
       } catch (err) {
@@ -164,7 +164,7 @@ export const unifiedSupabase = {
           }
         }
         
-        const { data, error } = await query.order('date').order('heure_debut');
+        const { data, error } = await query.order('date').order('creneau');
         
         if (error) throw error;
         
@@ -179,8 +179,7 @@ export const unifiedSupabase = {
             icone: item.poste_icone
           },
           creneau: item.creneau,
-          heure_debut: item.heure_debut,
-          heure_fin: item.heure_fin,
+          
           role: item.role,
           notes: item.notes,
           employee: item.employe ? {

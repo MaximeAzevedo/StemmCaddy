@@ -64,11 +64,11 @@ export const POSTES_RULES = {
   // 🧅 PRÉPARATION
   'Légumerie': {
     min: 1,
-    max: 2,
+    max: 10,
     priority: 6,
     needsCompetence: true, // ✅ CHANGÉ : Compétence obligatoire
     strictValidation: false,
-    description: 'Préparation légumes - 1-2 personnes (compétence requise)'
+    description: 'Préparation légumes - 1-10 personnes (compétence requise)'
   },
 
   // 🧃 FLEXIBLE - Boissons

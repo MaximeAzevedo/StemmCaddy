@@ -76,6 +76,36 @@ export const supabaseCuisine = {
     }
   },
 
+  /**
+   * Récupérer tous les créneaux de cuisine
+   * TEMPORAIRE : utilise des données en dur basées sur la config
+   */
+  async getCreneaux() {
+    try {
+      console.log('📊 getCreneaux - Chargement créneaux cuisine...');
+      
+      // TEMPORAIRE : créneaux basés sur ceux utilisés en base
+      const CRENEAUX_CUISINE = [
+        { id: 1, nom: '8h' },
+        { id: 2, nom: '10h' },
+        { id: 3, nom: 'midi' },
+        { id: 4, nom: '11h' },
+        { id: 5, nom: '11h45' },
+        { id: 6, nom: '8h-16h' },
+        { id: 7, nom: '8h-12h' },
+        { id: 8, nom: '11h-11h45' },
+        { id: 9, nom: '11h45-12h45' }
+      ];
+      
+      console.log('✅ Créneaux cuisine chargés (en dur):', CRENEAUX_CUISINE.length);
+      return { data: CRENEAUX_CUISINE, error: null };
+      
+    } catch (error) {
+      console.error('💥 Erreur critique getCreneaux:', error);
+      return { data: [], error };
+    }
+  },
+
   // ==================== PLANNING CUISINE ====================
   
   /**
@@ -100,7 +130,7 @@ export const supabaseCuisine = {
         }
       }
       
-      const { data, error } = await query.order('date').order('heure_debut');
+      const { data, error } = await query.order('date').order('creneau');
       
       if (error) {
         console.error('❌ Erreur getPlanningCuisine:', error);
@@ -424,166 +454,126 @@ export const supabaseCuisine = {
     }
   },
 
-  // ==================== PLANNING PARTAGÉ (remplace localStorage) ====================
+  // ==================== PLANNING CUISINE (copie exacte logistique) ====================
   
   /**
-   * Sauvegarder le planning complet en base de données
-   * Remplace localStorage pour partage multi-utilisateurs
-   * 🔧 CORRECTION : Nettoyage complet des anciennes données
+   * ✅ COPIE EXACTE LOGISTIQUE : Sauvegarder le planning cuisine
    */
-  async savePlanningPartage(boardData, selectedDate) {
+  async savePlanningCuisine(planningData, selectedDate) {
     try {
+      console.log('💾 Sauvegarde planning cuisine...');
+      
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       
-      // ✅ CORRECTION : Supprimer TOUTES les anciennes données de planning (pas seulement la date courante)
-      console.log('🧹 Nettoyage complet des anciennes données de planning...');
-      
-      // Option 1 : Supprimer toutes les données (table planning réinitialisée)
-      const { data: existingData, error: selectError } = await supabase
-        .from('planning_cuisine_new')
-        .select('date')
-        .limit(1);
-      
-      if (!selectError && existingData?.length > 0) {
-        // Il y a des données existantes, les supprimer toutes
-        const { error: deleteError } = await supabase
-          .from('planning_cuisine_new')
-          .delete()
-          .gte('date', '2020-01-01'); // Supprime tout depuis 2020 (pratiquement tout)
-        
-        if (deleteError) {
-          console.warn('⚠️ Erreur suppression complète, fallback suppression date courante:', deleteError);
-          // Fallback : supprimer seulement la date courante
-      await supabase
+      // Supprimer l'ancien planning pour cette date
+      const { error: deleteError } = await supabase
         .from('planning_cuisine_new')
         .delete()
         .eq('date', dateStr);
-        } else {
-          console.log('✅ Toutes les anciennes données supprimées');
-        }
-      } else {
-        console.log('✅ Aucune donnée existante à supprimer');
+      
+      if (deleteError) {
+        console.error('❌ Erreur suppression ancien planning:', deleteError);
+        throw deleteError;
       }
       
-      // 2. Préparer les nouvelles assignations (ASSIGNATIONS MULTIPLES AUTORISÉES)
-      const insertions = [];
+      // Mapper les rôles vers les valeurs autorisées en base
+      const mapRole = (role) => {
+        switch (role?.toLowerCase()) {
+          case 'chef':
+            return 'Chef';
+          case 'assistant':
+            return 'Assistant';
+          case 'equipier':
+          default:
+            return 'Équipier';
+        }
+      };
       
-      Object.entries(boardData).forEach(([cellId, employees]) => {
-        if (cellId === 'unassigned') return; // Ignorer les non-assignés
+      // Préparer les données à insérer
+      const insertData = [];
+      
+      Object.entries(planningData).forEach(([dateKey, dailyPlanning]) => {
+        if (dateKey !== dateStr) return; // On ne traite que la date sélectionnée
         
-        // Parser cellId → poste + créneau
-        const [poste, creneau] = cellId.split('-', 2);
-        if (!poste || !creneau) return;
-        
-        // Obtenir config poste
-        const posteConfig = POSTES_CUISINE.find(p => p.nom === poste) || {};
-        
-        employees.forEach(emp => {
-          // 🔧 DEBUG : Vérifier le créneau reçu
-          console.log(`🔍 DEBUG Créneau: "${creneau}" pour ${poste}`);
+        Object.entries(dailyPlanning).forEach(([posteId, employeeList]) => {
+          if (posteId === 'absents') return; // Ignorer la section absents
           
-          // ✅ CORRECTION : Parser créneau → heures début/fin (logique robuste)
-          let heure_debut, heure_fin;
+          const posteIdNum = parseInt(posteId);
+          if (isNaN(posteIdNum)) return;
           
-          try {
-            // Créneaux spéciaux prédéfinis
-            if (creneau === 'midi') {
-              heure_debut = '12:00:00';
-              heure_fin = '16:00:00';
-            } else if (creneau === '8h') {
-              heure_debut = '08:00:00';
-              heure_fin = '10:00:00';
-            } else if (creneau === '10h') {
-              heure_debut = '10:00:00';
-              heure_fin = '12:00:00';
-            } else if (creneau.includes('-')) {
-              // Format "8h-16h" ou "11h-11h45" ou "11h45-12h45"
-              const parts = creneau.split('-');
-              
-              // Parser heure de début
-              if (parts[0] && parts[0].includes('h')) {
-                const startParts = parts[0].split('h');
-                const hours = parseInt(startParts[0]) || 8;
-                const minutes = parseInt(startParts[1]) || 0;
-                heure_debut = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':00';
-      } else {
-                heure_debut = '08:00:00'; // fallback
-              }
-              
-              // Parser heure de fin
-              if (parts[1] && parts[1].includes('h')) {
-                const endParts = parts[1].split('h');
-                const hours = parseInt(endParts[0]) || 16;
-                const minutes = parseInt(endParts[1]) || 0;
-                heure_fin = hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':00';
-              } else {
-                heure_fin = '16:00:00'; // fallback
-    }
-            } else if (creneau.endsWith('h')) {
-              // Format générique "Xh" (ex: "14h")
-              const hour = parseInt(creneau.replace('h', '')) || 8;
-              heure_debut = hour.toString().padStart(2, '0') + ':00:00';
-              heure_fin = (hour + 2).toString().padStart(2, '0') + ':00:00';
-            } else {
-              // Fallback total pour créneaux non reconnus
-                console.warn(`⚠️ Créneau non reconnu: "${creneau}", utilisation fallback`);
-              heure_debut = '08:00:00';
-              heure_fin = '10:00:00';
-            }
-            
-            // 🔍 DEBUG : Vérifier le résultat du parsing
-            console.log(`⏰ Parsing "${creneau}" → ${heure_debut} - ${heure_fin}`);
-
-    } catch (error) {
-            console.error(`❌ Erreur parsing créneau "${creneau}":`, error);
-            heure_debut = '08:00:00';
-            heure_fin = '10:00:00';
-    }
+          // Trouver le nom du poste à partir de l'ID
+          const POSTES_MAP = {
+            1: 'Sandwichs',
+            2: 'Self Midi 11h-11h45', 
+            3: 'Self Midi 11h45-12h45',
+            4: 'Cuisine chaude',
+            5: 'Vaisselle 8h',
+            6: 'Vaisselle 10h',
+            7: 'Vaisselle midi',
+            8: 'Pain',
+            9: 'Légumerie',
+            10: 'Jus de fruits',
+            11: 'Equipe Pina et Saskia'
+          };
           
-          insertions.push({
-            employee_id: emp.employeeId,
-            date: dateStr,
-            poste: poste,
-            creneau: creneau,
-            heure_debut: heure_debut,
-            heure_fin: heure_fin,
-            role: emp.role || 'Équipier',
-            poste_couleur: posteConfig.couleur || '#6b7280',
-            poste_icone: posteConfig.icone || '👨‍🍳',
-            notes: emp.notes || null
+          const posteName = POSTES_MAP[posteIdNum];
+          if (!posteName) return;
+          
+          // Déterminer le créneau selon le poste
+          let creneau = '8h-16h'; // par défaut
+          if (posteName.includes('11h-11h45')) creneau = '11h-11h45';
+          else if (posteName.includes('11h45-12h45')) creneau = '11h45-12h45';
+          else if (posteName.includes('8h')) creneau = '8h';
+          else if (posteName.includes('10h')) creneau = '10h';
+          else if (posteName.includes('midi')) creneau = 'midi';
+          else if (posteName === 'Pain') creneau = '8h-12h';
+          
+          const posteBase = posteName.split(' ')[0]; // 'Vaisselle', 'Self', etc.
+          
+          employeeList.forEach(employee => {
+            insertData.push({
+              employee_id: employee.id,
+              date: dateStr,
+              poste: posteBase,
+              creneau: creneau,
+              role: mapRole(employee.role),
+              poste_couleur: '#6b7280',
+              poste_icone: '👨‍🍳',
+              notes: null
+            });
           });
         });
       });
       
-      console.log(`💾 Préparation sauvegarde: ${insertions.length} assignations (assignations multiples autorisées)`);
-      
-      // 3. Insérer toutes les assignations (plus de limitation UNIQUE)
-      if (insertions.length > 0) {
-        const { error } = await supabase
+      // Insérer le nouveau planning
+      if (insertData.length > 0) {
+        const { data, error: insertError } = await supabase
           .from('planning_cuisine_new')
-          .insert(insertions)
-          .select('id');
+          .insert(insertData)
+          .select();
         
-        if (error) {
-          console.error('❌ Erreur insertion planning:', error);
-          return { success: false, error };
+        if (insertError) {
+          console.error('❌ Erreur insertion planning:', insertError);
+          throw insertError;
         }
+        
+        console.log('✅ Planning sauvegardé:', data?.length, 'assignations');
+        return { data, error: null };
+      } else {
+        console.log('ℹ️ Aucune assignation à sauvegarder');
+        return { data: [], error: null };
       }
       
-      console.log(`💾 Planning partagé sauvegardé: ${insertions.length} assignations`);
-      return { success: true };
-
     } catch (error) {
-      console.error('❌ Erreur sauvegarde planning partagé:', error);
-      return { success: false, error };
+      console.error('💥 Erreur critique sauvegarde planning:', error);
+      return { data: null, error };
     }
   },
 
   /**
-   * Charger le planning complet depuis la base de données
-   * Remplace localStorage pour partage multi-utilisateurs
+   * ✅ COPIE EXACTE LOGISTIQUE : Charger le planning cuisine
    */
-  async loadPlanningPartage(selectedDate) {
+  async loadPlanningCuisine(selectedDate) {
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       
@@ -594,40 +584,65 @@ export const supabaseCuisine = {
           employe:employes_cuisine_new(id, prenom, photo_url, langue_parlee)
         `)
         .eq('date', dateStr)
-        .order('heure_debut');
+        .order('creneau');
       
       if (error) throw error;
       
-      // Convertir en format board compatible
-      const board = {};
+      // Convertir en format planning compatible (comme logistique)
+      const planning = {};
       
       data.forEach(entry => {
-        const cellId = `${entry.poste}-${entry.creneau}`;
+        let posteId;
         
-        if (!board[cellId]) {
-          board[cellId] = [];
-    }
+        // ✅ MAPPING EXACT: DB → Interface IDs
+        // Déterminer l'ID du poste selon le nom et créneau sauvegardés
+        if (entry.poste === 'Sandwichs') {
+          posteId = 1;
+        } else if (entry.poste === 'Self' && entry.creneau === '11h-11h45') {
+          posteId = 2;
+        } else if (entry.poste === 'Self' && entry.creneau === '11h45-12h45') {
+          posteId = 3;
+        } else if (entry.poste === 'Cuisine') {
+          posteId = 4;
+        } else if (entry.poste === 'Vaisselle' && entry.creneau === '8h') {
+          posteId = 5;
+        } else if (entry.poste === 'Vaisselle' && entry.creneau === '10h') {
+          posteId = 6;
+        } else if (entry.poste === 'Vaisselle' && entry.creneau === 'midi') {
+          posteId = 7;
+        } else if (entry.poste === 'Pain') {
+          posteId = 8;
+        } else if (entry.poste === 'Légumerie') {
+          posteId = 9;
+        } else if (entry.poste === 'Jus') {
+          posteId = 10;
+        } else if (entry.poste === 'Equipe') {
+          posteId = 11;
+        }
         
-        board[cellId].push({
-          draggableId: `db-${entry.id}`,
-          employeeId: entry.employee_id,
-          planningId: entry.id,
-          employee: {
-            id: entry.employe.id,
-            nom: entry.employe.prenom,
-            profil: entry.employe.langue_parlee || 'Standard'
-          },
-          photo_url: entry.employe.photo_url,
-          nom: entry.employe.prenom,
+        if (!posteId) {
+          console.warn(`⚠️ Poste non mappé: ${entry.poste} ${entry.creneau}`);
+          return;
+        }
+        
+        if (!planning[posteId]) {
+          planning[posteId] = [];
+        }
+        
+        // Structure d'employé compatible avec l'interface
+        planning[posteId].push({
+          id: entry.employe.id,
           prenom: entry.employe.prenom,
+          nom: entry.employe.prenom,
+          photo_url: entry.employe.photo_url,
+          langue_parlee: entry.employe.langue_parlee,
           role: entry.role,
-          notes: entry.notes,
-          isLocal: false
+          status: 'assigned'
         });
       });
       
-      console.log(`📥 Planning partagé chargé: ${data.length} assignations`);
-      return { data: board, error: null };
+      console.log('✅ Planning chargé depuis DB:', Object.keys(planning).length, 'postes');
+      return { data: planning, error: null };
       
     } catch (error) {
       console.error('❌ Erreur chargement planning partagé:', error);

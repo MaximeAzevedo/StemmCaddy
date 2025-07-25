@@ -84,7 +84,7 @@ const CuisinePlanningDisplay = () => {
       console.log(`📺 Chargement planning pour la date: ${dateParam}`);
       
       // ✅ UTILISER notre méthode robuste qui gère déjà tout
-      const result = await supabaseCuisine.loadPlanningPartage(new Date(dateParam));
+      const result = await supabaseCuisine.loadPlanningCuisine(new Date(dateParam));
 
       if (result.error) {
         console.error('❌ Erreur chargement planning TV:', result.error);
@@ -92,37 +92,60 @@ const CuisinePlanningDisplay = () => {
         return;
       }
 
-      const boardData = result.data || {};
-      console.log('📺 Board data reçu:', Object.keys(boardData).length, 'cellules');
+      const planningData = result.data || {};
+      console.log('📺 Planning data reçu:', Object.keys(planningData).length, 'postes');
       
-      // ✅ CONVERSION board → planning par poste pour la TV
+      // 🔍 DEBUG TV : Afficher les données exactes reçues
+      console.log('🔍 DEBUG TV - Données brutes reçues:', planningData);
+      Object.entries(planningData).forEach(([posteId, employees]) => {
+        console.log(`🔍 TV Poste "${posteId}":`, employees.map(emp => ({
+          id: emp.id,
+          nom: emp.prenom || emp.nom
+        })));
+      });
+      
+      // ✅ CONVERSION planning par posteId → planning par nom de poste pour la TV
       const planningByPoste = {};
       
-      Object.entries(boardData).forEach(([cellId, employees]) => {
-        if (cellId === 'unassigned') return; // Ignorer non-assignés
+      // ✅ MAPPING CORRECT : IDs vrais de CuisinePlanningSimple → noms TV
+      const POSTE_ID_TO_NAME = {
+        1: 'Sandwichs',                  // ✅ ID 1 vrai
+        2: 'Self Midi',                  // ✅ ID 2 vrai (11h-11h45)
+        3: 'Self Midi',                  // ✅ ID 3 vrai (11h45-12h45)  
+        4: 'Cuisine chaude',             // ✅ ID 4 vrai
+        5: 'Vaisselle',                  // ✅ ID 5 vrai (8h)
+        6: 'Vaisselle',                  // ✅ ID 6 vrai (10h)
+        7: 'Vaisselle',                  // ✅ ID 7 vrai (midi)
+        8: 'Pain',                       // ✅ ID 8 vrai
+        9: 'Légumerie',                  // ✅ ID 9 vrai
+        10: 'Jus de fruits',             // ✅ ID 10 vrai
+        11: 'Equipe Pina et Saskia'     // ✅ ID 11 vrai
+      };
+
+      Object.entries(planningData).forEach(([posteId, employees]) => {
+        const posteIdNum = parseInt(posteId);
+        const posteName = POSTE_ID_TO_NAME[posteIdNum];
         
-        // Parser cellId → poste + créneau  
-        const [poste, creneau] = cellId.split('-', 2);
-        if (!poste || !employees?.length) return;
+        if (!posteName || !employees?.length) return;
             
-            if (!planningByPoste[poste]) {
-              planningByPoste[poste] = [];
-            }
+        if (!planningByPoste[posteName]) {
+          planningByPoste[posteName] = [];
+        }
             
-        // Ajouter tous les employés de cette cellule
+        // Ajouter tous les employés de ce poste
         employees.forEach(emp => {
-            planningByPoste[poste].push({
-            id: emp.employeeId || emp.employee?.id,
-            prenom: emp.prenom || emp.nom || emp.employee?.nom,
+          planningByPoste[posteName].push({
+            id: emp.id,
+            prenom: emp.prenom || emp.nom,
             photo_url: emp.photo_url,
-            creneau: creneau,
-            poste: poste
-            });
+            poste: posteName,
+            role: emp.role
+          });
         });
-        });
+      });
       
       setPlanningData(planningByPoste);
-      console.log('📺 Planning final par poste:', planningByPoste);
+      console.log('📺 DEBUG TV - Planning final par poste:', planningByPoste);
       
     } catch (error) {
       console.error('❌ Erreur chargement planning TV:', error);
@@ -328,7 +351,11 @@ const CuisinePlanningDisplay = () => {
                                     src={employee.photo_url} 
                                     alt={employee.prenom}
                                     className="w-full h-full rounded-full object-cover"
-                                    style={{ width: `calc(${photoSizePx} - 4px)`, height: `calc(${photoSizePx} - 4px)` }}
+                                    style={{ 
+                                      width: `calc(${photoSizePx} - 4px)`, 
+                                      height: `calc(${photoSizePx} - 4px)`,
+                                      objectPosition: 'center top'
+                                    }}
                                   />
                                 ) : (
                                   <span className={`${allEmployeesForPoste.length <= 2 ? 'text-4xl' : 'text-2xl'} font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent`}>

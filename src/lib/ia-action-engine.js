@@ -641,8 +641,7 @@ export class IAActionEngine {
             employee_id: assignment.employee_id,
             poste: assignment.poste,
             creneau: 'Service', // Créneau par défaut
-            heure_debut: '08:00',
-            heure_fin: '16:00',
+            creneau: '8h-16h',
             role: assignment.role,
             notes: assignment.raison_ai,
             ai_generated: true

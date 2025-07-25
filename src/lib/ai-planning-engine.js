@@ -83,47 +83,90 @@ ${employeesAvailable.map(emp => `${emp.prenom} (${emp.profil})`).join(', ')}
 
 POSTES EXACTS: ${postesRequired.map(p => p.nom).join(', ')}
 
-🔥 RÈGLES MÉTIER ABSOLUES (ORDRE STRICT):
-1. Sandwichs = 5-6 personnes (PRIORITÉ 1)
-2. Pain = 2 personnes exactement (PRIORITÉ 2)
-3. Self Midi = 4 personnes total (2 à 11h-11h45 + 2 à 11h45-12h45)
-4. Vaisselle = 7 personnes total (1 à 8h + 3 à 10h + 3 à midi)
-5. Cuisine chaude = 4-7 personnes (commencer par 4)
-6. Jus de fruits = 2 personnes idéal, 1 minimum acceptable
-7. Equipe Pina et Saskia = minimum 1 personne
-8. Légumerie = DERNIER RECOURS uniquement après quotas complets
+🔥 RÈGLES MÉTIER ABSOLUES (ORDRE PRIORITÉ EXACT):
+1. Pain = 2 personnes exactement (PRIORITÉ 1)
+2. Sandwichs = 5 personnes exactement (PRIORITÉ 2)
+3. Self Midi = 4 personnes total RÉPARTIES EN :
+   - "Self Midi 11h-11h45" = 2 personnes exactement
+   - "Self Midi 11h45-12h45" = 2 personnes exactement
+4. Vaisselle = 7 personnes total RÉPARTIES EN :
+   - "Vaisselle 8h" = 1 personne exactement
+   - "Vaisselle 10h" = 3 personnes exactement  
+   - "Vaisselle midi" = 3 personnes exactement
+5. Cuisine chaude = 4 à 7 personnes (commencer par 4)
+6. Jus de fruits = 2 à 3 personnes
+7. Légumerie = 2 à 10 personnes
+8. Equipe Pina et Saskia = minimum 1 personne (DERNIER)
 
 🎯 STRATÉGIE OBLIGATOIRE:
-- Remplir EXACTEMENT les quotas dans l'ordre
-- Mix profils Fort+Moyen+Faible sur chaque poste
-- Légumerie seulement si tous les quotas sont atteints
+- Assigner dans l'ORDRE EXACT des priorités (Pain → Sandwichs → Self Midi → Vaisselle → etc.)
+- Pour Self Midi et Vaisselle: CRÉER DES POSTES SÉPARÉS pour chaque créneau
+- Mix profils Fort+Moyen+Faible quand possible
 - TOUS les ${employeesAvailable.length} employés DOIVENT être assignés
 
-CONTRAINTES JSON:
-- Utilisez EXACTEMENT les noms de postes donnés
-- Respectez les créneaux: Vaisselle(8h/10h/midi), Self Midi(11h-11h45/11h45-12h45)
-- Jamais de champs vides
+CONTRAINTES JSON CRITIQUES:
+- Self Midi = DEUX postes distincts: "Self Midi 11h-11h45" et "Self Midi 11h45-12h45"
+- Vaisselle = TROIS postes distincts: "Vaisselle 8h", "Vaisselle 10h", "Vaisselle midi"
+- Autres postes = noms standards: "Pain", "Sandwichs", "Cuisine chaude", "Jus de fruits", "Légumerie", "Equipe Pina et Saskia"
 - JSON parfait obligatoire
 
-RÉPONSE JSON PARFAIT (respectez la structure exacte):
+RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
 {
   "planning_optimal": [
     {
-      "poste": "Sandwichs",
+      "poste": "Pain",
       "employes_assignes": [
         {"prenom": "Aissatou", "role": "Chef", "score_adequation": 90, "raison": "Fort"},
-        {"prenom": "Mahmoud", "role": "Aide", "score_adequation": 75, "raison": "Moyen"}
+        {"prenom": "Jurom", "role": "Aide", "score_adequation": 75, "raison": "Moyen"}
+      ]
+    },
+    {
+      "poste": "Sandwichs", 
+      "employes_assignes": [
+        {"prenom": "Maria", "role": "Chef", "score_adequation": 95, "raison": "Fort"}
+      ]
+    },
+    {
+      "poste": "Self Midi 11h-11h45",
+      "employes_assignes": [
+        {"prenom": "Fatumata", "role": "Equipier", "score_adequation": 80, "raison": "Moyen"},
+        {"prenom": "Niyat", "role": "Equipier", "score_adequation": 75, "raison": "Moyen"}
+      ]
+    },
+    {
+      "poste": "Self Midi 11h45-12h45",
+      "employes_assignes": [
+        {"prenom": "Djenabou", "role": "Equipier", "score_adequation": 85, "raison": "Fort"},
+        {"prenom": "Kifle", "role": "Equipier", "score_adequation": 70, "raison": "Faible"}
+      ]
+    },
+    {
+      "poste": "Vaisselle 8h",
+      "employes_assignes": [
+        {"prenom": "Charif", "role": "Equipier", "score_adequation": 80, "raison": "Moyen"}
+      ]
+    },
+    {
+      "poste": "Vaisselle 10h",
+      "employes_assignes": [
+        {"prenom": "Carla", "role": "Equipier", "score_adequation": 75, "raison": "Moyen"}
+      ]
+    },
+    {
+      "poste": "Vaisselle midi",
+      "employes_assignes": [
+        {"prenom": "Nesrin", "role": "Equipier", "score_adequation": 70, "raison": "Faible"}
       ]
     }
   ],
   "statistiques": {
-    "postes_couverts": ${postesRequired.length},
+    "postes_couverts": 8,
     "employes_utilises": ${employeesAvailable.length},
     "score_global": 85
   },
   "recommandations": [
     "Priorités strictes respectées",
-    "Quotas exacts appliqués"
+    "Créneaux Self Midi et Vaisselle séparés correctement"
   ]
 }`;
 
@@ -546,8 +589,7 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte):
               date: date,
               poste: posteAssignment.poste,      // Nom du poste (string)
               creneau: 'Service complet',        // Créneau par défaut
-              heure_debut: '08:00:00',          // Format TIME requis
-              heure_fin: '16:00:00',            // Format TIME requis
+                          creneau: '8h-16h',                // Format simplifié
               role: employe.role || 'Équipier',
               notes: `Planning IA - ${employe.raison || 'Assignation optimisée'}`,
               // Les colonnes poste_couleur et poste_icone sont optionnelles (valeurs par défaut)
@@ -583,14 +625,14 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte):
         .eq('actif', true);
 
       const postes = [
-        { nom: 'Sandwichs', min: 5, max: 6, priority: 1 },        // ✅ PRIORITÉ 1
-        { nom: 'Pain', min: 2, max: 2, priority: 2 },             // ✅ PRIORITÉ 2
-        { nom: 'Self Midi', min: 4, max: 4, priority: 3 },        // ✅ PRIORITÉ 3
-        { nom: 'Vaisselle', min: 7, max: 7, priority: 4 },        // ✅ PRIORITÉ 4
-        { nom: 'Cuisine chaude', min: 4, max: 7, priority: 5 },   // ✅ PRIORITÉ 5
-        { nom: 'Jus de fruits', min: 2, max: 2, priority: 6 },    // ✅ PRIORITÉ 6
-        { nom: 'Equipe Pina et Saskia', min: 1, max: 3, priority: 7 }, // ✅ PRIORITÉ 7
-        { nom: 'Légumerie', min: 0, max: 5, priority: 8 }         // ✅ DERNIER RECOURS
+        { nom: 'Pain', min: 2, max: 2, priority: 1 },                    // ✅ PRIORITÉ 1
+        { nom: 'Sandwichs', min: 5, max: 5, priority: 2 },               // ✅ PRIORITÉ 2  
+        { nom: 'Self Midi', min: 4, max: 4, priority: 3 },               // ✅ PRIORITÉ 3
+        { nom: 'Vaisselle', min: 7, max: 7, priority: 4 },               // ✅ PRIORITÉ 4
+        { nom: 'Cuisine chaude', min: 4, max: 7, priority: 5 },          // ✅ PRIORITÉ 5
+        { nom: 'Jus de fruits', min: 2, max: 3, priority: 6 },           // ✅ PRIORITÉ 6
+        { nom: 'Légumerie', min: 2, max: 10, priority: 7 },              // ✅ PRIORITÉ 7
+        { nom: 'Equipe Pina et Saskia', min: 1, max: 5, priority: 8 }    // ✅ PRIORITÉ 8 (DERNIER)
       ];
 
       // 2. Appel IA pour optimisation
