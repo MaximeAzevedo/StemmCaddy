@@ -1,0 +1,14 @@
+{
+  "build": {
+    "env": {
+      "GENERATE_SOURCEMAP": "false",
+      "ESLINT_NO_DEV_ERRORS": "true",
+      "CI": "false"
+    }
+  },
+  "functions": {
+    "app/build/**": {
+      "maxDuration": 30
+    }
+  }
+} 
