@@ -88,10 +88,10 @@ const Dashboard = ({ user, onLogout }) => {
           {quickActions.map((action, index) => (
             <motion.div
               key={action.title}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 * index }}
-              whileHover={{ scale: 1.03 }}
+              initial={{ opacity: 0.8, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.05 * index }}
+              whileHover={{ scale: 1.02 }}
               className="bg-white rounded-2xl shadow-xl p-6 cursor-pointer group transition-all duration-300"
               onClick={action.onClick}
             >
@@ -109,9 +109,9 @@ const Dashboard = ({ user, onLogout }) => {
       <div className="flex flex-col items-center pt-8 pb-8">
         <h2 className="text-5xl font-bold text-gray-800 mb-8 text-center">Le mieux c'est maintenant</h2>
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
+          initial={{ opacity: 0.9, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
           className="relative group cursor-pointer"
         >
           {/* Effet de glow en arrière-plan */}

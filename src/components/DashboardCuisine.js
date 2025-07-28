@@ -95,9 +95,9 @@ const DashboardCuisine = ({ user, onLogout }) => {
             {quickActions.map((action, index) => (
               <motion.div
                 key={action.title}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 * index }}
+                initial={{ opacity: 0.8, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.05 * index }}
                 whileHover={{ scale: 1.02 }}
                 className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 cursor-pointer group"
                 onClick={() => handleQuickAction(action)}
