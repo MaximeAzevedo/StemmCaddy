@@ -21,12 +21,7 @@ const MainHeader = () => {
     window.location.href = '/login';
   };
 
-  const linkClass = (active) =>
-    `px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 backdrop-blur-sm ${
-      active
-        ? 'bg-white bg-opacity-30 text-white shadow-lg ring-2 ring-gray-300 border border-gray-300'
-        : 'text-white hover:bg-white hover:bg-opacity-20 hover:text-white border border-transparent hover:border-gray-300'
-    }`;
+  // Fonction linkClass supprimée - utilisation de boutons simples maintenant
 
   return (
     <header className="fixed top-2 left-1/2 transform -translate-x-1/2 z-50 w-3/4 max-w-6xl">
@@ -46,24 +41,39 @@ const MainHeader = () => {
 
           {/* Navigation au centre */}
           <nav className="flex items-center space-x-5 bg-white bg-opacity-10 backdrop-blur-sm rounded-xl px-4 py-1.5 shadow-lg border border-gray-300">
-            <NavLink 
-              to="/logistique" 
-              className={({ isActive }) => linkClass(isLogistique || isActive)}
+            <button 
+              onClick={() => navigate('/logistique')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                isLogistique 
+                  ? 'bg-white bg-opacity-30 text-white shadow-lg' 
+                  : 'text-white hover:bg-white hover:bg-opacity-20'
+              }`}
+              style={{ color: 'white', fontSize: '14px' }}
             >
               Logistique
-            </NavLink>
-            <NavLink 
-              to="/cuisine" 
-              className={({ isActive }) => linkClass(isCuisine || isActive)}
+            </button>
+            <button 
+              onClick={() => navigate('/cuisine')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                isCuisine 
+                  ? 'bg-white bg-opacity-30 text-white shadow-lg' 
+                  : 'text-white hover:bg-white hover:bg-opacity-20'
+              }`}
+              style={{ color: 'white', fontSize: '14px' }}
             >
               Cuisine
-            </NavLink>
-            <NavLink 
-              to="/secretariat" 
-              className={({ isActive }) => linkClass(isSecretariat || isActive)}
+            </button>
+            <button 
+              onClick={() => navigate('/secretariat')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                isSecretariat 
+                  ? 'bg-white bg-opacity-30 text-white shadow-lg' 
+                  : 'text-white hover:bg-white hover:bg-opacity-20'
+              }`}
+              style={{ color: 'white', fontSize: '14px' }}
             >
               Secrétariat
-            </NavLink>
+            </button>
           </nav>
 
           {/* Section utilisateur à droite */}
