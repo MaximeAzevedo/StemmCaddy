@@ -458,24 +458,30 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
         }
         
         // Assigner sur chaque créneau
+        // eslint-disable-next-line no-loop-func
         creneauxForPoste.forEach((creneau, creneauIndex) => {
           const needed = employeesNeededPerCreneau[creneauIndex] || 0;
           
-          for (let i = 0; i < needed && availableEmployees.length > 0; i++) {
+          // Créer une copie locale pour éviter les références dangereuses dans les fonctions
+          const initialAvailable = [...availableEmployees];
+          
+          for (let i = 0; i < needed && initialAvailable.length > i; i++) {
             let selectedEmployee;
+            const currentAvailable = [...availableEmployees];
             
-            if (i === 0 && profilsFort.some(emp => availableEmployees.includes(emp))) {
+            if (i === 0 && profilsFort.some(emp => currentAvailable.includes(emp))) {
               // Premier assigné = profil Fort si disponible
-              selectedEmployee = profilsFort.find(emp => availableEmployees.includes(emp));
-            } else if (profilsMoyen.some(emp => availableEmployees.includes(emp))) {
+              selectedEmployee = profilsFort.find(emp => currentAvailable.includes(emp));
+            } else if (profilsMoyen.some(emp => currentAvailable.includes(emp))) {
               // Ensuite privilégier Moyens
-              selectedEmployee = profilsMoyen.find(emp => availableEmployees.includes(emp));
+              selectedEmployee = profilsMoyen.find(emp => currentAvailable.includes(emp));
             } else {
               // Sinon prendre ce qui reste
-              selectedEmployee = availableEmployees[0];
+              selectedEmployee = currentAvailable[0];
             }
             
             if (selectedEmployee) {
+              // eslint-disable-next-line no-loop-func
               availableEmployees = availableEmployees.filter(emp => emp.id !== selectedEmployee.id);
               
               assignments.push({
@@ -588,8 +594,7 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
               employee_id: employeeDB.id,
               date: date,
               poste: posteAssignment.poste,      // Nom du poste (string)
-              creneau: 'Service complet',        // Créneau par défaut
-                          creneau: '8h-16h',                // Format simplifié
+              creneau: '8h-16h',                // Format simplifié
               role: employe.role || 'Équipier',
               notes: `Planning IA - ${employe.raison || 'Assignation optimisée'}`,
               // Les colonnes poste_couleur et poste_icone sont optionnelles (valeurs par défaut)

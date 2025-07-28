@@ -15,6 +15,8 @@ import AbsenceManagement from './components/AbsenceManagement';
 import AbsenceManagementCuisine from './components/AbsenceManagementCuisine';
 import DashboardCuisine from './components/DashboardCuisine';
 import CuisinePlanningDisplay from './components/CuisinePlanningDisplay';
+import PlanningNettoyage from './components/PlanningNettoyage';
+import NettoyagePlanningDisplay from './components/NettoyagePlanningDisplay';
 import SecretariatManagement from './components/SecretariatManagement';
 import MainHeader from './components/MainHeader';
 // ✅ NOUVEAU : Import de l'application de collectes chauffeurs
@@ -36,7 +38,7 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
   const location = useLocation();
   
   // Vérifier si on est en mode TV ou sur l'app collectes (pas de header)
-  const isTVMode = location?.pathname === '/cuisine/tv' || location?.pathname === '/logistique/tv';
+  const isTVMode = location?.pathname === '/cuisine/tv' || location?.pathname === '/logistique/tv' || location?.pathname === '/cuisine/nettoyage/tv';
   const isCollectesApp = location?.pathname === '/collectes';
   
   return (
@@ -192,6 +194,26 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
             element={
               <ProtectedRoute user={user}>
                 <CuisinePlanningDisplay tvMode={true} />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* 🔒 SÉCURISÉ : Planning nettoyage protégé */}
+          <Route 
+            path="/cuisine/nettoyage" 
+            element={
+              <ProtectedRoute user={user}>
+                <PlanningNettoyage user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* 🔒 SÉCURISÉ : Mode TV nettoyage protégé */}
+          <Route 
+            path="/cuisine/nettoyage/tv" 
+            element={
+              <ProtectedRoute user={user}>
+                <NettoyagePlanningDisplay tvMode={true} />
               </ProtectedRoute>
             }
           />

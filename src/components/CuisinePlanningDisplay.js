@@ -12,6 +12,8 @@ const CuisinePlanningDisplay = () => {
   const [currentGroup, setCurrentGroup] = useState(1); // 1 ou 2 pour alterner
   const [timeLeft, setTimeLeft] = useState(15); // Compte à rebours
   const [isPaused, setIsPaused] = useState(false); // État de pause
+  const [isNettoyageMode, setIsNettoyageMode] = useState(false); // Mode nettoyage
+  const [nettoyageData, setNettoyageData] = useState({}); // Données planning nettoyage
   
   // ✅ CORRECTION : Paramètres URL avec date dynamique
   const dateParam = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'); // Date du jour par défaut
@@ -27,6 +29,16 @@ const CuisinePlanningDisplay = () => {
     { id: 6, nom: 'Légumerie', couleur: '#10b981', icone: '🥬' },
     { id: 7, nom: 'Self Midi', couleur: '#8b5cf6', icone: '🍽️' },
     { id: 8, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥' }
+  ];
+
+  // ✅ ZONES NETTOYAGE MODE TV
+  const ZONES_NETTOYAGE = [
+    { id: 1, nom: 'Plonge', couleur: '#3b82f6', image: '/images/nettoyage/plonge.jpg', icone: '🧽' },
+    { id: 2, nom: 'Couloir sale et frigo', couleur: '#ef4444', image: '/images/nettoyage/couloir-sale-frigo.jpg', icone: '🚪' },
+    { id: 3, nom: 'Légumerie', couleur: '#10b981', image: '/images/nettoyage/legumerie.jpg', icone: '🥬' },
+    { id: 4, nom: 'Cuisine chaude', couleur: '#f59e0b', image: '/images/nettoyage/cuisine-chaude.jpg', icone: '🔥' },
+    { id: 5, nom: 'Sandwicherie et sous vide', couleur: '#8b5cf6', image: '/images/nettoyage/sandwicherie-sous-vide.jpg', icone: '🥪' },
+    { id: 6, nom: 'Couloir propre et frigo', couleur: '#22c55e', image: '/images/nettoyage/couloir-propre-frigo.jpg', icone: '✨' }
   ];
 
   // ✅ GROUPES DE ROTATION (4 postes par groupe)

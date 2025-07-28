@@ -994,6 +994,141 @@ export const supabaseCuisine = {
       console.warn('⚠️ Erreur suppression photo (non bloquant):', error);
       return { data: null, error: null };
     }
+  },
+
+  // ==================== PLANNING NETTOYAGE ====================
+
+  /**
+   * Sauvegarder le planning nettoyage
+   */
+  async savePlanningNettoyage(planning, selectedDate) {
+    try {
+      console.log('💾 Sauvegarde planning nettoyage...', { date: selectedDate, planning });
+      
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      
+      // Supprimer le planning existant pour cette date
+      const { error: deleteError } = await supabase
+        .from('planning_nettoyage_new')
+        .delete()
+        .eq('date', dateString);
+      
+      if (deleteError) {
+        console.error('❌ Erreur suppression planning existant:', deleteError);
+        throw deleteError;
+      }
+      
+      // Construire les nouvelles assignations
+      const assignments = [];
+      const dateKey = format(selectedDate, 'yyyy-MM-dd');
+      
+      if (planning[dateKey]) {
+        // Mapping zone_id → zone_nom
+        const ZONE_MAPPING = {
+          1: { nom: 'Plonge', couleur: '#3b82f6', icone: '🧽' },
+          2: { nom: 'Couloir sale et frigo', couleur: '#ef4444', icone: '🚪' },
+          3: { nom: 'Légumerie', couleur: '#10b981', icone: '🥬' },
+          4: { nom: 'Cuisine chaude', couleur: '#f59e0b', icone: '🔥' },
+          5: { nom: 'Sandwicherie et sous vide', couleur: '#8b5cf6', icone: '🥪' },
+          6: { nom: 'Couloir propre et frigo', couleur: '#22c55e', icone: '✨' }
+        };
+        
+        Object.entries(planning[dateKey]).forEach(([zoneId, employees]) => {
+          if (zoneId !== 'absents' && employees && employees.length > 0) {
+            const zoneIdNum = parseInt(zoneId);
+            const zoneInfo = ZONE_MAPPING[zoneIdNum];
+            
+            if (zoneInfo) {
+              employees.forEach(emp => {
+                assignments.push({
+                  employee_id: emp.id,
+                  date: dateString,
+                  zone_id: zoneIdNum,
+                  zone_nom: zoneInfo.nom,
+                  zone_couleur: zoneInfo.couleur,
+                  zone_icone: zoneInfo.icone,
+                  role: emp.role || 'Nettoyage',
+                  notes: emp.notes || null
+                });
+              });
+            }
+          }
+        });
+      }
+      
+      if (assignments.length === 0) {
+        console.log('📝 Aucune assignation à sauvegarder');
+        return { data: [], error: null };
+      }
+      
+      // Insérer les nouvelles assignations
+      const { data, error } = await supabase
+        .from('planning_nettoyage_new')
+        .insert(assignments)
+        .select();
+      
+      if (error) {
+        console.error('❌ Erreur insertion planning nettoyage:', error);
+        throw error;
+      }
+      
+      console.log(`✅ Planning nettoyage sauvegardé: ${assignments.length} assignations`);
+      return { data: data || [], error: null };
+      
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde planning nettoyage:', error);
+      return { data: null, error };
+    }
+  },
+
+  /**
+   * Charger le planning nettoyage pour une date
+   */
+  async loadPlanningNettoyage(selectedDate) {
+    try {
+      console.log('📋 Chargement planning nettoyage...', { date: selectedDate });
+      
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      
+      const { data, error } = await supabase
+        .from('planning_nettoyage_new')
+        .select(`
+          *,
+          employe:employes_cuisine_new(id, prenom, photo_url, langue_parlee)
+        `)
+        .eq('date', dateString)
+        .order('zone_id');
+      
+      if (error) {
+        console.error('❌ Erreur chargement planning nettoyage:', error);
+        throw error;
+      }
+      
+      // Convertir en format planning compatible
+      const planning = {};
+      
+      data?.forEach(entry => {
+        if (!planning[entry.zone_id]) {
+          planning[entry.zone_id] = [];
+        }
+        
+        planning[entry.zone_id].push({
+          id: entry.employe.id,
+          prenom: entry.employe.prenom,
+          photo_url: entry.employe.photo_url,
+          langue_parlee: entry.employe.langue_parlee,
+          role: entry.role,
+          status: 'assigned'
+        });
+      });
+      
+      console.log(`✅ Planning nettoyage chargé: ${data?.length || 0} assignations`);
+      return { data: planning, error: null };
+      
+    } catch (error) {
+      console.error('❌ Erreur chargement planning nettoyage:', error);
+      return { data: {}, error };
+    }
   }
 
 };

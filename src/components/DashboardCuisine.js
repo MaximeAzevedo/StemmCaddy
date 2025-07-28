@@ -1,23 +1,21 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   UserGroupIcon, 
   CalendarDaysIcon, 
   UserMinusIcon,
-  ClockIcon
+  ClockIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import CuisineManagement from './CuisineManagement';
 import AbsenceManagementCuisine from './AbsenceManagementCuisine';
-import CuisineAIAssistant from './CuisineAIAssistant';
+
 import CuisinePlanningSimple from './CuisinePlanningSimple';
 
 const DashboardCuisine = ({ user, onLogout }) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [stats] = useState({
-    totalEmployees: 29,
-    totalPostes: 9,
-    absencesToday: 2
-  });
 
   const quickActions = [
     {
@@ -40,6 +38,13 @@ const DashboardCuisine = ({ user, onLogout }) => {
       icon: UserMinusIcon,
       color: 'from-violet-500 to-purple-600',
       tab: 'absences'
+    },
+    {
+      title: 'Planning Nettoyage',
+      description: 'Répartir les employés dans les zones de nettoyage',
+      icon: SparklesIcon,
+      color: 'from-green-500 to-emerald-600',
+      action: () => navigate('/cuisine/nettoyage')
     }
   ];
 
@@ -81,44 +86,7 @@ const DashboardCuisine = ({ user, onLogout }) => {
           </p>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-orange-100">
-                <UserGroupIcon className="w-6 h-6 text-orange-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Employés cuisine</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalEmployees}</p>
-              </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-green-100">
-                <CalendarDaysIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Postes cuisine</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalPostes}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-full bg-red-100">
-                <UserMinusIcon className="w-6 h-6 text-red-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Absences aujourd'hui</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.absencesToday}</p>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Actions Rapides */}
         <div>
@@ -146,28 +114,36 @@ const DashboardCuisine = ({ user, onLogout }) => {
           </div>
         </div>
 
-        {/* Accès rapide au Mode TV */}
+        {/* Accès rapide aux Modes TV */}
         <div className="mt-12 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold mb-2">Mode TV Cuisine</h3>
-              <p className="text-purple-100">
-                Affichage en temps réel du planning cuisine pour les écrans de service
-              </p>
-            </div>
+          <div className="mb-4">
+            <h3 className="text-xl font-bold mb-2">Modes TV</h3>
+            <p className="text-purple-100">
+              Affichage en temps réel des plannings pour les écrans de service
+            </p>
+          </div>
+          
+          <div className="flex gap-4">
             <button
               onClick={() => window.open('/cuisine/tv','_blank')}
-              className="bg-white text-purple-600 px-6 py-3 rounded-lg font-medium hover:bg-purple-50 transition-colors flex items-center space-x-2"
+              className="flex-1 bg-white text-purple-600 px-6 py-3 rounded-lg font-medium hover:bg-purple-50 transition-colors flex items-center justify-center space-x-2"
             >
               <ClockIcon className="w-5 h-5" />
-              <span>Ouvrir Mode TV</span>
+              <span>Mode TV Planning</span>
+            </button>
+            
+            <button
+              onClick={() => window.open('/cuisine/nettoyage/tv','_blank')}
+              className="flex-1 bg-white/20 text-white border border-white/30 px-6 py-3 rounded-lg font-medium hover:bg-white/30 transition-colors flex items-center justify-center space-x-2"
+            >
+              <SparklesIcon className="w-5 h-5" />
+              <span>Mode TV Nettoyage</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Assistant IA spécialisé Cuisine */}
-      <CuisineAIAssistant />
+
     </div>
   );
 };

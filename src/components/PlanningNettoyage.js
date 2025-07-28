@@ -6,45 +6,75 @@ import {
   Zap,
   ArrowLeft,
   User,
-  Monitor
+  Sparkles,
+  Tv
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { supabaseCuisine } from '../lib/supabase-cuisine';
-import { businessPlanningEngine } from '../lib/business-planning-engine';
+import { supabaseCuisine } from '../lib/supabase-cuisine'; // Réutiliser la même base
 
-const CuisinePlanningSimple = ({ user, onLogout }) => {
+const PlanningNettoyage = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [planning, setPlanning] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
   
-  // Données cuisine
+  // Données employés
   const [employees, setEmployees] = useState([]);
   const [absences, setAbsences] = useState([]);
   
-  // ✅ SIMPLE : Postes fixes comme les véhicules en logistique
-  const postes = [
-    { id: 1, nom: 'Sandwichs', couleur: '#f59e0b', icone: '🥪' },
-    { id: 2, nom: 'Self Midi 11h-11h45', couleur: '#8b5cf6', icone: '🍽️' },
-    { id: 3, nom: 'Self Midi 11h45-12h45', couleur: '#8b5cf6', icone: '🍽️' },
-    { id: 4, nom: 'Cuisine chaude', couleur: '#ef4444', icone: '🔥' },
-    { id: 5, nom: 'Vaisselle 8h', couleur: '#3b82f6', icone: '🧽' },
-    { id: 6, nom: 'Vaisselle 10h', couleur: '#3b82f6', icone: '🧽' },
-    { id: 7, nom: 'Vaisselle midi', couleur: '#3b82f6', icone: '🧽' },
-    { id: 8, nom: 'Pain', couleur: '#eab308', icone: '🍞' },
-    { id: 9, nom: 'Légumerie', couleur: '#10b981', icone: '🥬' },
-    { id: 10, nom: 'Jus de fruits', couleur: '#22c55e', icone: '🧃' },
-    { id: 11, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥' }
+  // ✅ 6 ZONES DE NETTOYAGE avec images
+  const zones = [
+    { 
+      id: 1, 
+      nom: 'Plonge', 
+      couleur: '#3b82f6', 
+      image: '/images/nettoyage/plonge.jpg',
+      icone: '🧽'
+    },
+    { 
+      id: 2, 
+      nom: 'Couloir sale et frigo', 
+      couleur: '#ef4444', 
+      image: '/images/nettoyage/couloir-sale-frigo.jpg',
+      icone: '🚪'
+    },
+    { 
+      id: 3, 
+      nom: 'Légumerie', 
+      couleur: '#10b981', 
+      image: '/images/nettoyage/legumerie.jpg',
+      icone: '🥬'
+    },
+    { 
+      id: 4, 
+      nom: 'Cuisine chaude', 
+      couleur: '#f59e0b', 
+      image: '/images/nettoyage/cuisine-chaude.jpg',
+      icone: '🔥'
+    },
+    { 
+      id: 5, 
+      nom: 'Sandwicherie et sous vide', 
+      couleur: '#8b5cf6', 
+      image: '/images/nettoyage/sandwicherie-sous-vide.jpg',
+      icone: '🥪'
+    },
+    { 
+      id: 6, 
+      nom: 'Couloir propre et frigo', 
+      couleur: '#22c55e', 
+      image: '/images/nettoyage/couloir-propre-frigo.jpg',
+      icone: '✨'
+    }
   ];
 
   /**
-   * Chargement des données cuisine
+   * Chargement des données employés (même logique que cuisine)
    */
-  const loadCuisineData = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -62,37 +92,14 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       const employees = employeesResult.data || [];
       const absences = absencesResult.data || [];
       
-      console.log('📊 Employés chargés:', employees.length);
-      console.log('📊 Absences chargées:', absences.length);
-      
-      // 🔍 DEBUG: Chercher Azmera spécifiquement
-      const azmera = employees.find(emp => 
-        emp.prenom && emp.prenom.toLowerCase().includes('azmera')
-      );
-      if (azmera) {
-        console.log('✅ Azmera trouvée dans employees:', {
-          id: azmera.id,
-          prenom: azmera.prenom,
-          actif: azmera.actif
-        });
-        
-        // Vérifier si elle est dans les absences
-        const azmeraAbsence = absences.find(abs => abs.employee_id === azmera.id);
-        if (azmeraAbsence) {
-          console.log('⚠️ Azmera marquée absente:', azmeraAbsence);
-        } else {
-          console.log('✅ Azmera PAS absente');
-        }
-      } else {
-        console.log('❌ Azmera NON trouvée dans employees');
-        console.log('📋 Tous les employés:', employees.map(e => e.prenom));
-      }
+      console.log('🧹 Employés chargés pour nettoyage:', employees.length);
+      console.log('🧹 Absences chargées:', absences.length);
       
       setEmployees(employees);
       setAbsences(absences);
       
     } catch (error) {
-      console.error('❌ Erreur chargement données cuisine:', error);
+      console.error('❌ Erreur chargement données nettoyage:', error);
       toast.error('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
@@ -100,90 +107,48 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   }, [selectedDate]);
 
   useEffect(() => {
-    loadCuisineData();
-  }, [loadCuisineData]);
+    loadData();
+  }, [loadData]);
 
   /**
-   * 🎯 GÉNÉRATION PLANNING MÉTIER - Compatible nouveau format
-   */
-  const handleGenerateAI = async () => {
-    try {
-      setAiLoading(true);
-      console.log('🎯 Démarrage génération planning métier...');
-      
-      // Génération métier
-      const result = await businessPlanningEngine.generateOptimalPlanning(selectedDate);
-      
-      if (result.success && result.planning) {
-        // ✅ Résultat déjà au bon format planning[dateKey][posteId] = [employees]
-        setPlanning(result.planning);
-        
-        const stats = result.statistiques;
-        toast.success(
-          `✅ Planning métier généré !\n` +
-          `📊 ${stats.employes_utilises} employés assignés\n` +
-          `🎯 ${stats.postes_couverts} postes couverts\n` +
-          `⚡ Méthode: ${stats.methode}`,
-          { duration: 4000 }
-        );
-        
-        console.log('✅ Planning métier appliqué:', result.planning);
-      } else {
-        throw new Error(result.error || 'Erreur génération métier');
-      }
-      
-    } catch (error) {
-      console.error('❌ Erreur génération métier:', error);
-      toast.error(`❌ Erreur génération métier: ${error.message}`);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  /**
-   * ✅ COPIE EXACTE LOGISTIQUE : Créer un planning vide
+   * ✅ Créer un planning vide
    */
   const createEmptyPlanning = useCallback(() => {
     const dateKey = format(selectedDate, 'yyyy-MM-dd');
     const newPlanning = {};
     
     newPlanning[dateKey] = {
-      absents: [] // Section absents comme en logistique
+      absents: [] // Section absents
     };
     
-    postes.forEach(poste => {
-      newPlanning[dateKey][poste.id] = [];
+    zones.forEach(zone => {
+      newPlanning[dateKey][zone.id] = [];
     });
     
     setPlanning(newPlanning);
-    console.log('📅 Planning vide initialisé');
+    console.log('🧹 Planning nettoyage vide initialisé');
   }, [selectedDate]);
 
   /**
-   * ✅ COPIE EXACTE LOGISTIQUE : Initialisation planning
+   * ✅ Initialisation planning avec chargement DB et absences
    */
   const initializePlanning = useCallback(async () => {
-    if (postes.length === 0) return;
+    if (zones.length === 0) return;
     
     try {
       const dateKey = format(selectedDate, 'yyyy-MM-dd');
       
-      // Charger planning existant et absences
-      const [planningResult] = await Promise.all([
-        supabaseCuisine.loadPlanningCuisine(selectedDate)
-      ]);
+      // Charger planning existant depuis la DB
+      const planningResult = await supabaseCuisine.loadPlanningNettoyage(selectedDate);
       
-      const planningData = planningResult.data || {};
-      
-      // Créer le planning final avec absences
       const finalPlanning = {};
       finalPlanning[dateKey] = {
         absents: [] // Initialiser la section absents
       };
       
-      // Initialiser tous les postes avec les données existantes ou vide
-      postes.forEach(poste => {
-        finalPlanning[dateKey][poste.id] = planningData[poste.id] || [];
+      // Initialiser toutes les zones avec les données existantes ou vide
+      zones.forEach(zone => {
+        finalPlanning[dateKey][zone.id] = planningResult.data[zone.id] || [];
       });
       
       // Ajouter les employés absents
@@ -200,22 +165,84 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       });
       
       setPlanning(finalPlanning);
-      console.log('✅ Planning initialisé');
+      console.log('✅ Planning nettoyage initialisé avec données DB');
       
     } catch (error) {
-      console.error('❌ Erreur initialisation planning:', error);
+      console.error('❌ Erreur initialisation planning nettoyage:', error);
       createEmptyPlanning();
     }
   }, [selectedDate, createEmptyPlanning, absences]);
 
   useEffect(() => {
-    if (!loading && postes.length > 0) {
+    if (!loading && zones.length > 0) {
       initializePlanning();
     }
   }, [loading, selectedDate, initializePlanning]);
 
   /**
-   * ✅ COPIE EXACTE LOGISTIQUE : Drag & Drop
+   * 🎯 Génération automatique simple : répartir équitablement
+   */
+  const handleGenerateAuto = async () => {
+    try {
+      const dateKey = format(selectedDate, 'yyyy-MM-dd');
+      const availableEmployees = employees.filter(emp => 
+        emp.actif && !absences.some(absence => absence.employee_id === emp.id)
+      );
+
+      if (availableEmployees.length === 0) {
+        toast.error('Aucun employé disponible pour le nettoyage');
+        return;
+      }
+
+      const newPlanning = { ...planning };
+      if (!newPlanning[dateKey]) {
+        newPlanning[dateKey] = { absents: [] };
+        zones.forEach(zone => {
+          newPlanning[dateKey][zone.id] = [];
+        });
+      }
+
+      // Vider toutes les zones
+      zones.forEach(zone => {
+        newPlanning[dateKey][zone.id] = [];
+      });
+
+      // Répartition équitable
+      const employeesPerZone = Math.floor(availableEmployees.length / zones.length);
+      const remainingEmployees = availableEmployees.length % zones.length;
+
+      let employeeIndex = 0;
+      
+      zones.forEach((zone, zoneIndex) => {
+        const employeesForThisZone = employeesPerZone + (zoneIndex < remainingEmployees ? 1 : 0);
+        
+        for (let i = 0; i < employeesForThisZone && employeeIndex < availableEmployees.length; i++) {
+          newPlanning[dateKey][zone.id].push({
+            ...availableEmployees[employeeIndex],
+            status: 'assigned',
+            role: 'Nettoyage'
+          });
+          employeeIndex++;
+        }
+      });
+
+      setPlanning(newPlanning);
+      
+      toast.success(
+        `✅ Planning nettoyage généré !\n` +
+        `🧹 ${availableEmployees.length} employés répartis\n` +
+        `📍 ${zones.length} zones couvertes`,
+        { duration: 3000 }
+      );
+      
+    } catch (error) {
+      console.error('❌ Erreur génération auto nettoyage:', error);
+      toast.error('Erreur lors de la génération automatique');
+    }
+  };
+
+  /**
+   * ✅ Drag & Drop (même logique que cuisine, sans vérification compétences)
    */
   const onDragEnd = useCallback(async (result) => {
     const { destination, source, draggableId } = result;
@@ -226,7 +253,6 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       return;
     }
     
-    // Vérifications de base
     if (employees.length === 0) {
       toast.error('Données non chargées, veuillez patienter');
       return;
@@ -239,11 +265,9 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
 
     const dateKey = format(selectedDate, 'yyyy-MM-dd');
 
-    // =================== GESTION DES ABSENTS ===================
+    // Gestion des absents (lecture seule)
     if (destination.droppableId.startsWith('absents_') || source.droppableId.startsWith('absents_')) {
-      toast.error('👁️ Section absents en lecture seule - Utilisez la gestion des absences', { 
-        duration: 3000 
-      });
+      toast.error('👁️ Section absents en lecture seule', { duration: 3000 });
       return;
     }
     
@@ -258,7 +282,6 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         return;
       }
 
-      // ✅ COPIE LOGISTIQUE : Parser avec underscore
       const parts = destination.droppableId.split('_');
       
       if (parts.length !== 2) {
@@ -267,34 +290,32 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         return;
       }
       
-      const [destDate, destPosteId] = parts;
-      const destPoste = parseInt(destPosteId);
+      const [destDate, destZoneId] = parts;
+      const destZone = parseInt(destZoneId);
       
-      if (!planning[destDate] || !planning[destDate][destPoste]) {
-        console.error('❌ Destination invalide:', { destDate, destPoste });
+      if (!planning[destDate] || !planning[destDate][destZone]) {
+        console.error('❌ Destination invalide:', { destDate, destZone });
         toast.error('Destination invalide');
         return;
       }
       
       const newPlanning = { ...planning };
       
-      // Assigner l'employé
       const employeeWithRole = {
         ...draggedEmployee, 
         status: 'assigned',
-        role: 'Équipier'
+        role: 'Nettoyage'
       };
       
-      newPlanning[destDate][destPoste] = [
-        ...newPlanning[destDate][destPoste],
+      newPlanning[destDate][destZone] = [
+        ...newPlanning[destDate][destZone],
         employeeWithRole
       ];
       
-      // ✅ Mise à jour directe sans délai
       setPlanning(newPlanning);
       
-      const posteInfo = postes.find(p => p.id === destPoste);
-      toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} assigné à ${posteInfo?.nom}`);
+      const zoneInfo = zones.find(z => z.id === destZone);
+      toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} assigné à ${zoneInfo?.nom}`);
       
       return;
     }
@@ -308,35 +329,33 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         return;
       }
       
-      const [sourceDate, sourcePosteId] = sourceParts;
-      const sourcePoste = parseInt(sourcePosteId);
+      const [sourceDate, sourceZoneId] = sourceParts;
+      const sourceZone = parseInt(sourceZoneId);
       
       const newPlanning = { ...planning };
       
-      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourcePoste]) {
-        console.error('❌ Source invalide:', { sourceDate, sourcePoste });
+      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceZone]) {
+        console.error('❌ Source invalide:', { sourceDate, sourceZone });
         toast.error('Source invalide');
         return;
       }
       
-      const draggedEmployee = newPlanning[sourceDate][sourcePoste][source.index];
+      const draggedEmployee = newPlanning[sourceDate][sourceZone][source.index];
       if (!draggedEmployee) {
         console.error('❌ Employé non trouvé à l\'index:', source.index);
         toast.error('Employé non trouvé');
         return;
       }
       
-      // Retirer l'employé du planning
-      newPlanning[sourceDate][sourcePoste].splice(source.index, 1);
+      newPlanning[sourceDate][sourceZone].splice(source.index, 1);
       
-      // ✅ Mise à jour directe sans délai
       setPlanning(newPlanning);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} désassigné`);
       
       return;
     }
     
-    // Déplacement entre cases du planning
+    // Déplacement entre zones du planning
     if (draggableId.startsWith('planning-')) {
       const sourceParts = source.droppableId.split('_');
       const destParts = destination.droppableId.split('_');
@@ -347,32 +366,31 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         return;
       }
       
-      const [sourceDate, sourcePosteId] = sourceParts;
-      const [destDate, destPosteId] = destParts;
-      const sourcePoste = parseInt(sourcePosteId);
-      const destPoste = parseInt(destPosteId);
+      const [sourceDate, sourceZoneId] = sourceParts;
+      const [destDate, destZoneId] = destParts;
+      const sourceZone = parseInt(sourceZoneId);
+      const destZone = parseInt(destZoneId);
       
       const newPlanning = { ...planning };
       
-      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourcePoste]) {
+      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceZone]) {
         console.error('❌ Source invalide');
         toast.error('Source invalide');
         return;
       }
       if (!newPlanning[destDate]) newPlanning[destDate] = {};
-      if (!newPlanning[destDate][destPoste]) newPlanning[destDate][destPoste] = [];
+      if (!newPlanning[destDate][destZone]) newPlanning[destDate][destZone] = [];
       
-      const draggedEmployee = newPlanning[sourceDate][sourcePoste][source.index];
+      const draggedEmployee = newPlanning[sourceDate][sourceZone][source.index];
       if (!draggedEmployee) {
         console.error('❌ Employé non trouvé à l\'index:', source.index);
         toast.error('Employé non trouvé');
         return;
       }
       
-      newPlanning[sourceDate][sourcePoste].splice(source.index, 1);
-      newPlanning[destDate][destPoste].splice(destination.index, 0, draggedEmployee);
+      newPlanning[sourceDate][sourceZone].splice(source.index, 1);
+      newPlanning[destDate][destZone].splice(destination.index, 0, draggedEmployee);
       
-      // ✅ Mise à jour directe sans délai
       setPlanning(newPlanning);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} déplacé`);
       
@@ -384,7 +402,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   }, [selectedDate, employees, planning]);
 
   /**
-   * ✅ COPIE EXACTE LOGISTIQUE : Sauvegarde
+   * ✅ Sauvegarde en base de données
    */
   const savePlanning = async () => {
     if (Object.keys(planning).length === 0) {
@@ -394,24 +412,24 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
 
     try {
       setSaving(true);
-      toast.loading('💾 Sauvegarde en cours...', { id: 'save-planning' });
+      toast.loading('💾 Sauvegarde planning nettoyage...', { id: 'save-nettoyage' });
       
-      const result = await supabaseCuisine.savePlanningCuisine(planning, selectedDate);
+      const result = await supabaseCuisine.savePlanningNettoyage(planning, selectedDate);
       
       if (result.error) {
         throw result.error;
       }
       
       const totalAssignations = result.data?.length || 0;
-      toast.success(`✅ Planning sauvegardé ! (${totalAssignations} assignations)`, { 
-        id: 'save-planning',
+      toast.success(`✅ Planning nettoyage sauvegardé ! (${totalAssignations} assignations)`, { 
+        id: 'save-nettoyage',
         duration: 3000 
       });
       
     } catch (error) {
-      console.error('❌ Erreur sauvegarde planning:', error);
+      console.error('❌ Erreur sauvegarde planning nettoyage:', error);
       toast.error(`❌ Erreur sauvegarde: ${error.message}`, { 
-        id: 'save-planning',
+        id: 'save-nettoyage',
         duration: 4000 
       });
     } finally {
@@ -423,9 +441,9 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
    * Reset du planning
    */
   const resetPlanning = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir réinitialiser le planning ?')) {
+    if (window.confirm('Êtes-vous sûr de vouloir réinitialiser le planning nettoyage ?')) {
       createEmptyPlanning();
-      toast.success('Planning réinitialisé');
+      toast.success('Planning nettoyage réinitialisé');
     }
   };
 
@@ -433,31 +451,11 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
    * ✅ Employés disponibles (non absents)
    */
   const availableEmployees = employees.filter(emp => 
-    !absences.some(absence => absence.employee_id === emp.id)
+    emp.actif && !absences.some(absence => absence.employee_id === emp.id)
   );
 
   /**
-   * ✅ Obtenir les employés assignés
-   */
-  const getAssignedEmployeeIds = () => {
-    const dateKey = format(selectedDate, 'yyyy-MM-dd');
-    const assignedIds = new Set();
-    
-    if (planning[dateKey]) {
-      Object.entries(planning[dateKey]).forEach(([key, employeeList]) => {
-        if (key !== 'absents') {
-          employeeList.forEach(emp => {
-            assignedIds.add(emp.id);
-          });
-        }
-      });
-    }
-    
-    return assignedIds;
-  };
-
-  /**
-   * ✅ COPIE LOGISTIQUE : Rendu employé dans pool
+   * ✅ Rendu employé dans pool
    */
   const renderEmployeeInPool = (employee, index) => (
     <Draggable draggableId={`employee-${employee.id}`} index={index} key={employee.id}>
@@ -495,7 +493,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   );
 
   /**
-   * ✅ COPIE LOGISTIQUE : Rendu employé assigné
+   * ✅ Rendu employé assigné
    */
   const renderAssignedEmployee = (employee, index) => (
     <Draggable draggableId={`planning-${employee.id}-${index}`} index={index} key={`${employee.id}-${index}`}>
@@ -530,25 +528,37 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   );
 
   /**
-   * ✅ COPIE LOGISTIQUE : Rendu colonne poste
+   * ✅ Rendu colonne zone
    */
-  const getPosteColumn = (poste, dateKey) => {
-    const posteEmployees = planning[dateKey]?.[poste.id] || [];
-    const droppableId = `${dateKey}_${poste.id}`;
+  const getZoneColumn = (zone, dateKey) => {
+    const zoneEmployees = planning[dateKey]?.[zone.id] || [];
+    const droppableId = `${dateKey}_${zone.id}`;
 
     return (
-      <div key={poste.id} className="bg-white rounded-lg shadow-sm border border-gray-200">
-        {/* Header du poste */}
+      <div key={zone.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+        {/* Header de la zone avec image */}
         <div 
-          className="p-3 rounded-t-lg text-white font-bold text-center"
-          style={{ backgroundColor: poste.couleur }}
+          className="p-4 text-white font-bold text-center relative"
+          style={{ backgroundColor: zone.couleur }}
         >
-          <div className="flex items-center justify-center space-x-2">
-            <span>{poste.icone}</span>
-            <span className="text-sm">{poste.nom}</span>
-          </div>
-          <div className="text-xs opacity-80 mt-1">
-            {posteEmployees.length} employé{posteEmployees.length > 1 ? 's' : ''}
+          {/* Image de fond si disponible */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ 
+              backgroundImage: `url(${zone.image})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }}
+          ></div>
+          
+          <div className="relative z-10">
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <span className="text-2xl">{zone.icone}</span>
+              <h3 className="text-lg font-bold">{zone.nom}</h3>
+            </div>
+            <div className="text-sm opacity-90">
+              {zoneEmployees.length} employé{zoneEmployees.length > 1 ? 's' : ''}
+            </div>
           </div>
         </div>
 
@@ -558,18 +568,19 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
             <div
               ref={provided.innerRef}
               {...provided.droppableProps}
-              className={`p-3 min-h-[120px] ${
+              className={`p-4 min-h-[120px] ${
                 snapshot.isDraggingOver 
                   ? 'bg-blue-50 border-blue-200' 
                   : 'bg-gray-50'
               }`}
             >
-              {posteEmployees.map((emp, idx) => renderAssignedEmployee(emp, idx))}
+              {zoneEmployees.map((emp, idx) => renderAssignedEmployee(emp, idx))}
               {provided.placeholder}
               
-              {posteEmployees.length === 0 && (
-                <div className="text-center text-gray-400 text-xs py-4">
-                  Glisser un employé ici
+              {zoneEmployees.length === 0 && (
+                <div className="text-center text-gray-400 text-xs py-8">
+                  <div className="mb-2">{zone.icone}</div>
+                  <div>Glisser un employé ici</div>
                 </div>
               )}
             </div>
@@ -583,9 +594,9 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-3 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Chargement du planning</h3>
-          <p className="text-gray-600">Préparation des données cuisine...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-3 border-gray-200 border-t-green-600 mx-auto mb-4"></div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Chargement du planning nettoyage</h3>
+          <p className="text-gray-600">Préparation des données...</p>
         </div>
       </div>
     );
@@ -600,30 +611,23 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🔙 Bouton retour cliqué - Navigation directe vers /cuisine');
-                // Navigation directe - plus fiable
-                window.location.href = '/cuisine';
-              }}
-              type="button"
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer border border-gray-300"
+              onClick={() => navigate('/cuisine')}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Retour</span>
             </button>
             
             <div className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <h1 className="text-xl font-bold text-gray-800">Planning Cuisine</h1>
+              <Sparkles className="w-5 h-5 text-green-600" />
+              <h1 className="text-xl font-bold text-gray-800">Planning Nettoyage</h1>
             </div>
             
             <input
               type="date"
               value={format(selectedDate, 'yyyy-MM-dd')}
               onChange={(e) => setSelectedDate(new Date(e.target.value))}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
             />
           </div>
 
@@ -638,12 +642,19 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
             </button>
             
             <button
-              onClick={handleGenerateAI}
-              disabled={aiLoading}
-              className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg transition-all duration-200 shadow-lg"
+              onClick={handleGenerateAuto}
+              className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg transition-all duration-200 shadow-lg"
             >
-              <span className="text-lg">{aiLoading ? '⚡' : '🎯'}</span>
-              <span>{aiLoading ? 'Génération Métier...' : 'Générer Planning Métier'}</span>
+              <Sparkles className="w-4 h-4" />
+              <span>Répartir Automatiquement</span>
+            </button>
+            
+            <button
+              onClick={() => window.open(`/cuisine/nettoyage/tv?date=${format(selectedDate, 'yyyy-MM-dd')}`, '_blank')}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200"
+            >
+              <Tv className="w-4 h-4" />
+              <span>Mode TV</span>
             </button>
             
             <button
@@ -652,17 +663,6 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
             >
               <Zap className="w-4 h-4" />
               <span>Reset</span>
-            </button>
-            
-            <button
-              onClick={() => {
-                const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                window.open(`/cuisine/tv?date=${dateStr}`, '_blank');
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Monitor className="w-4 h-4" />
-              <span>Mode TV</span>
             </button>
           </div>
         </div>
@@ -673,7 +673,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
           {/* Colonne employés disponibles */}
           <div className="w-80 flex-shrink-0">
             <div className="bg-white rounded-xl shadow-lg border border-gray-200">
-              <div className="bg-blue-600 p-4 rounded-t-xl">
+              <div className="bg-green-600 p-4 rounded-t-xl">
                 <div className="flex items-center gap-2 text-white">
                   <User className="w-5 h-5" />
                   <h2 className="text-lg font-bold">
@@ -689,7 +689,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`min-h-[400px] ${
-                        snapshot.isDraggingOver ? 'bg-blue-50' : ''
+                        snapshot.isDraggingOver ? 'bg-green-50' : ''
                       }`}
                     >
                       {availableEmployees.map((emp, idx) => renderEmployeeInPool(emp, idx))}
@@ -701,9 +701,9 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
             </div>
           </div>
 
-          {/* Planning postes */}
-          <div className="flex-1 grid grid-cols-4 gap-4">
-            {postes.map(poste => getPosteColumn(poste, dateKey))}
+          {/* Zones de nettoyage */}
+          <div className="flex-1 grid grid-cols-3 gap-4">
+            {zones.map(zone => getZoneColumn(zone, dateKey))}
           </div>
         </div>
       </DragDropContext>
@@ -711,4 +711,4 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   );
 };
 
-export default CuisinePlanningSimple; 
+export default PlanningNettoyage; 

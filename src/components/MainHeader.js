@@ -70,18 +70,6 @@ const MainHeader = () => {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                {/* Informations utilisateur */}
-                <div className="flex items-center space-x-3 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-1.5 shadow-lg border border-white/20">
-                  <div className="w-6 h-6 bg-white/25 rounded-full flex items-center justify-center">
-                    <span className="text-white font-bold text-xs">
-                      {(user.nom || user.prenom || user.username || 'U').charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <span className="text-white/90 text-sm font-medium">
-                    {user.nom || user.prenom || user.username || 'Anonyme'}
-                  </span>
-                </div>
-                
                 {/* Bouton déconnexion */}
                 <button
                   onClick={handleLogout}
