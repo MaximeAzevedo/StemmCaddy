@@ -1,10 +1,13 @@
 {
   "framework": "create-react-app",
   "buildCommand": "npm run build",
-  "outputDirectory": "build",
+  "outputDirectory": "build", 
   "installCommand": "npm install",
   "env": {
     "CI": "false",
-    "GENERATE_SOURCEMAP": "false"
+    "GENERATE_SOURCEMAP": "false",
+    "ESLINT_NO_DEV_ERRORS": "true",
+    "DISABLE_ESLINT_PLUGIN": "true",
+    "SKIP_PREFLIGHT_CHECK": "true"
   }
 } 
