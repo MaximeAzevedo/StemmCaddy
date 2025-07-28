@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { supabaseAPI } from '../lib/supabase';
 
 const Login = ({ onLogin }) => {
   const [credentials, setCredentials] = useState({
-    email: 'maxime@caddy.lu',
+    username: 'maxime',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -17,35 +16,28 @@ const Login = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      // Tentative de connexion avec Supabase
-      const { data, error } = await supabaseAPI.signIn(credentials.email, credentials.password);
+      // Système de connexion par nom d'utilisateur
+      const users = {
+        'maxime': { password: 'Cristobello54', name: 'Maxime', role: 'admin' },
+        'rachid': { password: 'rachidacaddy', name: 'Rachid', role: 'encadrant' },
+        'david': { password: 'lepetitbreton', name: 'David', role: 'encadrant' },
+        'medhanie': { password: 'medhanie123', name: 'Medhanie', role: 'chauffeur' }
+      };
+
+      const user = users[credentials.username.toLowerCase()];
       
-      if (error) {
-        // Fallback sur l'ancien système de démo
-        if (credentials.password === 'caddy123' || credentials.password === 'Cristobello54') {
-          const userData = {
-            id: 1,
-            name: credentials.email === 'maxime@caddy.lu' ? 'Maxime' : credentials.email.split('@')[0] || 'Éducateur',
-            email: credentials.email,
-            role: credentials.email === 'maxime@caddy.lu' ? 'admin' : 'educateur'
-          };
-          
-          toast.success(`Bienvenue ${userData.name} !`);
-          onLogin(userData);
-        } else {
-          toast.error('Identifiants incorrects');
-        }
-      } else {
-        // Connexion Supabase réussie
+      if (user && user.password === credentials.password) {
         const userData = {
-          id: data.user.id,
-          name: data.user.user_metadata?.name || data.user.email.split('@')[0],
-          email: data.user.email,
-          role: data.user.email === 'maxime@caddy.lu' ? 'admin' : 'educateur'
+          id: credentials.username,
+          name: user.name,
+          username: credentials.username,
+          role: user.role
         };
         
         toast.success(`Bienvenue ${userData.name} !`);
         onLogin(userData);
+      } else {
+        toast.error('Nom d\'utilisateur ou mot de passe incorrect');
       }
     } catch (error) {
       console.error('Erreur de connexion:', error);
@@ -91,20 +83,20 @@ const Login = ({ onLogin }) => {
           className="card-premium p-8"
         >
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email */}
+            {/* Nom d'utilisateur */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email
+                Nom d'utilisateur
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
-                  type="email"
+                  type="text"
                   required
-                  value={credentials.email}
-                  onChange={(e) => setCredentials({...credentials, email: e.target.value})}
+                  value={credentials.username}
+                  onChange={(e) => setCredentials({...credentials, username: e.target.value})}
                   className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-                  placeholder="votre.email@caddy.lu"
+                  placeholder="maxime"
                 />
               </div>
             </div>
@@ -122,7 +114,7 @@ const Login = ({ onLogin }) => {
                   value={credentials.password}
                   onChange={(e) => setCredentials({...credentials, password: e.target.value})}
                   className="w-full pl-11 pr-11 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Cristobello54"
+                  placeholder="••••••••••"
                 />
                 <button
                   type="button"
@@ -153,14 +145,7 @@ const Login = ({ onLogin }) => {
             </motion.button>
           </form>
 
-          {/* Aide */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500">
-              Compte admin: <span className="font-mono bg-gray-100 px-2 py-1 rounded">maxime@caddy.lu</span>
-              <br />
-              Mot de passe: <span className="font-mono bg-gray-100 px-2 py-1 rounded">Cristobello54</span>
-            </p>
-          </div>
+
         </motion.div>
 
         {/* Footer */}
