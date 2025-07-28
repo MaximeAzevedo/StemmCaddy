@@ -376,7 +376,7 @@ const CuisinePlanningDisplay = () => {
                                     style={{ 
                                       width: `calc(${photoSizePx} - 4px)`, 
                                       height: `calc(${photoSizePx} - 4px)`,
-                                      objectPosition: 'center top'
+                                      objectPosition: 'center 20%'
                                     }}
                                   />
                                 ) : (

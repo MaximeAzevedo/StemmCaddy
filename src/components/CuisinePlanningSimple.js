@@ -25,6 +25,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   // Données cuisine
   const [employees, setEmployees] = useState([]);
   const [absences, setAbsences] = useState([]);
+  const [photoZoom, setPhotoZoom] = useState(null); // Modal zoom photo pour accessibilité
   
   // ✅ SIMPLE : Postes fixes comme les véhicules en logistique
   const postes = [
@@ -430,6 +431,35 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   };
 
   /**
+   * 🔍 ACCESSIBILITÉ: Ouvrir le zoom photo au clic droit
+   */
+  const handlePhotoZoom = (e, employee) => {
+    e.preventDefault(); // Empêche le menu contextuel par défaut
+    setPhotoZoom(employee);
+  };
+
+  /**
+   * 🔍 ACCESSIBILITÉ: Fermer le zoom photo
+   */
+  const closePhotoZoom = () => {
+    setPhotoZoom(null);
+  };
+
+  /**
+   * 🔍 ACCESSIBILITÉ: Gestion des touches (Échap pour fermer)
+   */
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && photoZoom) {
+        closePhotoZoom();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [photoZoom]);
+
+  /**
    * ✅ Employés disponibles (non absents)
    */
   const availableEmployees = employees.filter(emp => 
@@ -466,9 +496,11 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          onContextMenu={(e) => handlePhotoZoom(e, employee)}
           className={`mb-2 p-2 bg-white rounded-lg border cursor-move flex items-center space-x-2 ${
             snapshot.isDragging ? 'shadow-lg bg-blue-50' : 'hover:bg-gray-50'
           }`}
+          title="Clic droit pour voir la photo en grand"
         >
           <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
             {employee.photo_url ? (
@@ -476,6 +508,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
                 src={employee.photo_url} 
                 alt={employee.prenom || employee.nom} 
                 className="w-full h-full object-cover"
+                style={{ objectPosition: 'center 20%' }}
               />
             ) : (
               <span className="text-xs font-bold text-gray-600">
@@ -504,9 +537,11 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
+          onContextMenu={(e) => handlePhotoZoom(e, employee)}
           className={`mb-1 p-2 bg-white rounded border text-sm cursor-move ${
             snapshot.isDragging ? 'shadow-lg bg-blue-50' : 'hover:bg-gray-50'
           }`}
+          title="Clic droit pour voir la photo en grand"
         >
           <div className="flex items-center space-x-2">
             <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -515,6 +550,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
                   src={employee.photo_url} 
                   alt={employee.prenom || employee.nom} 
                   className="w-full h-full object-cover"
+                  style={{ objectPosition: 'center 20%' }}
                 />
               ) : (
                 <span className="text-xs font-bold text-gray-600">
@@ -707,6 +743,61 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
           </div>
         </div>
       </DragDropContext>
+
+      {/* 🔍 MODAL ZOOM PHOTO ACCESSIBILITÉ */}
+      {photoZoom && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+          onClick={closePhotoZoom}
+        >
+          <div 
+            className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Bouton fermer */}
+            <button
+              onClick={closePhotoZoom}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-bold"
+              title="Fermer (ou appuyez sur Échap)"
+            >
+              ×
+            </button>
+
+            {/* Contenu du modal */}
+            <div className="text-center">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                {photoZoom.prenom || photoZoom.nom}
+              </h3>
+              
+              <div className="w-64 h-64 mx-auto rounded-2xl overflow-hidden bg-gray-100 flex items-center justify-center">
+                {photoZoom.photo_url ? (
+                  <img 
+                    src={photoZoom.photo_url} 
+                    alt={photoZoom.prenom || photoZoom.nom}
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: 'center 20%' }}
+                  />
+                ) : (
+                  <div className="text-6xl font-bold text-gray-400">
+                    {(photoZoom.prenom || photoZoom.nom || '?')[0]}
+                  </div>
+                )}
+              </div>
+
+              {/* Informations supplémentaires si disponibles */}
+              {photoZoom.fonction && (
+                <p className="text-lg text-gray-600 mt-4">
+                  {photoZoom.fonction}
+                </p>
+              )}
+
+              <p className="text-sm text-gray-500 mt-4">
+                Clic à côté ou Échap pour fermer
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

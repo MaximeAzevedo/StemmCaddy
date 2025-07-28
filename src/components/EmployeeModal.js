@@ -54,7 +54,7 @@ const EmployeeModal = ({
                   src={employee.photo_url}
                   alt={isCreateMode ? "Nouvelle photo" : employee.nom}
                   className="w-12 h-12 md:w-16 md:h-16 rounded-2xl object-cover shadow-lg ring-2 ring-white"
-                  style={{ objectPosition: 'center top' }}
+                  style={{ objectPosition: 'center 15%' }}
                 />
               ) : (
                 <div className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl flex items-center justify-center text-white font-bold text-lg md:text-xl shadow-lg ${

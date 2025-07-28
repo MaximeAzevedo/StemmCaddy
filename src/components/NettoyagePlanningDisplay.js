@@ -127,7 +127,7 @@ const NettoyagePlanningDisplay = () => {
               alt={employee.nom}
               className="w-full h-full rounded-full object-cover"
               style={{ 
-                objectPosition: 'center top',
+                objectPosition: 'center 20%',
                 objectFit: 'cover',
                 minWidth: '100%',
                 minHeight: '100%'

@@ -27,7 +27,7 @@ const EmployeeCard = ({
                   src={employee.photo_url}
                   alt={employee.nom}
                   className="w-12 h-12 md:w-16 md:h-16 rounded-2xl object-cover shadow-lg ring-2 ring-white"
-                  style={{ objectPosition: 'center top' }}
+                  style={{ objectPosition: 'center -5px' }}
                   onError={(e) => {
                     e.target.style.display = 'none';
                     e.target.nextSibling.style.display = 'flex';

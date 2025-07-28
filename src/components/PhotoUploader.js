@@ -173,7 +173,7 @@ const PhotoUploader = ({
               src={photoPreview || employee.photo_url}
               alt="Photo employé"
               className={`w-32 h-32 rounded-xl object-cover border-2 ${colors.border} shadow-md`}
-              style={{ objectPosition: 'center top' }}
+              style={{ objectPosition: 'center 20%' }}
             />
             {photoUploading && (
               <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
