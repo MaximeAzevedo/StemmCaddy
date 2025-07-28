@@ -685,70 +685,121 @@ export const supabaseCuisine = {
    */
   async deleteEmployeeCuisine(employeeId) {
     try {
-      console.log('🗑️ deleteEmployeeCuisine - Suppression employé:', employeeId);
+      console.log('🗑️ deleteEmployeeCuisine - Suppression employé ID:', employeeId);
       
-      // 1. Vérifier que l'employé existe
+      // Validation de l'ID
+      if (!employeeId) {
+        console.error('❌ ID employé manquant');
+        return { data: null, error: { message: 'ID employé requis' } };
+      }
+      
+      // 1. Vérifier que l'employé existe et récupérer ses infos
+      console.log('🔍 Recherche employé dans la base...');
       const { data: employee, error: getError } = await supabase
         .from('employes_cuisine_new')
         .select('*')
         .eq('id', employeeId)
         .single();
         
-      if (getError || !employee) {
-        console.error('❌ Employé non trouvé:', getError);
+      if (getError) {
+        console.error('❌ Erreur recherche employé:', getError);
+        if (getError.code === 'PGRST116') {
+          return { data: null, error: { message: `Employé avec l'ID ${employeeId} non trouvé` } };
+        }
+        return { data: null, error: { message: `Erreur base de données: ${getError.message}` } };
+      }
+      
+      if (!employee) {
+        console.error('❌ Employé non trouvé avec ID:', employeeId);
         return { data: null, error: { message: 'Employé non trouvé' } };
       }
       
+      console.log('✅ Employé trouvé:', employee.prenom, employee.nom);
+      
       // 2. Vérifier s'il est assigné dans le planning futur (sécurité)
       const today = new Date().toISOString().split('T')[0];
+      console.log('📅 Vérification assignations futures à partir de:', today);
+      
       const { data: futureAssignments, error: planningError } = await supabase
         .from('planning_cuisine_new')
-        .select('*')
+        .select('date, poste, session')
         .eq('employee_id', employeeId)
         .gte('date', today);
         
       if (planningError) {
         console.warn('⚠️ Impossible de vérifier le planning:', planningError);
+        // On continue quand même la suppression
       }
       
       if (futureAssignments && futureAssignments.length > 0) {
+        console.warn('⚠️ Employé a des assignations futures:', futureAssignments);
         return { 
           data: null, 
           error: { 
-            message: `Impossible de supprimer: ${employee.prenom} est assigné dans ${futureAssignments.length} planning(s) futur(s)`,
+            message: `Impossible de supprimer ${employee.prenom} : Il/Elle est assigné(e) dans ${futureAssignments.length} planning(s) futur(s). Veuillez d'abord retirer ces assignations.`,
             code: 'EMPLOYEE_HAS_FUTURE_ASSIGNMENTS',
             details: futureAssignments
           } 
         };
       }
       
+      console.log('✅ Aucune assignation future trouvée');
+      
       // 3. Supprimer les absences liées (cascade)
-      const { error: absencesError } = await supabase
+      console.log('🗑️ Suppression des absences liées...');
+      const { data: deletedAbsences, error: absencesError } = await supabase
         .from('absences_cuisine_new')
         .delete()
-        .eq('employee_id', employeeId);
+        .eq('employee_id', employeeId)
+        .select();
         
       if (absencesError) {
         console.warn('⚠️ Erreur suppression absences:', absencesError);
+        // On continue quand même
+      } else {
+        console.log(`✅ ${deletedAbsences?.length || 0} absence(s) supprimée(s)`);
       }
       
       // 4. Supprimer l'employé (définitivement)
-      const { error } = await supabase
+      console.log('🗑️ Suppression de l\'employé de la table principale...');
+      const { data: deletedEmployee, error: deleteError } = await supabase
         .from('employes_cuisine_new')
         .delete()
-        .eq('id', employeeId);
+        .eq('id', employeeId)
+        .select()
+        .single();
       
-      if (error) {
-        console.error('❌ Erreur suppression employé:', error);
-        throw error;
+      if (deleteError) {
+        console.error('❌ Erreur suppression employé:', deleteError);
+        throw new Error(`Impossible de supprimer l'employé: ${deleteError.message}`);
       }
       
-      console.log('✅ Employé cuisine supprimé avec succès:', employee.prenom);
-      return { data: { deletedEmployee: employee }, error: null };
+      if (!deletedEmployee) {
+        console.error('❌ Aucun employé supprimé (peut-être déjà supprimé?)');
+        return { data: null, error: { message: 'Aucun employé supprimé - il a peut-être déjà été supprimé' } };
+      }
+      
+      console.log('✅ Employé cuisine supprimé avec succès:', employee.prenom, employee.nom);
+      return { 
+        data: { 
+          deletedEmployee: employee,
+          deletedAbsencesCount: deletedAbsences?.length || 0
+        }, 
+        error: null 
+      };
       
     } catch (error) {
       console.error('💥 Erreur critique deleteEmployeeCuisine:', error);
-      return { data: null, error };
+      
+      // Retourner une erreur structurée
+      return { 
+        data: null, 
+        error: {
+          message: error.message || 'Erreur inconnue lors de la suppression',
+          code: error.code || 'UNKNOWN_ERROR',
+          details: error
+        }
+      };
     }
   },
 

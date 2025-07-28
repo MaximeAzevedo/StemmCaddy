@@ -323,11 +323,17 @@ const useEmployeeManagement = () => {
    * Supprimer un employé avec confirmation
    */
   const handleDeleteEmployee = async () => {
-    if (!editedEmployee?.id) return;
+    if (!editedEmployee?.id) {
+      console.warn('⚠️ Aucun employé sélectionné pour suppression');
+      toast.error('Aucun employé sélectionné');
+      return;
+    }
+
+    console.log('🗑️ Tentative de suppression employé:', editedEmployee);
 
     // Confirmation de suppression
     const confirmDelete = window.confirm(
-      `⚠️ Êtes-vous sûr de vouloir supprimer l'employé "${editedEmployee.nom}" ?\n\n` +
+      `⚠️ Êtes-vous sûr de vouloir supprimer l'employé "${editedEmployee.prenom || editedEmployee.nom}" ?\n\n` +
       `Cette action est irréversible et supprimera :\n` +
       `• Son profil et ses informations\n` +
       `• Ses compétences\n` +
@@ -336,36 +342,82 @@ const useEmployeeManagement = () => {
       `Confirmez-vous la suppression ?`
     );
 
-    if (!confirmDelete) return;
+    if (!confirmDelete) {
+      console.log('❌ Suppression annulée par l\'utilisateur');
+      return;
+    }
 
     try {
       setDeleting(true);
+      console.log('🔄 Début suppression employé ID:', editedEmployee.id);
       
       // Supprimer la photo si elle existe
       if (editedEmployee.photo_url) {
-        await supabaseCuisine.deleteEmployeePhoto(editedEmployee.photo_url);
+        console.log('📸 Suppression photo employé...');
+        try {
+          await supabaseCuisine.deleteEmployeePhoto(editedEmployee.photo_url);
+          console.log('✅ Photo supprimée');
+        } catch (photoError) {
+          console.warn('⚠️ Erreur suppression photo (continuons):', photoError);
+        }
       }
       
       // Supprimer l'employé de la base
+      console.log('🗑️ Suppression employé de la base de données...');
       const result = await supabaseCuisine.deleteEmployeeCuisine(editedEmployee.id);
       
+      console.log('📤 Résultat suppression:', result);
+      
       if (result.error) {
+        // Gestion des erreurs spécifiques
+        if (result.error.code === 'EMPLOYEE_HAS_FUTURE_ASSIGNMENTS') {
+          toast.error(
+            `Impossible de supprimer ${editedEmployee.prenom || editedEmployee.nom} : \n` +
+            `Il/Elle est assigné(e) dans des plannings futurs.\n` +
+            `Veuillez d'abord retirer ses assignations.`
+          );
+          return;
+        }
         throw new Error(result.error.message);
       }
       
       // Mettre à jour la liste locale (retirer l'employé supprimé)
-      setEmployees(employees.filter(emp => emp.id !== editedEmployee.id));
+      console.log('🔄 Mise à jour liste locale...');
+      setEmployees(prevEmployees => {
+        const newEmployees = prevEmployees.filter(emp => emp.id !== editedEmployee.id);
+        console.log(`📊 Liste employés mise à jour: ${prevEmployees.length} → ${newEmployees.length}`);
+        return newEmployees;
+      });
       
       // Fermer le modal
+      console.log('🚪 Fermeture du modal...');
       closeEdit();
       
-      toast.success(`Employé "${editedEmployee.nom}" supprimé avec succès`);
+      // Notification de succès
+      toast.success(
+        `✅ Employé "${editedEmployee.prenom || editedEmployee.nom}" supprimé avec succès`, 
+        { duration: 4000 }
+      );
+      
+      console.log('✅ Suppression terminée avec succès');
       
     } catch (error) {
       console.error('❌ Erreur suppression employé:', error);
-      toast.error(error.message || 'Erreur lors de la suppression');
+      console.error('📊 Détails erreur:', {
+        message: error.message,
+        stack: error.stack,
+        employeeId: editedEmployee.id
+      });
+      
+      // Message d'erreur détaillé
+      const errorMessage = error.message || 'Erreur inconnue lors de la suppression';
+      toast.error(
+        `❌ Erreur lors de la suppression :\n${errorMessage}`, 
+        { duration: 6000 }
+      );
     } finally {
       setDeleting(false);
+      console.log('🏁 Fin du processus de suppression');
     }
   };
 
