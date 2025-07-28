@@ -24,13 +24,13 @@ const MainHeader = () => {
   const linkClass = (active) =>
     `px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 backdrop-blur-sm ${
       active
-        ? 'bg-white/30 text-white shadow-lg ring-2 ring-white/40 border border-white/20'
-        : 'text-white/90 hover:bg-white/20 hover:text-white border border-transparent hover:border-white/20'
+        ? 'bg-white bg-opacity-30 text-white shadow-lg ring-2 ring-gray-300 border border-gray-300'
+        : 'text-white hover:bg-white hover:bg-opacity-20 hover:text-white border border-transparent hover:border-gray-300'
     }`;
 
   return (
     <header className="fixed top-2 left-1/2 transform -translate-x-1/2 z-50 w-3/4 max-w-6xl">
-      <div className="bg-gradient-to-r from-blue-600/80 via-indigo-600/85 to-purple-600/80 backdrop-blur-xl shadow-2xl border border-white/20 rounded-2xl px-8 py-2">
+      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-90 backdrop-blur-xl shadow-2xl border border-gray-300 rounded-2xl px-8 py-2">
         <div className="flex items-center justify-between">
           
           {/* Logo Premium à gauche */}
@@ -38,14 +38,14 @@ const MainHeader = () => {
             onClick={() => navigate('/')}
             className="flex items-center space-x-3 hover:scale-105 transition-transform duration-300 group"
           >
-            <div className="w-7 h-7 bg-white/25 rounded-lg flex items-center justify-center backdrop-blur-sm ring-1 ring-white/30 group-hover:ring-white/50 transition-all duration-300">
+            <div className="w-7 h-7 bg-white bg-opacity-25 rounded-lg flex items-center justify-center backdrop-blur-sm ring-1 ring-gray-300 group-hover:ring-white transition-all duration-300">
               <span className="text-white font-bold text-sm drop-shadow-sm">C</span>
             </div>
             <span className="text-lg font-bold text-white select-none drop-shadow-sm tracking-wide">Caddy</span>
           </button>
 
           {/* Navigation au centre */}
-          <nav className="flex items-center space-x-5 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-1.5 shadow-lg border border-white/20">
+          <nav className="flex items-center space-x-5 bg-white bg-opacity-10 backdrop-blur-sm rounded-xl px-4 py-1.5 shadow-lg border border-gray-300">
             <NavLink 
               to="/logistique" 
               className={({ isActive }) => linkClass(isLogistique || isActive)}
@@ -73,7 +73,7 @@ const MainHeader = () => {
                 {/* Bouton déconnexion */}
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white/90 hover:bg-white/20 hover:text-white border border-transparent hover:border-white/20 transition-all duration-300 backdrop-blur-sm"
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white hover:bg-white hover:bg-opacity-20 hover:text-white border border-transparent hover:border-gray-300 transition-all duration-300 backdrop-blur-sm"
                 >
                   Déconnexion
                 </button>
@@ -82,7 +82,7 @@ const MainHeader = () => {
               /* Bouton connexion si pas connecté */
               <button
                 onClick={() => navigate('/login')}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white/20 text-white hover:bg-white/30 border border-white/20 hover:border-white/40 transition-all duration-300 backdrop-blur-sm shadow-lg"
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-white bg-opacity-20 text-white hover:bg-white hover:bg-opacity-30 border border-gray-300 hover:border-gray-200 transition-all duration-300 backdrop-blur-sm shadow-lg"
               >
                 Connexion
               </button>
@@ -91,10 +91,10 @@ const MainHeader = () => {
         </div>
         
         {/* Effet de brillance premium */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-60 pointer-events-none"></div>
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-white to-transparent opacity-10 pointer-events-none"></div>
         
         {/* Effet de halo lumineux */}
-        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 via-indigo-600/20 to-purple-600/20 rounded-2xl blur-lg opacity-70 -z-10"></div>
+        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-30 rounded-2xl blur-lg -z-10"></div>
       </div>
     </header>
   );
