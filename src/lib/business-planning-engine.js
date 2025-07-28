@@ -6,6 +6,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { supabaseCuisine } from './supabase-cuisine.js';
+import { format } from 'date-fns';
 
 // Configuration Supabase
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -58,40 +60,51 @@ export class BusinessPlanningEngine {
   }
 
   /**
-   * 📊 Charger les données métier
+   * 📊 Charger les données métier - MÊME MÉTHODE que le composant
    */
   async loadBusinessData(selectedDate) {
-    // Charger employés actifs avec leurs compétences (tout dans la même table)
-    const { data: employees, error: empError } = await supabase
-      .from('employes_cuisine_new')
-      .select('*')
-      .eq('actif', true);
+    try {
+      // ✅ UTILISER LA MÊME MÉTHODE que le composant pour la cohérence
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      
+      console.log('🎯 Moteur métier - Chargement données pour:', dateString);
+      
+      // Charger employés et absences en parallèle (MÊME MÉTHODE que le composant)
+      const [employeesResult, absencesResult] = await Promise.all([
+        supabaseCuisine.getEmployeesCuisine(),
+        supabaseCuisine.getAbsencesCuisine(dateString, dateString)
+      ]);
 
-    if (empError) throw empError;
+      if (employeesResult.error) throw employeesResult.error;
+      if (absencesResult.error) {
+        console.warn('⚠️ Erreur chargement absences (continuons sans):', absencesResult.error);
+      }
 
-    // ✅ ABSENCES : Charger les absences pour la date donnée
-    const dateString = selectedDate || new Date().toISOString().split('T')[0];
-    const { data: absences, error: absError } = await supabase
-      .from('absences_cuisine_new')
-      .select('employee_id, date_debut, date_fin, type_absence')
-      .lte('date_debut', dateString)
-      .gte('date_fin', dateString);
+      const employees = employeesResult.data || [];
+      const absences = absencesResult.data || [];
 
-    if (absError) {
-      console.warn('⚠️ Erreur chargement absences (continuons sans):', absError);
-    }
+      // ✅ FILTRER : Exclure les employés absents (MÊME LOGIQUE que le composant)
+      const absentEmployeeIds = new Set(absences.map(abs => abs.employee_id));
+      const availableEmployees = employees.filter(emp => 
+        emp.actif && !absentEmployeeIds.has(emp.id)
+      );
 
-    // ✅ FILTRER : Exclure les employés absents
-    const absentEmployeeIds = new Set(absences?.map(abs => abs.employee_id) || []);
-    const availableEmployees = (employees || []).filter(emp => !absentEmployeeIds.has(emp.id));
-
-    this.employees = availableEmployees;
-    this.absences = absences || [];
-    
-    console.log(`📊 Données chargées: ${employees?.length || 0} employés total, ${absentEmployeeIds.size} absents, ${this.employees.length} disponibles`);
-    
-    if (absentEmployeeIds.size > 0) {
-      console.log('🚫 Employés absents exclus:', Array.from(absentEmployeeIds));
+      this.employees = availableEmployees;
+      this.absences = absences;
+      
+      console.log(`📊 Moteur métier - Données chargées:`);
+      console.log(`   ${employees.length} employés total`);
+      console.log(`   ${absentEmployeeIds.size} absents`);
+      console.log(`   ${this.employees.length} disponibles`);
+      
+      if (absentEmployeeIds.size > 0) {
+        const absentsNames = absences.map(abs => abs.employe?.prenom || abs.employee_id).join(', ');
+        console.log(`🚫 Employés absents exclus: ${absentsNames}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erreur chargement données métier:', error);
+      throw error;
     }
   }
 
@@ -104,7 +117,7 @@ export class BusinessPlanningEngine {
     // Mapping postes → compétences (compétences dans employes_cuisine_new directement)
     const posteCompetenceMap = {
       'Pain': employee.pain,
-      'Sandwichs': employee.sandwichs,
+      'Sandwichs': employee.sandwichs || employee.chef_sandwichs, // Chef ou équipier sandwichs
       'Self Midi': employee.self_midi,
       'Vaisselle': employee.vaisselle,
       'Cuisine chaude': employee.cuisine_chaude,

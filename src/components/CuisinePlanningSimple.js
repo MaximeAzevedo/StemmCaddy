@@ -290,10 +290,8 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
         employeeWithRole
       ];
       
-      // ✅ SOLUTION SIMPLE : Délai minimal pour éviter conflit avec react-beautiful-dnd
-      setTimeout(() => {
-        setPlanning(newPlanning);
-      }, 50);
+      // ✅ Mise à jour directe sans délai
+      setPlanning(newPlanning);
       
       const posteInfo = postes.find(p => p.id === destPoste);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} assigné à ${posteInfo?.nom}`);
@@ -331,10 +329,8 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       // Retirer l'employé du planning
       newPlanning[sourceDate][sourcePoste].splice(source.index, 1);
       
-      // ✅ SOLUTION SIMPLE : Délai minimal pour éviter conflit avec react-beautiful-dnd
-      setTimeout(() => {
-        setPlanning(newPlanning);
-      }, 50);
+      // ✅ Mise à jour directe sans délai
+      setPlanning(newPlanning);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} désassigné`);
       
       return;
@@ -376,10 +372,8 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       newPlanning[sourceDate][sourcePoste].splice(source.index, 1);
       newPlanning[destDate][destPoste].splice(destination.index, 0, draggedEmployee);
       
-      // ✅ SOLUTION SIMPLE : Délai minimal pour éviter conflit avec react-beautiful-dnd
-      setTimeout(() => {
-        setPlanning(newPlanning);
-      }, 50);
+      // ✅ Mise à jour directe sans délai
+      setPlanning(newPlanning);
       toast.success(`${draggedEmployee.prenom || draggedEmployee.nom} déplacé`);
       
       return;

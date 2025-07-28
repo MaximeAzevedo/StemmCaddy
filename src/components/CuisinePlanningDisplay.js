@@ -131,15 +131,25 @@ const CuisinePlanningDisplay = () => {
         if (!planningByPoste[posteName]) {
           planningByPoste[posteName] = [];
         }
+        
+        // ✅ MAPPING ID → CRÉNEAU pour affichage TV
+        const POSTE_ID_TO_CRENEAU = {
+          5: '8h',           // Vaisselle 8h
+          6: '10h',          // Vaisselle 10h
+          7: 'midi',         // Vaisselle midi
+          2: '11h',          // Self Midi 11h-11h45
+          3: '11h45'         // Self Midi 11h45-12h45
+        };
             
-        // Ajouter tous les employés de ce poste
+        // Ajouter tous les employés de ce poste avec leur créneau
         employees.forEach(emp => {
           planningByPoste[posteName].push({
             id: emp.id,
             prenom: emp.prenom || emp.nom,
             photo_url: emp.photo_url,
             poste: posteName,
-            role: emp.role
+            role: emp.role,
+            creneau: POSTE_ID_TO_CRENEAU[posteIdNum] // ✅ Créneau seulement pour Vaisselle et Self Midi
           });
         });
       });
@@ -367,14 +377,23 @@ const CuisinePlanningDisplay = () => {
                           </div>
                           
                           {/* Prénom Premium */}
-                          <div className={`font-bold text-gray-800 ${textSize} mb-2 leading-tight break-words w-full`}>
+                          <div className={`font-bold text-gray-800 ${textSize} mb-1 leading-tight break-words w-full`}>
                             {employee.prenom}
                           </div>
                           
-                          {/* Créneau avec badge */}
-                          <div className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full font-medium">
-                            {formatCreneau(employee.creneau)}
-                          </div>
+                          {/* Horaires sous le nom pour Vaisselle et Self Midi */}
+                          {(poste.nom === 'Vaisselle' || poste.nom === 'Self Midi') && employee.creneau && (
+                            <div className="text-gray-600 text-sm font-medium mb-2">
+                              {formatCreneau(employee.creneau)}
+                            </div>
+                          )}
+                          
+                          {/* Créneau avec badge pour les autres postes (pas de badge si pas d'horaires spécifiques) */}
+                          {!(poste.nom === 'Vaisselle' || poste.nom === 'Self Midi') && employee.creneau && (
+                            <div className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full font-medium">
+                              {formatCreneau(employee.creneau)}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
