@@ -29,7 +29,10 @@ const LogistiqueTVView = () => {
   // Filtrer les véhicules selon la slide courante
   const getVehiclesForCurrentSlide = () => {
     if (currentView === 'vehicles-slide1') {
-      return vehicles.filter(v => vehicleSlides.slide1.includes(v.nom));
+      const filtered = vehicles.filter(v => vehicleSlides.slide1.includes(v.nom));
+      console.log('🚐 SLIDE 1 - Véhicules disponibles:', vehicles.map(v => v.nom));
+      console.log('🚐 SLIDE 1 - Véhicules filtrés:', filtered.map(v => v.nom));
+      return filtered;
     } else if (currentView === 'vehicles-slide2') {
       return vehicles.filter(v => vehicleSlides.slide2.includes(v.nom));
     }
@@ -163,6 +166,8 @@ const LogistiqueTVView = () => {
    * Chargement initial et au changement de semaine
    */
   useEffect(() => {
+    console.log('🔄 === TV VIEW useEffect TRIGGER ===');
+    console.log('📅 TV Semaine courante:', format(currentWeek, 'yyyy-MM-dd'));
     loadAllData();
   }, [currentWeek]); // 🔧 CORRECTION: Dépendance sur currentWeek au lieu de loadAllData
 
@@ -197,32 +202,74 @@ const LogistiqueTVView = () => {
   }, [navigate]);
 
   /**
+   * Vérifier si le service est fermé un jour donné
+   */
+  const isServiceFerme = (date) => {
+    return absences.some(absence => 
+      absence.type_absence === 'Fermeture' &&
+      date >= absence.date_debut && 
+      date <= absence.date_fin
+    );
+  };
+
+  /**
+   * Obtenir les informations de fermeture pour un jour donné
+   */
+  const getFermetureInfo = (date) => {
+    const fermeture = absences.find(absence => 
+      absence.type_absence === 'Fermeture' &&
+      date >= absence.date_debut && 
+      date <= absence.date_fin
+    );
+    return fermeture;
+  };
+
+  /**
    * Obtenir le statut d'un employé pour une date
    */
   const getEmployeeStatus = (employeeId, date) => {
-    // Vérifier les absences
+    // DEBUG logs supprimés - fonction corrigée
+    
+    // Vérifier les vraies absences (pas les rendez-vous)
     const isAbsent = absences.some(absence => 
       absence.employee_id === employeeId &&
       absence.date_debut <= date &&
-      absence.date_fin >= date
+      absence.date_fin >= date &&
+      absence.type_absence !== 'Rendez-vous' // ⚠️ Exclure les rendez-vous
     );
 
     if (isAbsent) {
       return { type: 'absent', display: 'Absent', color: 'bg-red-500' };
     }
 
-    // Vérifier les assignations de véhicules
+    // Vérifier les assignations de véhicules (les rendez-vous peuvent être assignés)
     const dateKey = date;
     if (planning[dateKey]) {
       for (const [vehicleId, assignedEmployees] of Object.entries(planning[dateKey])) {
-        const isAssigned = assignedEmployees.some(emp => emp.id === employeeId);
-        if (isAssigned) {
+        
+        const assignedEmployee = assignedEmployees.find(emp => emp.employee_id === employeeId);
+        
+        if (assignedEmployee) {
           const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
           if (vehicle) {
+            // Vérifier si cet employé a un rendez-vous ce jour-là
+            const rendezVous = absences.find(absence => 
+              absence.employee_id === employeeId &&
+              absence.date_debut <= date &&
+              absence.date_fin >= date &&
+              absence.type_absence === 'Rendez-vous'
+            );
+            
+            let displayText = vehicle.nom;
+            if (rendezVous && rendezVous.heure_debut) {
+              const heure = rendezVous.heure_debut.split(':')[0];
+              displayText = `${vehicle.nom} (RDV ${heure}h)`;
+            }
+            
             if (vehicle.nom === 'Caddy') {
-              return { type: 'caddy', display: 'Caddy', color: 'bg-gray-500' };
+              return { type: 'caddy', display: displayText, color: 'bg-gray-500' };
             } else {
-              return { type: 'vehicle', display: vehicle.nom, color: vehicle.couleur || '#6b7280' };
+              return { type: 'vehicle', display: displayText, color: vehicle.couleur || '#6b7280' };
             }
           }
         }
@@ -305,6 +352,33 @@ const LogistiqueTVView = () => {
                 const dateKey = format(day, 'yyyy-MM-dd');
                 const assignedEmployees = planning[dateKey]?.[vehicle.id] || [];
                 
+                // 🔍 DEBUG: Vérifier pourquoi "Libre" s'affiche
+                if (dateKey === '2025-07-29' && vehicle.nom === 'Crafter 21') {
+                  console.log(`🔍 ${vehicle.nom} le ${dateKey}:`, {
+                    planning: planning[dateKey],
+                    vehicleId: vehicle.id,
+                    assignedEmployees: assignedEmployees,
+                    planningKeys: Object.keys(planning)
+                  });
+                }
+                
+                const isFerme = isServiceFerme(dateKey);
+                const fermetureInfo = getFermetureInfo(dateKey);
+                
+                if (isFerme) {
+                  return (
+                    <div key={`${vehicle.id}-${day.toISOString()}`} className="p-4 border-2 border-gray-400 rounded-lg bg-gray-100 relative">
+                      <div className="text-center py-8">
+                        <div className="text-2xl mb-2">🚫</div>
+                        <div className="text-lg font-bold text-gray-700 mb-1">FERMÉ</div>
+                        {fermetureInfo && (
+                          <div className="text-sm text-gray-500">{fermetureInfo.motif}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                
                 return (
                   <div key={`${vehicle.id}-${day.toISOString()}`} className="p-4 border-2 border-gray-200 rounded-lg bg-gray-50">
                     {assignedEmployees.length > 0 ? (
@@ -315,9 +389,9 @@ const LogistiqueTVView = () => {
                             className="px-3 py-2 bg-white rounded-lg text-center shadow-sm"
                           >
                             <div className={`text-lg font-medium ${
-                              employee.role === 'conducteur' ? 'text-red-600' :
-                              employee.role === 'assistant' ? 'text-green-600' :
-                              'text-gray-900'
+                              employee.role?.toLowerCase() === 'conducteur' ? 'text-red-600' :
+                              employee.role?.toLowerCase() === 'assistant' ? 'text-green-600' :
+                              'text-black'
                             }`}>
                               {getFirstName(employee.nom)}
                             </div>

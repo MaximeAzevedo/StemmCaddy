@@ -9,7 +9,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Truck
+  Truck,
+  X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, parseISO, addDays, startOfWeek } from 'date-fns';
@@ -32,7 +33,9 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
     date_debut: '',
     date_fin: '',
     type_absence: 'Absent',
-    motif: ''
+    motif: '',
+    heure_debut: ''
+    // heure_fin supprimé - on n'en a plus besoin
   });
 
   const loadData = useCallback(async () => {
@@ -93,17 +96,14 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.employee_id || !formData.date_debut) {
-      toast.error('Veuillez sélectionner un employé et une date de début');
+    // Validation
+    if (formData.type_absence !== 'Fermeture' && !formData.employee_id) {
+      toast.error('Veuillez sélectionner un employé');
       return;
     }
     
-    // Validation des dates
-    const dateDebut = new Date(formData.date_debut);
-    const dateFin = new Date(formData.date_fin || formData.date_debut);
-    
-    if (dateFin < dateDebut) {
-      toast.error('La date de fin doit être postérieure ou égale à la date de début');
+    if (!formData.date_debut) {
+      toast.error('Veuillez sélectionner une date');
       return;
     }
     
@@ -112,11 +112,13 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
       
       // Préparer les données d'absence
       const absenceData = {
-        employee_id: parseInt(formData.employee_id),
+        employee_id: formData.type_absence === 'Fermeture' ? null : parseInt(formData.employee_id),
         date_debut: formData.date_debut,
         date_fin: formData.date_fin || formData.date_debut, // Par défaut, absence d'un jour
         type_absence: formData.type_absence,
-        motif: formData.motif || null
+        motif: formData.motif || null,
+        heure_debut: (formData.type_absence === 'Rendez-vous' && formData.heure_debut) ? formData.heure_debut : null,
+        heure_fin: null // Toujours null pour simplifier
       };
       
       let result;
@@ -174,7 +176,8 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
       date_debut: '',
       date_fin: '',
       type_absence: 'Absent',
-      motif: ''
+      motif: '',
+      heure_debut: ''
     });
     setSelectedAbsence(null);
   };
@@ -186,7 +189,8 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
         date_debut: absence.date_debut || '',
         date_fin: absence.date_fin || '',
         type_absence: absence.type_absence || 'Absent',
-        motif: absence.motif || ''
+        motif: absence.motif || '',
+        heure_debut: absence.heure_debut || ''
       });
       setSelectedAbsence(absence);
     } else {
@@ -197,7 +201,8 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
         date_debut: today,
         date_fin: today,
         type_absence: 'Absent',
-        motif: ''
+        motif: '',
+        heure_debut: ''
       });
       setSelectedAbsence(null);
     }
@@ -264,9 +269,29 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
   const getEmployeeStatusOnDay = (employeeId, day) => {
     const dayString = format(day, 'yyyy-MM-dd');
     
-    // Chercher une absence pour cet employé ce jour-là
+    // 🚫 PRIORITÉ 1: Vérifier d'abord s'il y a une fermeture du service ce jour-là
+    const fermeture = absences.find(absence => {
+      return absence.type_absence === 'Fermeture' &&
+             absence.employee_id === null &&
+             dayString >= absence.date_debut && 
+             dayString <= absence.date_fin;
+    });
+    
+    if (fermeture) {
+      // Service fermé = tous les employés sont "fermés"
+      return {
+        isAbsent: true,
+        type: 'Fermeture',
+        label: 'Service fermé',
+        color: 'bg-gray-600',
+        abbreviation: 'FERMÉ'
+      };
+    }
+    
+    // ⚠️ PRIORITÉ 2: Chercher une absence individuelle pour cet employé ce jour-là
     const absence = absences.find(absence => {
       if (absence.employee_id !== employeeId) return false;
+      if (absence.type_absence === 'Fermeture') return false; // Déjà traité ci-dessus
       
       // Vérifier si le jour se trouve dans la plage d'absence
       const dateDebut = absence.date_debut;
@@ -285,7 +310,7 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
         type: absence.type_absence,
         label: typeInfo.label,
         color: typeInfo.color,
-        abbreviation: getAbsenceAbbreviation(absence.type_absence)
+        abbreviation: getAbsenceAbbreviation(absence.type_absence, absence.heure_debut)
       };
     } else {
       // Employé présent
@@ -300,12 +325,19 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
   };
 
   // Fonction pour obtenir l'abréviation du type d'absence
-  const getAbsenceAbbreviation = (type) => {
+  const getAbsenceAbbreviation = (type, heure_debut = null) => {
     switch(type) {
       case 'Absent': return 'ABS';
       case 'Congé': return 'CONG';
       case 'Maladie': return 'MAL';
       case 'Formation': return 'FORM';
+      case 'Rendez-vous': 
+        if (heure_debut) {
+          const heure = heure_debut.split(':')[0]; // Extraire l'heure (ex: "10" de "10:30")
+          return `RDV ${heure}h`;
+        }
+        return 'RDV';
+      case 'Fermeture': return 'FERMÉ';
       default: return 'ABS';
     }
   };
@@ -344,7 +376,9 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
     { value: 'Absent', label: 'Absent', color: 'bg-red-500' },
     { value: 'Congé', label: 'Congé', color: 'bg-blue-500' },
     { value: 'Maladie', label: 'Maladie', color: 'bg-yellow-500' },
-    { value: 'Formation', label: 'Formation', color: 'bg-green-500' }
+    { value: 'Formation', label: 'Formation', color: 'bg-green-500' },
+    { value: 'Rendez-vous', label: 'Rendez-vous', color: 'bg-orange-500' },
+    { value: 'Fermeture', label: 'Fermeture service', color: 'bg-gray-600' }
   ];
 
   if (loading) {
@@ -472,6 +506,20 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                 </div>
                 <span className="text-sm text-gray-600">Formation</span>
               </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-6 rounded-lg bg-orange-100 border-2 border-orange-300 flex items-center justify-center">
+                  <span className="text-xs font-bold text-orange-700">RDV</span>
+                </div>
+                <span className="text-sm text-gray-600">Rendez-vous</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-6 rounded-lg bg-gray-100 border-2 border-gray-300 flex items-center justify-center">
+                  <span className="text-xs font-bold text-gray-700">FERMÉ</span>
+                </div>
+                <span className="text-sm text-gray-600">Service fermé</span>
+              </div>
             </div>
           </div>
           
@@ -515,6 +563,8 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                               status.type === 'Congé' ? 'bg-blue-100 border-blue-300' :
                               status.type === 'Maladie' ? 'bg-yellow-100 border-yellow-300' :
                               status.type === 'Formation' ? 'bg-purple-100 border-purple-300' :
+                              status.type === 'Rendez-vous' ? 'bg-orange-100 border-orange-300' :
+                              status.type === 'Fermeture' ? 'bg-gray-100 border-gray-300' :
                               'bg-red-100 border-red-300'
                             }`}>
                               <span className={`text-xs font-bold ${
@@ -522,6 +572,8 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                                 status.type === 'Congé' ? 'text-blue-700' :
                                 status.type === 'Maladie' ? 'text-yellow-700' :
                                 status.type === 'Formation' ? 'text-purple-700' :
+                                status.type === 'Rendez-vous' ? 'text-orange-700' :
+                                status.type === 'Fermeture' ? 'text-gray-700' :
                                 'text-red-700'
                               }`}>
                                 {status.abbreviation}
@@ -721,25 +773,41 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Employé */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Employé *
-                  </label>
-                  <select
-                    value={formData.employee_id}
-                    onChange={(e) => setFormData(prev => ({ ...prev, employee_id: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Sélectionner un employé</option>
-                    {employeesLogistique.map(employee => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.nom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                
+                {/* Sélection employé (sauf pour fermetures) */}
+                {formData.type_absence !== 'Fermeture' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Employé *
+                    </label>
+                    <select
+                      value={formData.employee_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, employee_id: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="">Sélectionner un employé</option>
+                      {employeesLogistique.map(employee => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Message pour fermetures */}
+                {formData.type_absence === 'Fermeture' && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center text-gray-700">
+                      <AlertCircle className="w-5 h-5 mr-2 text-gray-500" />
+                      <span className="text-sm font-medium">🚫 Fermeture du service logistique</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Cette déclaration concerne l'ensemble du service (tous les employés et véhicules)
+                    </p>
+                  </div>
+                )}
 
                 {/* Type d'absence */}
                 <div>
@@ -748,7 +816,15 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                   </label>
                   <select
                     value={formData.type_absence}
-                    onChange={(e) => setFormData(prev => ({ ...prev, type_absence: e.target.value }))}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        type_absence: newType,
+                        // Nettoyer l'heure si ce n'est pas un rendez-vous
+                        heure_debut: newType === 'Rendez-vous' ? prev.heure_debut : ''
+                      }));
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
@@ -760,27 +836,52 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                   </select>
                 </div>
 
-                {/* Dates */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Date de début *
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.date_debut}
-                      onChange={(e) => {
-                        const newDateDebut = e.target.value;
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          date_debut: newDateDebut,
-                          date_fin: prev.date_fin || newDateDebut // Auto-remplir date fin si vide
-                        }));
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
+                {/* Horaires (seulement pour les rendez-vous) */}
+                {formData.type_absence === 'Rendez-vous' && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-orange-800 mb-3 flex items-center">
+                      <Clock className="w-4 h-4 mr-2" />
+                      Heure du rendez-vous
+                    </h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Heure du rendez-vous *
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.heure_debut}
+                        onChange={(e) => setFormData(prev => ({ ...prev, heure_debut: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        required
+                      />
+                    </div>
                   </div>
+                )}
+
+                {/* Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date {formData.type_absence === 'Rendez-vous' ? 'du rendez-vous' : 'de début'} *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.date_debut}
+                    onChange={(e) => {
+                      const newDateDebut = e.target.value;
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        date_debut: newDateDebut,
+                        // Pour les rendez-vous, date_fin = date_debut (même jour)
+                        date_fin: formData.type_absence === 'Rendez-vous' ? newDateDebut : (prev.date_fin || newDateDebut)
+                      }));
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                {/* Date de fin (seulement pour les absences multi-jours) */}
+                {formData.type_absence !== 'Rendez-vous' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Date de fin
@@ -790,24 +891,43 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                       type="date"
                       value={formData.date_fin}
                       onChange={(e) => setFormData(prev => ({ ...prev, date_fin: e.target.value }))}
-                      min={formData.date_debut} // Empêche de sélectionner une date antérieure
+                      min={formData.date_debut}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                </div>
+                )}
 
                 {/* Motif */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Motif
+                    {formData.type_absence === 'Fermeture' ? 'Raison de la fermeture *' : 'Motif'}
                   </label>
-                  <textarea
-                    value={formData.motif}
-                    onChange={(e) => setFormData(prev => ({ ...prev, motif: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows="3"
-                    placeholder="Détails de l'absence (optionnel)"
-                  />
+                  
+                  {formData.type_absence === 'Fermeture' ? (
+                    <select
+                      value={formData.motif}
+                      onChange={(e) => setFormData(prev => ({ ...prev, motif: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="">Sélectionner une raison</option>
+                      <option value="Sortie annuelle">Sortie annuelle</option>
+                      <option value="Intempéries">Intempéries</option>
+                      <option value="Maintenance véhicules">Maintenance véhicules</option>
+                      <option value="Formation collective">Formation collective</option>
+                      <option value="Jour férié">Jour férié</option>
+                      <option value="Grève">Grève</option>
+                      <option value="Autre">Autre raison</option>
+                    </select>
+                  ) : (
+                    <textarea
+                      value={formData.motif}
+                      onChange={(e) => setFormData(prev => ({ ...prev, motif: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      rows="3"
+                      placeholder="Détails de l'absence (optionnel)"
+                    />
+                  )}
                 </div>
 
                 {/* Actions */}

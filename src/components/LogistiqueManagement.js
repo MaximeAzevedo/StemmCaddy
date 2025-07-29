@@ -118,17 +118,17 @@ const LogistiqueManagement = ({ user, onLogout }) => {
       permis: false,
       langues: [],
       notes: '',
-      // Horaires par défaut
-      lundi_debut: '08:00',
-      lundi_fin: '16:00',
-      mardi_debut: '08:00',
-      mardi_fin: '16:00',
-      mercredi_debut: '08:00',
-      mercredi_fin: '16:00',
-      jeudi_debut: '08:00',
-      jeudi_fin: '16:00',
-      vendredi_debut: '08:00',
-      vendredi_fin: '16:00'
+      // Horaires par défaut - aucun jour défini (l'utilisateur choisit)
+      lundi_debut: null,
+      lundi_fin: null,
+      mardi_debut: null,
+      mardi_fin: null,
+      mercredi_debut: null,
+      mercredi_fin: null,
+      jeudi_debut: null,
+      jeudi_fin: null,
+      vendredi_debut: null,
+      vendredi_fin: null
     };
     setEditedEmployee(defaultEmployee);
     setCreateMode(true);
@@ -545,10 +545,23 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                           <span className="text-sm font-medium text-slate-700">Horaires</span>
                         </div>
                         <div className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">
-                          {employee.lundi_debut && employee.lundi_fin ? 
-                            `${employee.lundi_debut.substring(0,5)} - ${employee.lundi_fin.substring(0,5)}` : 
-                            '8h00 - 16h00'
-                          }
+                          {(() => {
+                            const joursTravailleurs = jours.filter(jour => 
+                              employee[`${jour}_debut`] && employee[`${jour}_fin`]
+                            );
+                            
+                            if (joursTravailleurs.length === 0) {
+                              return 'Aucun jour défini';
+                            } else if (joursTravailleurs.length === 5) {
+                              return `Temps plein (${employee.lundi_debut?.substring(0,5)} - ${employee.lundi_fin?.substring(0,5)})`;
+                            } else {
+                              const premierJour = joursTravailleurs[0];
+                              const horaires = employee[`${premierJour}_debut`] && employee[`${premierJour}_fin`] ?
+                                `${employee[`${premierJour}_debut`].substring(0,5)} - ${employee[`${premierJour}_fin`].substring(0,5)}` :
+                                '';
+                              return `${joursTravailleurs.length}j/semaine (${horaires})`;
+                            }
+                          })()}
                         </div>
                       </div>
 
@@ -776,41 +789,81 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                     </h3>
                     
                     <div className="space-y-4">
-                      {jours.map(jour => (
-                        <div key={jour} className="bg-slate-50 rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <label className="text-sm font-medium text-slate-700 capitalize">
-                              {jour}
-                            </label>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs text-slate-600 mb-1">Début</label>
-                              <input
-                                type="time"
-                                value={editedEmployee?.[`${jour}_debut`] || '08:00'}
-                                onChange={(e) => setEditedEmployee({
-                                  ...editedEmployee, 
-                                  [`${jour}_debut`]: e.target.value
-                                })}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                              />
+                      {jours.map(jour => {
+                        const travailleCeJour = editedEmployee?.[`${jour}_debut`] && editedEmployee?.[`${jour}_fin`];
+                        
+                        return (
+                          <div key={jour} className="bg-slate-50 rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <label className="text-sm font-medium text-slate-700 capitalize">
+                                {jour}
+                              </label>
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={!travailleCeJour}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      // Ne travaille pas ce jour
+                                      setEditedEmployee({
+                                        ...editedEmployee,
+                                        [`${jour}_debut`]: null,
+                                        [`${jour}_fin`]: null
+                                      });
+                                    } else {
+                                      // Travaille ce jour - mettre des horaires par défaut
+                                      setEditedEmployee({
+                                        ...editedEmployee,
+                                        [`${jour}_debut`]: '08:00',
+                                        [`${jour}_fin`]: '16:00'
+                                      });
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-slate-600 bg-gray-100 border-gray-300 rounded focus:ring-slate-500 focus:ring-2"
+                                />
+                                <label className="text-xs text-slate-600">
+                                  Ne travaille pas ce jour
+                                </label>
+                              </div>
                             </div>
-                            <div>
-                              <label className="block text-xs text-slate-600 mb-1">Fin</label>
-                              <input
-                                type="time"
-                                value={editedEmployee?.[`${jour}_fin`] || '16:00'}
-                                onChange={(e) => setEditedEmployee({
-                                  ...editedEmployee, 
-                                  [`${jour}_fin`]: e.target.value
-                                })}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                              />
-                            </div>
+                            
+                            {travailleCeJour && (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs text-slate-600 mb-1">Début</label>
+                                  <input
+                                    type="time"
+                                    value={editedEmployee?.[`${jour}_debut`] || '08:00'}
+                                    onChange={(e) => setEditedEmployee({
+                                      ...editedEmployee, 
+                                      [`${jour}_debut`]: e.target.value
+                                    })}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-slate-600 mb-1">Fin</label>
+                                  <input
+                                    type="time"
+                                    value={editedEmployee?.[`${jour}_fin`] || '16:00'}
+                                    onChange={(e) => setEditedEmployee({
+                                      ...editedEmployee, 
+                                      [`${jour}_fin`]: e.target.value
+                                    })}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            
+                            {!travailleCeJour && (
+                              <div className="text-center py-4 text-slate-400 text-sm">
+                                Employé non disponible ce jour
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

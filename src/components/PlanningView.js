@@ -32,6 +32,7 @@ const PlanningView = ({ user, onLogout }) => {
   const [employees, setEmployees] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [competences, setCompetences] = useState([]);
+  const [absences, setAbsences] = useState([]); // Nouveau état pour les absences
   
   // État pour le menu contextuel des rôles
   const [contextMenu, setContextMenu] = useState(null);
@@ -53,6 +54,7 @@ const PlanningView = ({ user, onLogout }) => {
    */
   const loadLogisticData = useCallback(async () => {
     try {
+      console.log('🔄 === CHARGEMENT DONNÉES LOGISTIQUE ===');
       setLoading(true);
       
       const [employeesResult, vehiculesResult, competencesResult] = await Promise.all([
@@ -60,6 +62,12 @@ const PlanningView = ({ user, onLogout }) => {
         supabaseLogistique.getVehicules(),
         supabaseLogistique.getCompetencesVehicules()
       ]);
+      
+      console.log('📊 Résultats chargement:', {
+        employees: employeesResult.data?.length || 0,
+        vehicles: vehiculesResult.data?.length || 0,
+        competences: competencesResult.data?.length || 0
+      });
 
       if (employeesResult.error) throw employeesResult.error;
       if (vehiculesResult.error) throw vehiculesResult.error;
@@ -78,6 +86,7 @@ const PlanningView = ({ user, onLogout }) => {
   }, []);
 
   useEffect(() => {
+    console.log('🔄 === useEffect DÉMARRAGE - Chargement données ===');
     loadLogisticData();
   }, [loadLogisticData]);
 
@@ -107,7 +116,13 @@ const PlanningView = ({ user, onLogout }) => {
    * Initialisation planning
    */
   const initializePlanning = useCallback(async () => {
-    if (vehicles.length === 0) return;
+    console.log('🔄 === APPEL INITIALIZE PLANNING ===');
+    console.log('🚗 Véhicules disponibles:', vehicles.length);
+    
+    if (vehicles.length === 0) {
+      console.warn('⚠️ Aucun véhicule chargé - arrêt initialisation');
+      return;
+    }
     
     try {
       console.log('🔄 Initialisation planning...');
@@ -126,7 +141,27 @@ const PlanningView = ({ user, onLogout }) => {
       const planningData = planningResult.data || {};
       const absents = absencesResult.data || [];
       
+      // 🔍 DEBUG : Vérifier les données reçues
+      console.log('🔍 Planning data reçu:', planningData);
+      console.log('🔍 Nombre de jours dans planning:', Object.keys(planningData).length);
+      Object.entries(planningData).forEach(([date, vehicles]) => {
+        console.log(`🔍 ${date}: ${Object.keys(vehicles).length} véhicules`);
+        Object.entries(vehicles).forEach(([vehicleId, employees]) => {
+          console.log(`  🔍 Véhicule ${vehicleId}: ${employees.length} employés`);
+        });
+      });
+      
+      // Stocker les absences dans l'état du composant pour les rendez-vous
+      setAbsences(absents);
+      
       console.log('📅 Absences chargées pour la semaine:', absents.length);
+      
+      // 🔍 DEBUG RENDEZ-VOUS
+      const rendezVous = absents.filter(abs => abs.type_absence === 'Rendez-vous');
+      console.log('📅 Rendez-vous trouvés:', rendezVous.length);
+      rendezVous.forEach(rdv => {
+        console.log(`🔍 RDV: ${rdv.employes_logistique_new?.nom} le ${rdv.date_debut} à ${rdv.heure_debut}`);
+      });
       
       // Créer le planning final avec absences
       const finalPlanning = {};
@@ -139,25 +174,70 @@ const PlanningView = ({ user, onLogout }) => {
         
         // Initialiser toutes les cases véhicules avec les données existantes ou vide
         vehicles.forEach(vehicle => {
-          finalPlanning[dateKey][vehicle.id] = planningData[dateKey]?.[vehicle.id] || [];
+          const vehicleData = planningData[dateKey]?.[vehicle.id] || [];
+          finalPlanning[dateKey][vehicle.id] = vehicleData;
+          
+          // 🔍 DEBUG : Tracer l'assignation des données
+          if (vehicleData.length > 0) {
+            console.log(`🔍 ${dateKey} - Véhicule ${vehicle.nom} (${vehicle.id}): ${vehicleData.length} employés assignés`);
+            vehicleData.forEach(emp => {
+              console.log(`  🔍 ${emp.nom} (${emp.role})`);
+            });
+          }
         });
         
         // Ajouter les employés absents pour ce jour (tenir compte des plages de dates)
+        // IMPORTANT: Les rendez-vous ne sont PAS des absences, ils restent assignables aux véhicules
         absents.forEach(absence => {
-          if (absence.employee) {
+          // ✅ CORRECTION : Utiliser la bonne structure de données
+          const employee = absence.employes_logistique_new;
+          
+          if (employee && absence.employee_id) {
             // Vérifier si ce jour se trouve dans la plage d'absence
             if (dateKey >= absence.date_debut && dateKey <= absence.date_fin) {
-              finalPlanning[dateKey].absents.push({
-                ...absence.employee,
-                status: 'absent',
-                type_absence: absence.type_absence,
-                motif: absence.motif,
-                isReadOnly: true // 👁️ Lecture seule - géré par interface absences
-              });
+              // ⚠️ SEULES les vraies absences vont dans la section absents
+              if (absence.type_absence !== 'Rendez-vous') {
+                finalPlanning[dateKey].absents.push({
+                  id: employee.nom,
+                  nom: employee.nom,
+                  employee_id: absence.employee_id,
+                  status: 'absent',
+                  type_absence: absence.type_absence,
+                  motif: absence.motif,
+                  isReadOnly: true // 👁️ Lecture seule - géré par interface absences
+                });
+                console.log(`👤 Absent ajouté: ${employee.nom} le ${dateKey} (${absence.type_absence})`);
+              }
+              // Les rendez-vous sont stockés séparément pour l'affichage mais n'empêchent pas l'assignation
             }
+          } else if (absence.type_absence === 'Fermeture') {
+            // Fermeture globale du service (pas d'employé spécifique)
+            console.log(`🚫 Service fermé le ${dateKey}: ${absence.motif}`);
           }
         });
       });
+      
+      // 🔍 DEBUG : État final du planning
+      console.log('🔍 Planning final avant setState:', finalPlanning);
+      Object.entries(finalPlanning).forEach(([date, dayData]) => {
+        const vehicleCount = Object.keys(dayData).filter(key => key !== 'absents').length;
+        const employeeCount = Object.values(dayData)
+          .filter(data => Array.isArray(data))
+          .reduce((sum, employees) => sum + employees.length, 0);
+        console.log(`🔍 ${date}: ${vehicleCount} véhicules, ${employeeCount} employés total`);
+      });
+      
+      // 🚨 ALERTE SI SEMAINE VIDE
+      const totalEmployees = Object.values(finalPlanning)
+        .map(dayData => Object.values(dayData)
+          .filter(data => Array.isArray(data))
+          .reduce((sum, employees) => sum + employees.length, 0))
+        .reduce((sum, count) => sum + count, 0);
+        
+      if (totalEmployees === 0) {
+        console.warn('⚠️ SEMAINE VIDE - Aucune affectation trouvée pour cette semaine');
+        console.log('💡 Essayez la semaine précédente ou regénérez le planning');
+      }
       
       setPlanning(finalPlanning);
       console.log('✅ Planning initialisé avec absences automatiques');
@@ -169,8 +249,14 @@ const PlanningView = ({ user, onLogout }) => {
   }, [currentWeek, vehicles, createEmptyPlanning]);
 
   useEffect(() => {
+    console.log('🔄 === useEffect TRIGGER ===');
+    console.log('📊 État:', { loading, vehiclesCount: vehicles.length, currentWeek: format(currentWeek, 'yyyy-MM-dd') });
+    
     if (!loading && vehicles.length > 0) {
-    initializePlanning();
+      console.log('✅ Conditions OK - Appel initializePlanning');
+      initializePlanning();
+    } else {
+      console.warn('⚠️ Conditions pas réunies:', { loading, vehiclesCount: vehicles.length });
     }
   }, [loading, vehicles, currentWeek, initializePlanning]);
 
@@ -397,6 +483,51 @@ const PlanningView = ({ user, onLogout }) => {
   };
 
   /**
+   * Section Rendez-vous pour un jour donné
+   * 📅 AFFICHAGE SEULEMENT - Rappel visuel des rendez-vous
+   */
+  const getRendezVousSection = (day) => {
+    const dateKey = format(day, 'yyyy-MM-dd');
+    
+    // Chercher les rendez-vous pour ce jour
+    const rendezVousEmployees = absences.filter(absence => 
+      absence.type_absence === 'Rendez-vous' &&
+      dateKey >= absence.date_debut && 
+      dateKey <= absence.date_fin &&
+      absence.employes_logistique_new && // ✅ Correction structure
+      absence.employee_id
+    );
+    
+    if (rendezVousEmployees.length === 0) {
+      return null; // Pas de section si pas de rendez-vous
+    }
+    
+    return (
+      <div className="min-h-[80px] p-2 transition-all duration-200 border-2 rounded-lg border-orange-200 bg-orange-50">
+        <div className="space-y-1 h-full">
+          {rendezVousEmployees.map((absence, index) => {
+            const heure = absence.heure_debut ? absence.heure_debut.split(':')[0] : '';
+            const employee = absence.employes_logistique_new; // ✅ Bonne structure
+            return (
+              <div
+                key={`rdv-readonly-${dateKey}-${absence.employee_id}-${index}`}
+                className="px-2 py-1 text-xs rounded bg-orange-100 text-orange-800 border border-orange-300 cursor-help"
+                title={`${employee.nom} a un rendez-vous à ${absence.heure_debut || 'heure non précisée'}`}
+              >
+                {getFirstName(employee.nom)} - RDV {heure}h
+              </div>
+            );
+          })}
+        </div>
+        
+        <div className="text-xs text-orange-600 text-center mt-1">
+          {rendezVousEmployees.length} rendez-vous
+        </div>
+      </div>
+    );
+  };
+
+  /**
    * Drag & Drop
    */
   const onDragEnd = async (result) => {
@@ -516,11 +647,33 @@ const PlanningView = ({ user, onLogout }) => {
         return;
       }
       
-      // Retirer l'employé du planning (désassignation)
-      newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
-      
-      setPlanning(newPlanning);
-      toast.success(`${getFirstName(draggedEmployee.nom)} désassigné`);
+      try {
+        // 🔥 CORRECTION : Supprimer aussi de la base de données
+        console.log('🗑️ Suppression assignation en base:', {
+          employeeId: draggedEmployee.employee_id || draggedEmployee.id,
+          vehiculeId: sourceVehicle,
+          date: sourceDate
+        });
+        
+        const removeResult = await supabaseLogistique.removeEmployeeFromPlanning(
+          draggedEmployee.employee_id || draggedEmployee.id,
+          sourceVehicle,
+          sourceDate
+        );
+        
+        if (removeResult.success) {
+          // Retirer l'employé du planning local seulement après suppression DB réussie
+          newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
+          setPlanning(newPlanning);
+          toast.success(`${getFirstName(draggedEmployee.nom)} désassigné et supprimé de la base`);
+        } else {
+          throw new Error(removeResult.error?.message || 'Erreur suppression DB');
+        }
+      } catch (error) {
+        console.error('❌ Erreur suppression assignation:', error);
+        toast.error(`Erreur suppression: ${error.message}`);
+        return;
+      }
       
       return;
     }
@@ -586,6 +739,34 @@ const PlanningView = ({ user, onLogout }) => {
   };
 
   /**
+   * Obtenir les rendez-vous d'un employé pour une date donnée
+   */
+  const getEmployeeRendezVous = (employeeId, date) => {
+    // Chercher dans les absences de la semaine les rendez-vous pour cet employé et cette date
+    const rendezVous = absences.find(absence => 
+      absence.employee_id === employeeId && 
+      absence.type_absence === 'Rendez-vous' &&
+      date >= absence.date_debut && 
+      date <= absence.date_fin
+    );
+
+    if (rendezVous && rendezVous.heure_debut) {
+      const heure = rendezVous.heure_debut.split(':')[0];
+      return {
+        hasRendezVous: true,
+        display: `RDV ${heure}h`,
+        fullInfo: rendezVous
+      };
+    }
+
+    return {
+      hasRendezVous: false,
+      display: null,
+      fullInfo: null
+    };
+  };
+
+  /**
    * Obtenir une couleur unique par véhicule
    */
   const getVehicleColor = (vehicleId) => {
@@ -629,7 +810,9 @@ const PlanningView = ({ user, onLogout }) => {
           badge: 'bg-green-500 text-white',
           text: 'A'
         };
-      default: // equipier
+      case 'équipier': // Équipiers sans couleur selon les spécifications
+      case 'equipier': // Support des deux orthographes
+      default: // pas de rôle défini ou équipier
         return {
           border: '',
           badge: '',
@@ -696,83 +879,175 @@ const PlanningView = ({ user, onLogout }) => {
   const getVehicleColumn = (vehicle, day) => {
     const dateKey = format(day, 'yyyy-MM-dd');
     const employees = planning[dateKey]?.[vehicle.id] || [];
+    
+    // 🔍 DEBUG GÉNÉRAL : Voir si planning contient des données
+    if (employees.length === 0 && planning[dateKey] && Object.keys(planning[dateKey]).length > 0) {
+      console.log(`⚠️ Véhicule ${vehicle.nom} (ID: ${vehicle.id}) vide mais données existent:`, {
+        vehicleId: vehicle.id,
+        vehicleIdType: typeof vehicle.id,
+        availableKeys: Object.keys(planning[dateKey]),
+        availableKeysTypes: Object.keys(planning[dateKey]).map(k => typeof k)
+      });
+    }
+    
+    // 🔍 DEBUG : Tracer le problème d'affichage vide
+    if (dateKey === '2025-07-28') {
+      console.log(`🔍 VEHICLE DEBUG - ${vehicle.nom} (ID: ${vehicle.id}):`, {
+        dateKey,
+        vehicleId: vehicle.id,
+        planningForDate: planning[dateKey],
+        employeesFound: employees.length,
+        employees: employees
+      });
+      
+      if (planning[dateKey]) {
+        console.log(`🔍 Véhicules disponibles le ${dateKey}:`, Object.keys(planning[dateKey]));
+        console.log(`🔍 Données véhicule ${vehicle.id}:`, planning[dateKey][vehicle.id]);
+      }
+    }
+    
     const droppableId = `${dateKey}_${vehicle.id}`;
     const columnHeight = getVehicleColumnHeight(vehicle.capacite);
+    const isFerme = isServiceFerme(day);
+    const fermetureInfo = getFermetureInfo(day);
     
     return (
-      <Droppable droppableId={droppableId}>
-        {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            className={`${columnHeight} p-2 transition-all duration-200 border-2 rounded-lg ${
-              snapshot.isDraggingOver 
-                ? 'border-blue-400 bg-blue-50' 
-                : 'border-gray-200 bg-gray-50'
-            }`}
-          >
-            <div className="space-y-1 h-full overflow-y-auto">
-              {employees.map((employee, index) => {
-                const roleStyles = getRoleStyles(employee.role);
-                const isAbsent = employee.absent === true; // Lire directement la colonne absent
-                
-                return (
-                  <Draggable 
-                    key={`${dateKey}-${vehicle.id}-${employee.id}-${index}`} 
-                    draggableId={`planning-${dateKey}-${vehicle.id}-${employee.id}-${index}`} 
-                    index={index}
-                  >
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        onContextMenu={(e) => openContextMenu(e, dateKey, vehicle.id, index)}
-                        className={`px-2 py-1 text-xs rounded transition-all cursor-grab active:cursor-grabbing relative ${roleStyles.border} ${
-                          snapshot.isDragging
-                            ? 'bg-blue-500 text-white shadow-lg transform rotate-1'
-                            : isAbsent
-                              ? 'bg-gray-200 text-gray-600 opacity-75 border border-red-300' // Style pour absent
-                              : employee.profil === 'Fort' ? 'bg-emerald-100 text-emerald-800' :
-                                employee.profil === 'Moyen' ? 'bg-amber-100 text-amber-800' :
-                                'bg-rose-100 text-rose-800'
-                        }`}
-                        title={
-                          isAbsent 
-                            ? `⚠️ ${employee.nom} est absent ce jour - Réassigner urgence !`
-                            : `Clic droit pour changer le rôle (${employee.role || 'equipier'})`
-                        }
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center">
-                            {getFirstName(employee.nom)}
-                            {isAbsent && (
-                              <span className="ml-1 text-xs bg-red-500 text-white px-1 rounded">
-                                Absent
+      <div className="relative">
+        <Droppable droppableId={droppableId} isDropDisabled={isFerme}>
+          {(provided, snapshot) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className={`${columnHeight} p-2 transition-all duration-200 border-2 rounded-lg ${
+                isFerme 
+                  ? 'border-gray-400 bg-gray-100 opacity-50' 
+                  : snapshot.isDraggingOver 
+                    ? 'border-blue-400 bg-blue-50' 
+                    : 'border-gray-200 bg-gray-50'
+              }`}
+            >
+              <div className="space-y-1 h-full overflow-y-auto">
+                {!isFerme && employees.map((employee, index) => {
+                  const roleStyles = getRoleStyles(employee.role);
+                  const isAbsent = employee.absent === true; // Lire directement la colonne absent
+                  const rendezVousInfo = getEmployeeRendezVous(employee.id, dateKey);
+                  
+                  return (
+                    <Draggable 
+                      key={`${dateKey}-${vehicle.id}-${employee.id}-${index}`} 
+                      draggableId={`planning-${dateKey}-${vehicle.id}-${employee.id}-${index}`} 
+                      index={index}
+                    >
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          onContextMenu={(e) => openContextMenu(e, dateKey, vehicle.id, index)}
+                          className={`px-2 py-1 text-xs rounded transition-all cursor-grab active:cursor-grabbing relative ${roleStyles.border} ${
+                            snapshot.isDragging
+                              ? 'bg-blue-500 text-white shadow-lg transform rotate-1'
+                              : isAbsent
+                                ? 'bg-gray-200 text-gray-600 opacity-75 border border-red-300' // Style pour absent
+                                : employee.profil === 'Fort' ? 'bg-emerald-100 text-emerald-800' :
+                                  employee.profil === 'Moyen' ? 'bg-amber-100 text-amber-800' :
+                                  'bg-rose-100 text-rose-800'
+                          }`}
+                          title={
+                            isAbsent 
+                              ? `⚠️ ${employee.nom} est absent ce jour - Réassigner urgence !`
+                              : rendezVousInfo.hasRendezVous
+                                ? `📅 ${employee.nom} a un rendez-vous (${rendezVousInfo.display})`
+                                : `Clic droit pour changer le rôle (${employee.role || 'equipier'})`
+                          }
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center">
+                              {getFirstName(employee.nom)}
+                              {isAbsent && (
+                                <span className="ml-1 text-xs bg-red-500 text-white px-1 rounded">
+                                  Absent
+                                </span>
+                              )}
+                              {!isAbsent && rendezVousInfo.hasRendezVous && (
+                                <span className="ml-1 text-xs bg-orange-500 text-white px-1 rounded">
+                                  {rendezVousInfo.display}
+                                </span>
+                              )}
+                            </span>
+                            {roleStyles.badge && !isAbsent && (
+                              <span className={`w-4 h-4 rounded-full text-xs flex items-center justify-center ${roleStyles.badge}`}>
+                                {roleStyles.text}
                               </span>
                             )}
-                          </span>
-                          {roleStyles.badge && !isAbsent && (
-                            <span className={`w-4 h-4 rounded-full text-xs flex items-center justify-center ${roleStyles.badge}`}>
-                              {roleStyles.text}
-                            </span>
-                          )}
+                          </div>
                         </div>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+                
+                {isFerme && (
+                  <div className="text-center py-8">
+                    <div className="text-gray-600 text-sm font-medium mb-2">
+                      🚫 Service fermé
+                    </div>
+                    {fermetureInfo && (
+                      <div className="text-xs text-gray-500">
+                        {fermetureInfo.motif}
                       </div>
                     )}
-                  </Draggable>
-                );
-              })}
-            </div>
-            {provided.placeholder}
-            
-            <div className="text-xs text-gray-400 text-center mt-1">
-              {employees.length}/{vehicle.capacite}
+                  </div>
+                )}
               </div>
+              {provided.placeholder}
+              
+              <div className="text-xs text-gray-400 text-center mt-1">
+                {isFerme ? 'FERMÉ' : `${employees.length}/${vehicle.capacite}`}
+              </div>
+            </div>
+          )}
+        </Droppable>
+        
+        {/* Overlay de fermeture */}
+        {isFerme && (
+          <div className="absolute inset-0 bg-gray-600 bg-opacity-20 rounded-lg flex items-center justify-center pointer-events-none">
+            <div className="bg-white px-3 py-2 rounded-lg shadow-lg text-center border-2 border-gray-400">
+              <div className="text-sm font-bold text-gray-700">🚫 FERMÉ</div>
+              {fermetureInfo && (
+                <div className="text-xs text-gray-500 mt-1">{fermetureInfo.motif}</div>
+              )}
+            </div>
           </div>
         )}
-      </Droppable>
+      </div>
     );
+  };
+
+  /**
+   * Vérifier si le service est fermé un jour donné
+   */
+  const isServiceFerme = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    return absences.some(absence => 
+      absence.type_absence === 'Fermeture' &&
+      dateKey >= absence.date_debut && 
+      dateKey <= absence.date_fin
+    );
+  };
+
+  /**
+   * Obtenir les informations de fermeture pour un jour donné
+   */
+  const getFermetureInfo = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const fermeture = absences.find(absence => 
+      absence.type_absence === 'Fermeture' &&
+      dateKey >= absence.date_debut && 
+      dateKey <= absence.date_fin
+    );
+    return fermeture;
   };
 
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
@@ -997,6 +1272,22 @@ const PlanningView = ({ user, onLogout }) => {
                     {weekDays.map(day => (
                       <div key={`absents-${day.toISOString()}`}>
                         {getAbsentsSection(day)}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* LIGNE RENDEZ-VOUS */}
+                  <div className="grid grid-cols-6 gap-4 border-t-2 border-orange-200 pt-3">
+                    <div className="flex items-center space-x-3 py-2">
+                      <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                      <div>
+                        <div className="text-sm font-medium text-orange-700">Rendez-vous</div>
+                        <div className="text-xs text-orange-500">Rappel des rendez-vous</div>
+                      </div>
+                    </div>
+                    {weekDays.map(day => (
+                      <div key={`rdvs-${day.toISOString()}`}>
+                        {getRendezVousSection(day)}
                       </div>
                     ))}
                   </div>
