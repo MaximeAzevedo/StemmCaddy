@@ -247,10 +247,12 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
     }
   };
 
-  // Fonction pour savoir si un employé est absent un jour donné
-  const isEmployeeAbsentOnDay = (employeeId, day) => {
+  // Fonction pour obtenir le statut d'un employé un jour donné
+  const getEmployeeStatusOnDay = (employeeId, day) => {
     const dayString = format(day, 'yyyy-MM-dd');
-    return absences.some(absence => {
+    
+    // Chercher une absence pour cet employé ce jour-là
+    const absence = absences.find(absence => {
       if (absence.employee_id !== employeeId) return false;
       
       // Vérifier si le jour se trouve dans la plage d'absence
@@ -259,6 +261,45 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
       
       return dayString >= dateDebut && dayString <= dateFin;
     });
+    
+    if (absence) {
+      // Retourner les infos de l'absence avec couleur et abréviation
+      const typeInfo = typeAbsenceOptions.find(opt => opt.value === absence.type_absence) || 
+                       { value: 'Absent', label: 'Absent', color: 'bg-red-500' };
+      
+      return {
+        isAbsent: true,
+        type: absence.type_absence,
+        label: typeInfo.label,
+        color: typeInfo.color,
+        abbreviation: getAbsenceAbbreviation(absence.type_absence)
+      };
+    } else {
+      // Employé présent
+      return {
+        isAbsent: false,
+        type: 'Présent',
+        label: 'Présent',
+        color: 'bg-green-500',
+        abbreviation: '✓'
+      };
+    }
+  };
+
+  // Fonction pour obtenir l'abréviation du type d'absence
+  const getAbsenceAbbreviation = (type) => {
+    switch(type) {
+      case 'Absent': return 'ABS';
+      case 'Congé': return 'CONG';
+      case 'Maladie': return 'MAL';
+      case 'Formation': return 'FORM';
+      default: return 'ABS';
+    }
+  };
+
+  // Fonction pour savoir si un employé est absent un jour donné (pour compatibilité)
+  const isEmployeeAbsentOnDay = (employeeId, day) => {
+    return getEmployeeStatusOnDay(employeeId, day).isAbsent;
   };
 
   // Fonction pour obtenir les stats
@@ -377,6 +418,49 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
               </button>
             </div>
           </div>
+
+          {/* Légende des statuts */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Légende des statuts :</h3>
+            <div className="flex flex-wrap gap-4">
+              {/* Présent */}
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center border-2 border-green-300">
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                </div>
+                <span className="text-sm text-gray-600">Présent</span>
+              </div>
+              
+              {/* Types d'absence */}
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-6 rounded-lg bg-red-100 border-2 border-red-300 flex items-center justify-center">
+                  <span className="text-xs font-bold text-red-700">ABS</span>
+                </div>
+                <span className="text-sm text-gray-600">Absent</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-6 rounded-lg bg-blue-100 border-2 border-blue-300 flex items-center justify-center">
+                  <span className="text-xs font-bold text-blue-700">CONG</span>
+                </div>
+                <span className="text-sm text-gray-600">Congé</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-6 rounded-lg bg-yellow-100 border-2 border-yellow-300 flex items-center justify-center">
+                  <span className="text-xs font-bold text-yellow-700">MAL</span>
+                </div>
+                <span className="text-sm text-gray-600">Maladie</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-6 rounded-lg bg-purple-100 border-2 border-purple-300 flex items-center justify-center">
+                  <span className="text-xs font-bold text-purple-700">FORM</span>
+                </div>
+                <span className="text-sm text-gray-600">Formation</span>
+              </div>
+            </div>
+          </div>
           
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -408,14 +492,30 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
                     </td>
                     {Array.from({ length: 7 }, (_, i) => {
                       const day = addDays(currentWeek, i);
+                      const status = getEmployeeStatusOnDay(employee.id, day);
+                      
                       return (
                         <td key={i} className="p-3 text-center">
-                          {isEmployeeAbsentOnDay(employee.id, day) ? (
-                            <div className="w-8 h-8 mx-auto rounded-full bg-red-100 flex items-center justify-center border border-red-200">
-                              <Clock className="w-4 h-4 text-red-600" />
+                          {status.isAbsent ? (
+                            <div className={`w-12 h-8 mx-auto rounded-lg flex items-center justify-center border-2 ${
+                              status.type === 'Absent' ? 'bg-red-100 border-red-300' :
+                              status.type === 'Congé' ? 'bg-blue-100 border-blue-300' :
+                              status.type === 'Maladie' ? 'bg-yellow-100 border-yellow-300' :
+                              status.type === 'Formation' ? 'bg-purple-100 border-purple-300' :
+                              'bg-red-100 border-red-300'
+                            }`}>
+                              <span className={`text-xs font-bold ${
+                                status.type === 'Absent' ? 'text-red-700' :
+                                status.type === 'Congé' ? 'text-blue-700' :
+                                status.type === 'Maladie' ? 'text-yellow-700' :
+                                status.type === 'Formation' ? 'text-purple-700' :
+                                'text-red-700'
+                              }`}>
+                                {status.abbreviation}
+                              </span>
                             </div>
                           ) : (
-                            <div className="w-8 h-8 mx-auto rounded-full bg-green-100 flex items-center justify-center">
+                            <div className="w-8 h-8 mx-auto rounded-full bg-green-100 flex items-center justify-center border-2 border-green-300">
                               <CheckCircle className="w-4 h-4 text-green-600" />
                             </div>
                           )}
