@@ -259,7 +259,7 @@ export const aiService = {
 
   // ========================= GESTION COMPÉTENCES AVANCÉE =========================
   
-  async validateCompetence(employeeId, vehicleId, niveau = 'X', needsConfirmation = false) {
+  async validateCompetence(employeeId, vehicleId, niveau = 'en formation', needsConfirmation = false) {
     try {
       const { data: employee } = await supabaseAPI.getEmployee(employeeId);
       const { data: vehicle } = await supabaseAPI.getVehicle(vehicleId);
@@ -283,7 +283,7 @@ export const aiService = {
       if (result.error) throw result.error;
 
       this.logModification('VALIDATE_COMPETENCE', `Compétence validée: ${employee?.nom} - ${vehicle?.nom} (${niveau})`, competenceData);
-      return `🎯 **Compétence validée !**\n👤 ${employee?.nom}\n🚛 ${vehicle?.nom}\n⭐ Niveau: ${niveau === 'XX' ? '2 étoiles (autonome)' : '1 étoile (accompagné)'}`;
+      return `🎯 **Compétence validée !**\n👤 ${employee?.nom}\n🚛 ${vehicle?.nom}\n⭐ Niveau: ${niveau === 'XX' ? '2 étoiles (autonome)' : '1 étoile (en formation)'}`;
 
     } catch (error) {
       this.logModification('ERROR', `Échec validation compétence: ${error.message}`, { employeeId, vehicleId, niveau });
@@ -759,7 +759,7 @@ export const aiService = {
           if (!employee) response = `❌ Employé "${employeeName}" non trouvé`;
           else if (!vehicle) response = `❌ Véhicule "${vehicleName}" non trouvé`;
           else {
-            const niveauCode = niveau === 'autonome' ? 'XX' : 'X';
+            const niveauCode = niveau === 'autonome' ? 'XX' : 'en formation';
             response = await this.validateCompetence(employee.id, vehicle.id, niveauCode);
           }
         } else {

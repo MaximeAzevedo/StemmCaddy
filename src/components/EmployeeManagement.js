@@ -183,7 +183,7 @@ const EmployeeManagement = ({ user, onLogout }) => {
         if (field === 'valide') {
           if (value) {
             // Si on valide, créer/mettre à jour la compétence avec au moins 1 étoile
-            const niveau = existingCompetence?.niveau === 'XX' ? 'XX' : 'X';
+            const niveau = existingCompetence?.niveau === 'XX' ? 'XX' : 'en formation';
             const competenceData = {
               niveau: niveau,
               date_validation: new Date().toISOString().split('T')[0]
@@ -199,12 +199,12 @@ const EmployeeManagement = ({ user, onLogout }) => {
             console.log('🗑️ Suppression de compétence non implémentée');
           }
         } else if (field === 'niveau') {
-          // Conversion du niveau (0, 1, 2) vers le format base ('', 'X', 'XX')
+          // Conversion du niveau (0, 1, 2) vers le format base ('', 'en formation', 'XX')
           if (value === 0) {
             // Niveau 0 = supprimer la compétence
             console.log('🗑️ Suppression de compétence niveau 0');
           } else {
-            const niveau = value === 1 ? 'X' : 'XX';
+            const niveau = value === 1 ? 'en formation' : 'XX';
             const competenceData = {
               niveau: niveau,
               date_validation: new Date().toISOString().split('T')[0]
@@ -232,7 +232,7 @@ const EmployeeManagement = ({ user, onLogout }) => {
           if (value) {
             // Ajouter ou mettre à jour la compétence
             const competenceIndex = newCompetences[employeeId].findIndex(c => c.vehicle_id === vehicleId);
-            const niveau = existingCompetence?.niveau === 'XX' ? 'XX' : 'X';
+            const niveau = existingCompetence?.niveau === 'XX' ? 'XX' : 'en formation';
             const updatedCompetence = {
               employee_id: employeeId,
               vehicle_id: vehicleId,
@@ -257,7 +257,7 @@ const EmployeeManagement = ({ user, onLogout }) => {
           } else {
             // Mettre à jour le niveau
             const competenceIndex = newCompetences[employeeId].findIndex(c => c.vehicle_id === vehicleId);
-            const niveau = value === 1 ? 'X' : 'XX';
+            const niveau = value === 1 ? 'en formation' : 'XX';
             const updatedCompetence = {
               employee_id: employeeId,
               vehicle_id: vehicleId,

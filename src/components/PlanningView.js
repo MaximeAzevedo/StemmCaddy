@@ -9,7 +9,10 @@ import {
   ChevronRight,
   User,
   Truck,
-  Monitor
+  Monitor,
+  X,
+  Play,
+  CheckCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +35,18 @@ const PlanningView = ({ user, onLogout }) => {
   
   // État pour le menu contextuel des rôles
   const [contextMenu, setContextMenu] = useState(null);
+
+  // État pour le générateur automatique
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [generatorLoading, setGeneratorLoading] = useState(false);
+  const [selectedStartDate, setSelectedStartDate] = useState('');
+  const [generatorOptions, setGeneratorOptions] = useState({
+    replaceExisting: false,
+    fillGapsOnly: true
+  });
+
+  // État pour la confirmation de reset
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   /**
    * Chargement des données logistique
@@ -104,7 +119,7 @@ const PlanningView = ({ user, onLogout }) => {
       
       // Charger planning existant et absences en parallèle
       const [planningResult, absencesResult] = await Promise.all([
-        supabaseLogistique.loadPlanningHebdomadaire(currentWeek),
+        supabaseLogistique.loadPlanningHebdomadaire(format(currentWeek, 'yyyy-MM-dd')),
         supabaseLogistique.getAbsencesLogistique(dateDebut, dateFin)
       ]);
       
@@ -233,6 +248,111 @@ const PlanningView = ({ user, onLogout }) => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Générer automatiquement le planning pour une semaine
+   */
+  const generateWeeklyPlanning = async () => {
+    if (!selectedStartDate) {
+      toast.error('Veuillez sélectionner une date de début');
+      return;
+    }
+
+    try {
+      setGeneratorLoading(true);
+      
+      console.log('🤖 Démarrage génération planning automatique...');
+      toast.loading('Génération du planning en cours...', { id: 'generator' });
+
+      // Utiliser la date de début comme référence pour la semaine
+      const startDateStr = format(new Date(selectedStartDate), 'yyyy-MM-dd');
+      const result = await supabaseLogistique.generateWeeklyPlanning(startDateStr, generatorOptions);
+      
+      if (result.success) {
+        const { data } = result;
+        
+        toast.success(
+          `✅ Planning généré avec succès !\n` +
+          `📅 ${data.daysGenerated} jours • ${data.entriesCreated} assignations\n` +
+          `👥 ${data.summary.employeesAssigned} employés sur ${data.summary.vehiclesUsed} véhicules`,
+          { 
+            id: 'generator',
+            duration: 6000
+          }
+        );
+
+        console.log('✅ PLANNING GÉNÉRÉ:', data);
+        
+        // Recharger le planning pour afficher les nouvelles données
+        await initializePlanning();
+        
+        // Fermer le modal
+        setGeneratorOpen(false);
+        
+        // Réinitialiser la date
+        setSelectedStartDate('');
+
+      } else {
+        throw new Error(result.error || 'Erreur inconnue');
+      }
+
+    } catch (error) {
+      console.error('💥 Erreur génération planning:', error);
+      toast.error(
+        `❌ Erreur génération planning: ${error.message}`,
+        { id: 'generator', duration: 5000 }
+      );
+    } finally {
+      setGeneratorLoading(false);
+    }
+  };
+
+  /**
+   * Obtenir la date du lundi de la semaine courante comme suggestion
+   */
+  const getCurrentMondayDate = () => {
+    // Utiliser la semaine courante affichée dans le planning
+    return format(currentWeek, 'yyyy-MM-dd');
+  };
+
+  /**
+   * Ouvrir le générateur avec une date par défaut
+   */
+  const openPlanningGenerator = () => {
+    setSelectedStartDate(getCurrentMondayDate());
+    setGeneratorOpen(true);
+  };
+
+  /**
+   * Reset du planning avec confirmation
+   */
+  const resetPlanning = () => {
+    setResetConfirmOpen(true);
+  };
+
+  /**
+   * Confirmer le reset du planning
+   */
+  const confirmResetPlanning = async () => {
+    try {
+      // Vider le planning local
+      createEmptyPlanning();
+      
+      // Optionnel : Supprimer aussi de la base de données
+      const weekDates = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+      for (const date of weekDates) {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        await supabaseLogistique.clearDayPlanning(dateStr);
+      }
+      
+      setResetConfirmOpen(false);
+      toast.success('🔄 Planning remis à zéro !');
+      
+    } catch (error) {
+      console.error('❌ Erreur reset planning:', error);
+      toast.error('❌ Erreur lors du reset');
     }
   };
 
@@ -687,15 +807,7 @@ const PlanningView = ({ user, onLogout }) => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={generateAIPlanning}
-                disabled={employees.length === 0}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                <Zap className="w-4 h-4" />
-                <span>IA</span>
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
               <button 
                 onClick={savePlanning}
                 disabled={saving || Object.keys(planning).length === 0}
@@ -705,18 +817,28 @@ const PlanningView = ({ user, onLogout }) => {
                 <span>{saving ? 'Sauvegarde...' : 'Sauvegarder'}</span>
               </button>
               <button
+                onClick={openPlanningGenerator}
+                disabled={employees.length === 0}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <Play className="w-4 h-4" />
+                <span>Générer IA</span>
+              </button>
+              <button
+                onClick={resetPlanning}
+                disabled={Object.keys(planning).length === 0}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <X className="w-4 h-4" />
+                <span>Reset</span>
+              </button>
+              <button
                 onClick={() => navigate('/logistique/tv')}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
                 title="Mode TV - Affichage télévision"
               >
                 <Monitor className="w-4 h-4" />
                 <span>Mode TV</span>
-              </button>
-              <button
-                onClick={onLogout}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                Déconnexion
               </button>
             </div>
           </div>
@@ -918,6 +1040,77 @@ const PlanningView = ({ user, onLogout }) => {
             >
               Équipier
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Générateur IA */}
+      {generatorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Générateur de Planning IA</h3>
+            <p className="text-sm text-gray-700 mb-4">
+              Sélectionnez une date de début pour générer le planning hebdomadaire.
+              Le planning généré remplacera les données existantes.
+            </p>
+            <div className="flex items-center space-x-2 mb-4">
+              <input
+                type="date"
+                value={selectedStartDate}
+                onChange={(e) => setSelectedStartDate(e.target.value)}
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+              />
+              <button
+                onClick={generateWeeklyPlanning}
+                disabled={!selectedStartDate || generatorLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                {generatorLoading ? (
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                <span>{generatorLoading ? 'Génération...' : 'Générer Planning'}</span>
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setGeneratorOpen(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmation de reset */}
+      {resetConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Confirmation de Reset</h3>
+            <p className="text-sm text-gray-700 mb-4">
+              Êtes-vous sûr de vouloir remettre le planning à zéro pour cette semaine ?
+              Cela supprimera toutes les assignations et absences existantes.
+            </p>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={confirmResetPlanning}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Oui, Reset
+              </button>
+              <button
+                onClick={() => setResetConfirmOpen(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { format, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Monitor, ArrowLeft, Play, Pause, RotateCcw } from 'lucide-react';
+import { Monitor, ArrowLeft, Play, Pause, RotateCcw, ChevronLeft, ChevronRight, Calendar, Maximize } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseLogistique } from '../lib/supabase-logistique';
 
@@ -12,6 +12,7 @@ const LogistiqueTVView = () => {
   const [loading, setLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [timeLeft, setTimeLeft] = useState(15);
+  const [fullscreenFailed, setFullscreenFailed] = useState(false);
   
   // Données
   const [employees, setEmployees] = useState([]);
@@ -22,7 +23,7 @@ const LogistiqueTVView = () => {
   /**
    * Chargement des données complètes
    */
-  const loadAllData = useCallback(async () => {
+  const loadAllData = async () => {
     try {
       setLoading(true);
 
@@ -37,7 +38,7 @@ const LogistiqueTVView = () => {
       const [employeesResult, vehiculesResult, planningResult, absencesResult] = await Promise.all([
         supabaseLogistique.getEmployeesLogistique(),
         supabaseLogistique.getVehicules(),
-        supabaseLogistique.loadPlanningHebdomadaire(currentWeek),
+        supabaseLogistique.loadPlanningHebdomadaire(format(currentWeek, 'yyyy-MM-dd')),
         supabaseLogistique.getAbsencesLogistique(weekDates[0], weekDates[4])
       ]);
 
@@ -56,7 +57,7 @@ const LogistiqueTVView = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentWeek]);
+  };
 
   /**
    * Alternance automatique des vues avec timer (3 vues maintenant)
@@ -103,23 +104,70 @@ const LogistiqueTVView = () => {
   };
 
   /**
+   * Navigation entre les semaines
+   */
+  const goToPreviousWeek = () => {
+    setCurrentWeek(prev => {
+      const newWeek = new Date(prev);
+      newWeek.setDate(newWeek.getDate() - 7);
+      return newWeek;
+    });
+    setTimeLeft(15); // Reset timer lors du changement
+  };
+
+  const goToNextWeek = () => {
+    setCurrentWeek(prev => {
+      const newWeek = new Date(prev);
+      newWeek.setDate(newWeek.getDate() + 7);
+      return newWeek;
+    });
+    setTimeLeft(15); // Reset timer lors du changement
+  };
+
+  const goToCurrentWeek = () => {
+    setCurrentWeek(startOfWeek(new Date(), { weekStartsOn: 1 }));
+    setTimeLeft(15);
+  };
+
+  /**
+   * Activer manuellement le plein écran
+   */
+  const enterFullscreenManually = async () => {
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+        setFullscreenFailed(false);
+      }
+    } catch (error) {
+      // Ignore silencieusement les erreurs
+    }
+  };
+
+  /**
    * Chargement initial et au changement de semaine
    */
   useEffect(() => {
     loadAllData();
-  }, [loadAllData]);
+  }, [currentWeek]); // 🔧 CORRECTION: Dépendance sur currentWeek au lieu de loadAllData
 
   /**
    * Plein écran au montage
    */
   useEffect(() => {
-    const enterFullscreen = () => {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen();
+    const enterFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+          setFullscreenFailed(false);
+        }
+      } catch (error) {
+        // Ignorer silencieusement les erreurs de permissions plein écran
+        setFullscreenFailed(true);
       }
     };
 
-    enterFullscreen();
+    // Délai pour éviter les erreurs de permissions (doit être après interaction utilisateur)
+    setTimeout(enterFullscreen, 100);
 
     // Gestion de la touche Escape pour revenir au planning
     const handleKeyPress = (e) => {
@@ -358,6 +406,44 @@ const LogistiqueTVView = () => {
         <ArrowLeft className="w-6 h-6 text-gray-600" />
       </button>
 
+      {/* Sélecteur de semaine */}
+      <div className="absolute top-4 left-1/4 transform -translate-x-1/2 z-50 flex items-center space-x-3 bg-gray-900 bg-opacity-90 px-4 py-2 rounded-lg">
+        {/* Semaine précédente */}
+        <button
+          onClick={goToPreviousWeek}
+          className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
+          title="Semaine précédente"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        {/* Affichage semaine courante */}
+        <div className="flex items-center space-x-2 text-white min-w-[200px] text-center">
+          <Calendar className="w-4 h-4" />
+          <span className="text-sm font-medium">
+            Semaine du {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
+          </span>
+        </div>
+
+        {/* Bouton semaine courante */}
+        <button
+          onClick={goToCurrentWeek}
+          className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs font-medium transition-colors"
+          title="Revenir à la semaine courante"
+        >
+          Aujourd'hui
+        </button>
+
+        {/* Semaine suivante */}
+        <button
+          onClick={goToNextWeek}
+          className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
+          title="Semaine suivante"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
       {/* Contrôles TV */}
       <div className="absolute top-4 right-4 z-50 flex items-center space-x-3 bg-gray-900 bg-opacity-80 px-4 py-2 rounded-lg">
         {/* Timer visuel */}
@@ -388,6 +474,17 @@ const LogistiqueTVView = () => {
         >
           <RotateCcw className="w-4 h-4" />
         </button>
+
+        {/* Bouton plein écran si échec */}
+        {fullscreenFailed && (
+          <button
+            onClick={enterFullscreenManually}
+            className="p-2 bg-orange-600 hover:bg-orange-500 rounded-lg transition-colors text-white"
+            title="Activer le plein écran"
+          >
+            <Maximize className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Indicateur de vue */}
         <div className="flex items-center space-x-2 text-white">

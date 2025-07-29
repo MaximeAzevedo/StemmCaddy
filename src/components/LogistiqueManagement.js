@@ -11,7 +11,10 @@ import {
   ArrowLeft,
   CheckCircle,
   Clock,
-  FileText
+  FileText,
+  Trash2,
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +33,14 @@ const LogistiqueManagement = ({ user, onLogout }) => {
   const [editMode, setEditMode] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // États pour la suppression
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // États pour la création
+  const [createMode, setCreateMode] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const profiles = ['Faible', 'Moyen', 'Fort'];
   const jours = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'];
@@ -86,21 +97,49 @@ const LogistiqueManagement = ({ user, onLogout }) => {
   };
 
   /**
-   * Ouvrir la modification d'un employé
+   * Ouvrir la modal d'édition
    */
-  const openEditEmployee = (employee) => {
+  const openEdit = (employee) => {
     setSelectedEmployee(employee);
     setEditedEmployee({...employee});
     setEditMode(true);
   };
 
   /**
-   * Fermer la modification
+   * Ouvrir le mode création avec valeurs par défaut
+   */
+  const openCreate = () => {
+    const defaultEmployee = {
+      nom: '',
+      profil: 'Moyen',
+      permis: false,
+      langues: [],
+      notes: '',
+      // Horaires par défaut
+      lundi_debut: '08:00',
+      lundi_fin: '16:00',
+      mardi_debut: '08:00',
+      mardi_fin: '16:00',
+      mercredi_debut: '08:00',
+      mercredi_fin: '16:00',
+      jeudi_debut: '08:00',
+      jeudi_fin: '16:00',
+      vendredi_debut: '08:00',
+      vendredi_fin: '16:00'
+    };
+    setEditedEmployee(defaultEmployee);
+    setCreateMode(true);
+  };
+
+  /**
+   * Fermer les modals
    */
   const closeEdit = () => {
     setSelectedEmployee(null);
     setEditedEmployee(null);
     setEditMode(false);
+    setCreateMode(false);
+    setDeleteConfirmOpen(false); // Fermer aussi la confirmation
   };
 
   /**
@@ -153,24 +192,132 @@ const LogistiqueManagement = ({ user, onLogout }) => {
   };
 
   /**
-   * Mettre à jour une compétence véhicule (table séparée)
+   * Créer un nouvel employé
+   */
+  const createEmployee = async () => {
+    if (!editedEmployee || !editedEmployee.nom.trim()) {
+      toast.error('Le nom est obligatoire');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      
+      // Préparer les compétences véhicules
+      const competencesVehicules = vehicules.map(vehicule => {
+        const competence = editedEmployee[`competence_${vehicule.id}`];
+        return {
+          vehicule_id: vehicule.id,
+          niveau: competence || 'Aucune'
+        };
+      });
+
+      const employeeData = {
+        ...editedEmployee,
+        competencesVehicules
+      };
+
+      const result = await supabaseLogistique.createEmployeeLogistique(employeeData);
+      
+      if (result.error) {
+        if (result.error.code === 'EMPLOYEE_NAME_EXISTS') {
+          toast.error(result.error.message);
+        } else {
+          throw result.error;
+        }
+        return;
+      }
+      
+      // Mettre à jour la liste locale
+      setEmployees([...employees, result.data]);
+      
+      toast.success(`${result.data.nom} a été créé avec succès`);
+      closeEdit();
+      
+    } catch (error) {
+      console.error('❌ Erreur création employé:', error);
+      toast.error('Erreur lors de la création');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  /**
+   * Ouvrir la confirmation de suppression
+   */
+  const openDeleteConfirm = () => {
+    setDeleteConfirmOpen(true);
+  };
+
+  /**
+   * Fermer la confirmation de suppression
+   */
+  const closeDeleteConfirm = () => {
+    setDeleteConfirmOpen(false);
+  };
+
+  /**
+   * Supprimer l'employé après confirmation
+   */
+  const deleteEmployee = async () => {
+    if (!selectedEmployee) return;
+
+    try {
+      setDeleting(true);
+      
+      const result = await supabaseLogistique.deleteEmployeeLogistique(selectedEmployee.id);
+      
+      if (result.error) {
+        if (result.error.code === 'FUTURE_ASSIGNMENTS_EXIST') {
+          toast.error(result.error.message, { duration: 5000 });
+        } else {
+          throw result.error;
+        }
+        return;
+      }
+      
+      // Mettre à jour la liste locale
+      setEmployees(employees.filter(emp => emp.id !== selectedEmployee.id));
+      
+      toast.success(`${selectedEmployee.nom} a été supprimé avec succès`);
+      closeEdit();
+      closeDeleteConfirm();
+      
+    } catch (error) {
+      console.error('❌ Erreur suppression employé:', error);
+      toast.error('Erreur lors de la suppression');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /**
+   * Mettre à jour une compétence véhicule
    */
   const updateCompetence = async (employeeId, vehiculeId, niveau) => {
     try {
+      console.log('🔧 Mise à jour compétence:', { employeeId, vehiculeId, niveau });
+      
+      // Utiliser la fonction updateCompetenceVehicule qui gère tout (création, mise à jour, suppression)
       const result = await supabaseLogistique.updateCompetenceVehicule(employeeId, vehiculeId, niveau);
       
       if (result.error) throw result.error;
       
-      // Recharger les compétences
+      // Recharger les compétences pour mettre à jour l'interface
       const competencesResult = await supabaseLogistique.getCompetencesVehicules();
       if (!competencesResult.error) {
-        setCompetences(competencesResult.data || []);
+        setCompetences(competencesResult.data);
       }
       
-      toast.success('Compétence mise à jour');
+      if (niveau && niveau !== 'Aucune') {
+        toast.success(`Compétence mise à jour: ${niveau}`);
+      } else {
+        toast.success('Compétence supprimée');
+      }
+      
     } catch (error) {
-      console.error('❌ Erreur mise à jour compétence:', error);
-      toast.error('Erreur lors de la mise à jour');
+      console.error('❌ Erreur updateCompetence:', error);
+      toast.error('Erreur lors de la mise à jour de la compétence');
     }
   };
 
@@ -220,19 +367,33 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => onLogout()}
-              className="text-slate-600 hover:text-slate-900 font-medium transition-colors text-sm md:text-base"
-            >
-              Déconnexion
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => onLogout()}
+                className="text-slate-600 hover:text-slate-900 font-medium transition-colors text-sm md:text-base"
+              >
+                Déconnexion
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        {/* Barre de recherche premium responsive */}
+        {/* Header avec recherche et bouton nouveau */}
         <div className="mb-6 md:mb-8">
+          {/* Bouton Nouveau employé */}
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={openCreate}
+              className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-medium rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nouveau employé</span>
+            </button>
+          </div>
+
+          {/* Barre de recherche premium responsive */}
           <div className="relative max-w-2xl mx-auto">
             <div className="absolute inset-y-0 left-0 pl-4 md:pl-6 flex items-center pointer-events-none">
               <Search className="h-5 w-5 md:h-6 md:w-6 text-slate-400" />
@@ -311,7 +472,7 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                           </div>
                         </div>
                         <button
-                          onClick={() => openEditEmployee(employee)}
+                          onClick={() => openEdit(employee)}
                           className="p-2 md:p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 group-hover:scale-110 flex-shrink-0"
                         >
                           <Edit3 className="w-4 h-4 md:w-5 md:h-5" />
@@ -375,7 +536,7 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
                                   comp.niveau === 'XX' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
-                                  {comp.niveau === 'XX' ? 'Autonome' : 'Compétent'}
+                                  {comp.niveau === 'XX' ? 'Autonome' : 'En formation'}
                                 </span>
                               </div>
                             ))
@@ -412,9 +573,9 @@ const LogistiqueManagement = ({ user, onLogout }) => {
         )}
       </div>
 
-      {/* Modal de modification responsive */}
+      {/* Modal d'édition/création employé */}
       <AnimatePresence>
-        {editMode && selectedEmployee && (
+        {(editMode || createMode) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -434,15 +595,25 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     <div className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl flex items-center justify-center text-white font-bold text-lg md:text-xl ${
-                      selectedEmployee.profil === 'Fort' ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' :
-                      selectedEmployee.profil === 'Moyen' ? 'bg-gradient-to-br from-amber-500 to-amber-600' : 
+                      (selectedEmployee?.profil || editedEmployee?.profil) === 'Fort' ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' :
+                      (selectedEmployee?.profil || editedEmployee?.profil) === 'Moyen' ? 'bg-gradient-to-br from-amber-500 to-amber-600' : 
                       'bg-gradient-to-br from-rose-500 to-rose-600'
                     }`}>
-                      {selectedEmployee.nom.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                      {createMode ? (
+                        editedEmployee?.nom ? 
+                          editedEmployee.nom.split(' ').map(n => n[0]).join('').substring(0, 2) : 
+                          '?'
+                      ) : (
+                        selectedEmployee?.nom?.split(' ').map(n => n[0]).join('').substring(0, 2)
+                      )}
                     </div>
                     <div>
-                      <h2 className="text-xl md:text-2xl font-bold text-slate-800">Modifier l'employé</h2>
-                      <p className="text-slate-600 mt-1 text-sm md:text-base">{selectedEmployee.nom}</p>
+                      <h2 className="text-xl md:text-2xl font-bold text-slate-800">
+                        {editMode ? 'Modifier l\'employé' : 'Nouvel employé'}
+                      </h2>
+                      <p className="text-slate-600 mt-1 text-sm md:text-base">
+                        {createMode ? (editedEmployee?.nom || 'Saisissez le nom') : selectedEmployee?.nom}
+                      </p>
                     </div>
                   </div>
                   <button
@@ -564,7 +735,7 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {vehicules.map(vehicule => {
                       const competence = competences.find(comp => 
-                        comp.employee_id === selectedEmployee.id && comp.vehicule_id === vehicule.id
+                        comp.employee_id === selectedEmployee?.id && comp.vehicule_id === vehicule.id
                       );
                       
                       return (
@@ -574,13 +745,24 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                             <div className="text-sm text-slate-600">{vehicule.capacite} places</div>
                           </div>
                           <select
-                            value={competence?.niveau || ''}
-                            onChange={(e) => updateCompetence(selectedEmployee.id, vehicule.id, e.target.value)}
+                            value={competence?.niveau || editedEmployee?.[`competence_${vehicule.id}`] || 'Aucune'}
+                            onChange={(e) => {
+                              if (createMode) {
+                                // Mode création : mettre à jour l'état local
+                                setEditedEmployee({
+                                  ...editedEmployee,
+                                  [`competence_${vehicule.id}`]: e.target.value
+                                });
+                              } else {
+                                // Mode édition : appel API
+                                updateCompetence(selectedEmployee?.id, vehicule.id, e.target.value);
+                              }
+                            }}
                             className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                           >
-                            <option value="">Aucune</option>
-                            <option value="X">X - Compétent</option>
-                            <option value="XX">XX - Autonome</option>
+                            <option value="Aucune">Aucune</option>
+                            <option value="en formation">En formation</option>
+                            <option value="XX">Autonome</option>
                           </select>
                         </div>
                       );
@@ -589,31 +771,128 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex flex-col md:flex-row items-center justify-end space-y-3 md:space-y-0 md:space-x-4 mt-8 pt-6 border-t border-slate-200">
-                  <button
-                    onClick={closeEdit}
-                    className="w-full md:w-auto px-6 py-3 text-slate-600 hover:text-slate-800 font-medium transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={saveEmployee}
-                    disabled={saving}
-                    className="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                  >
-                    {saving ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        <span>Sauvegarde...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Sauvegarder</span>
-                      </>
-                    )}
-                  </button>
+                <div className="flex flex-col md:flex-row items-center justify-between space-y-3 md:space-y-0 md:space-x-4 mt-8 pt-6 border-t border-slate-200">
+                  {/* Bouton supprimer à gauche (seulement en mode édition) */}
+                  {editMode && (
+                    <button
+                      onClick={openDeleteConfirm}
+                      className="w-full md:w-auto px-6 py-3 bg-red-100 text-red-700 hover:bg-red-200 hover:text-red-800 font-medium rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Supprimer l'employé</span>
+                    </button>
+                  )}
+                  
+                  {/* Actions principales à droite */}
+                  <div className="flex flex-col md:flex-row items-center space-y-3 md:space-y-0 md:space-x-4 ml-auto">
+                    <button
+                      onClick={closeEdit}
+                      className="w-full md:w-auto px-6 py-3 text-slate-600 hover:text-slate-800 font-medium transition-colors"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={createMode ? createEmployee : saveEmployee}
+                      disabled={saving || creating}
+                      className="w-full md:w-auto px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                    >
+                      {saving || creating ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          <span>{saving ? 'Sauvegarde...' : 'Création...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>{editMode ? 'Sauvegarder' : 'Créer'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de confirmation de suppression */}
+      <AnimatePresence>
+        {deleteConfirmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={closeDeleteConfirm}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              {/* Header */}
+              <div className="bg-red-50 px-6 py-4 border-b border-red-100">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-red-900">Confirmer la suppression</h3>
+                    <p className="text-sm text-red-700">Cette action est irréversible</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contenu */}
+              <div className="px-6 py-4">
+                <p className="text-slate-600 mb-4">
+                  Êtes-vous sûr de vouloir supprimer <strong>{selectedEmployee?.nom}</strong> ?
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-medium mb-1">Cette action va supprimer :</p>
+                      <ul className="text-xs space-y-1 list-disc list-inside ml-2">
+                        <li>L'employé et ses informations</li>
+                        <li>Ses compétences véhicules</li>
+                        <li>Ses absences</li>
+                        <li>Son historique de plannings</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="bg-slate-50 px-6 py-4 flex items-center justify-end space-x-3">
+                <button
+                  onClick={closeDeleteConfirm}
+                  disabled={deleting}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium transition-colors disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={deleteEmployee}
+                  disabled={deleting}
+                  className="px-6 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Suppression...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Supprimer définitivement</span>
+                    </>
+                  )}
+                </button>
               </div>
             </motion.div>
           </motion.div>
