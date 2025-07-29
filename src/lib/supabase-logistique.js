@@ -65,11 +65,12 @@ export const supabaseLogistique = {
   /**
    * Supprimer un employé logistique (avec vérifications sécurité)
    */
-  async deleteEmployeeLogistique(employeeId) {
+  async deleteEmployeeLogistique(employeeId, forceDelete = false) {
     try {
-      console.log('🗑️ Suppression employé logistique ID:', employeeId);
+      console.log('🗑️ Suppression employé logistique ID:', employeeId, 'Force:', forceDelete);
 
       // 1. Vérifier si l'employé a des plannings futurs
+      console.log('🔍 Vérification plannings futurs...');
       const today = new Date().toISOString().split('T')[0];
       const { data: futurePlanning, error: planningError } = await supabase
         .from('planning_logistique_new')
@@ -82,8 +83,10 @@ export const supabaseLogistique = {
         return { data: null, error: planningError };
       }
 
-      if (futurePlanning && futurePlanning.length > 0) {
+      console.log('🔍 Plannings futurs trouvés:', futurePlanning?.length || 0);
+      if (futurePlanning && futurePlanning.length > 0 && !forceDelete) {
         const futureDates = futurePlanning.map(p => p.date).sort();
+        console.log('❌ Suppression bloquée - plannings futurs:', futureDates);
         return { 
           data: null, 
           error: { 
@@ -94,7 +97,12 @@ export const supabaseLogistique = {
         };
       }
 
+      if (futurePlanning && futurePlanning.length > 0 && forceDelete) {
+        console.log('⚡ Suppression forcée activée - suppression de', futurePlanning.length, 'plannings futurs');
+      }
+
       // 2. Supprimer les compétences véhicules
+      console.log('🗑️ Suppression compétences véhicules...');
       const { error: competencesError } = await supabase
         .from('competences_vehicules')
         .delete()
@@ -104,8 +112,10 @@ export const supabaseLogistique = {
         console.error('❌ Erreur suppression compétences:', competencesError);
         return { data: null, error: competencesError };
       }
+      console.log('✅ Compétences supprimées');
 
       // 3. Supprimer les absences existantes
+      console.log('🗑️ Suppression absences...');
       const { error: absencesError } = await supabase
         .from('absences_logistique_new')
         .delete()
@@ -115,8 +125,10 @@ export const supabaseLogistique = {
         console.error('❌ Erreur suppression absences:', absencesError);
         return { data: null, error: absencesError };
       }
+      console.log('✅ Absences supprimées');
 
-      // 4. Supprimer les plannings passés
+      // 4. Supprimer TOUS les plannings (passés ET futurs si forceDelete)
+      console.log('🗑️ Suppression plannings (tous)...');
       const { error: planningDeleteError } = await supabase
         .from('planning_logistique_new')
         .delete()
@@ -126,8 +138,10 @@ export const supabaseLogistique = {
         console.error('❌ Erreur suppression plannings:', planningDeleteError);
         return { data: null, error: planningDeleteError };
       }
+      console.log('✅ Plannings supprimés');
 
       // 5. Supprimer l'employé
+      console.log('🗑️ Suppression employé principal...');
       const { data, error } = await supabase
         .from('employes_logistique_new')
         .delete()
@@ -140,8 +154,17 @@ export const supabaseLogistique = {
         return { data: null, error };
       }
 
-      console.log('✅ Employé logistique supprimé avec succès');
-      return { data, error: null };
+      if (forceDelete && futurePlanning && futurePlanning.length > 0) {
+        console.log('✅ Employé logistique supprimé avec suppression forcée:', data, '- Plannings futurs supprimés:', futurePlanning.length);
+      } else {
+        console.log('✅ Employé logistique supprimé avec succès:', data);
+      }
+      
+      return { 
+        data, 
+        error: null,
+        deletedFuturePlanning: forceDelete ? futurePlanning?.length || 0 : 0
+      };
 
     } catch (error) {
       console.error('💥 Erreur critique suppression employé:', error);
@@ -513,7 +536,7 @@ export const supabaseLogistique = {
         `)
         .in('date', weekDates)
         .order('date')
-        .order('vehicule_id');
+        .order('creneau');
       
       if (error) {
         console.error('❌ Erreur chargement planning:', error);
@@ -1505,7 +1528,41 @@ export const supabaseLogistique = {
     };
     
     return summary;
-  }
+  },
+
+  /**
+   * Vérifier si un employé a des plannings futurs
+   */
+  async checkFuturePlannings(employeeId) {
+    try {
+      console.log('🔍 Vérification plannings futurs pour employé ID:', employeeId);
+      
+      const today = new Date().toISOString().split('T')[0];
+      const { data: futurePlanning, error } = await supabase
+        .from('planning_logistique_new')
+        .select('date')
+        .eq('employee_id', employeeId)
+        .gte('date', today);
+
+      if (error) {
+        console.error('❌ Erreur vérification planning futur:', error);
+        return { count: 0, dates: [], error };
+      }
+
+      const dates = futurePlanning?.map(p => p.date).sort() || [];
+      console.log('🔍 Plannings futurs trouvés:', dates.length, 'dates:', dates);
+      
+      return { 
+        count: futurePlanning?.length || 0, 
+        dates: dates, 
+        error: null 
+      };
+
+    } catch (error) {
+      console.error('💥 Erreur critique vérification plannings futurs:', error);
+      return { count: 0, dates: [], error };
+    }
+  },
 
 };
 

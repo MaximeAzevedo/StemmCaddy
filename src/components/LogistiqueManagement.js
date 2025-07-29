@@ -37,6 +37,8 @@ const LogistiqueManagement = ({ user, onLogout }) => {
   // États pour la suppression
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [forceDelete, setForceDelete] = useState(false); // Nouvelle option pour suppression forcée
+  const [futurePlanningCount, setFuturePlanningCount] = useState(0); // Nombre de plannings futurs
 
   // États pour la création
   const [createMode, setCreateMode] = useState(false);
@@ -140,6 +142,8 @@ const LogistiqueManagement = ({ user, onLogout }) => {
     setEditMode(false);
     setCreateMode(false);
     setDeleteConfirmOpen(false); // Fermer aussi la confirmation
+    setForceDelete(false);
+    setFuturePlanningCount(0);
   };
 
   /**
@@ -245,8 +249,29 @@ const LogistiqueManagement = ({ user, onLogout }) => {
   /**
    * Ouvrir la confirmation de suppression
    */
-  const openDeleteConfirm = () => {
-    setDeleteConfirmOpen(true);
+  const openDeleteConfirm = async () => {
+    if (!selectedEmployee) return;
+
+    try {
+      // Vérifier d'abord s'il y a des plannings futurs
+      console.log('🔍 Vérification plannings futurs pour:', selectedEmployee.nom);
+      
+      const futureCheck = await supabaseLogistique.checkFuturePlannings(selectedEmployee.id);
+      
+      if (futureCheck.error) {
+        console.error('❌ Erreur vérification plannings futurs:', futureCheck.error);
+        toast.error('Erreur lors de la vérification des plannings');
+        return;
+      }
+
+      setFuturePlanningCount(futureCheck.count);
+      setForceDelete(false); // Reset de la checkbox
+      setDeleteConfirmOpen(true);
+      
+    } catch (error) {
+      console.error('❌ Erreur openDeleteConfirm:', error);
+      toast.error('Erreur lors de l\'ouverture de la confirmation');
+    }
   };
 
   /**
@@ -254,6 +279,8 @@ const LogistiqueManagement = ({ user, onLogout }) => {
    */
   const closeDeleteConfirm = () => {
     setDeleteConfirmOpen(false);
+    setForceDelete(false);
+    setFuturePlanningCount(0);
   };
 
   /**
@@ -264,10 +291,13 @@ const LogistiqueManagement = ({ user, onLogout }) => {
 
     try {
       setDeleting(true);
+      console.log('🔧 Début suppression employé:', selectedEmployee.nom, 'ID:', selectedEmployee.id, 'Force:', forceDelete);
       
-      const result = await supabaseLogistique.deleteEmployeeLogistique(selectedEmployee.id);
+      const result = await supabaseLogistique.deleteEmployeeLogistique(selectedEmployee.id, forceDelete);
+      console.log('🔧 Résultat suppression:', result);
       
       if (result.error) {
+        console.log('❌ Erreur dans la suppression:', result.error);
         if (result.error.code === 'FUTURE_ASSIGNMENTS_EXIST') {
           toast.error(result.error.message, { duration: 5000 });
         } else {
@@ -276,10 +306,17 @@ const LogistiqueManagement = ({ user, onLogout }) => {
         return;
       }
       
+      console.log('✅ Suppression réussie, mise à jour de la liste');
       // Mettre à jour la liste locale
       setEmployees(employees.filter(emp => emp.id !== selectedEmployee.id));
       
-      toast.success(`${selectedEmployee.nom} a été supprimé avec succès`);
+      // Message de succès adapté
+      if (result.deletedFuturePlanning > 0) {
+        toast.success(`${selectedEmployee.nom} supprimé avec succès (${result.deletedFuturePlanning} affectations futures supprimées)`, { duration: 4000 });
+      } else {
+        toast.success(`${selectedEmployee.nom} a été supprimé avec succès`);
+      }
+      
       closeEdit();
       closeDeleteConfirm();
       
@@ -287,6 +324,7 @@ const LogistiqueManagement = ({ user, onLogout }) => {
       console.error('❌ Erreur suppression employé:', error);
       toast.error('Erreur lors de la suppression');
     } finally {
+      console.log('🔧 Fin suppression, setDeleting(false)');
       setDeleting(false);
     }
   };
@@ -851,20 +889,49 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                 <p className="text-slate-600 mb-4">
                   Êtes-vous sûr de vouloir supprimer <strong>{selectedEmployee?.nom}</strong> ?
                 </p>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-amber-800">
-                      <p className="font-medium mb-1">Cette action va supprimer :</p>
-                      <ul className="text-xs space-y-1 list-disc list-inside ml-2">
-                        <li>L'employé et ses informations</li>
-                        <li>Ses compétences véhicules</li>
-                        <li>Ses absences</li>
-                        <li>Son historique de plannings</li>
-                      </ul>
+
+                {/* Affichage conditionnel selon les plannings futurs */}
+                {futurePlanningCount > 0 ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-start space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-red-800">
+                        <p className="font-medium mb-1">⚠️ Plannings futurs détectés :</p>
+                        <p className="text-xs mb-2">
+                          Cet employé a <strong>{futurePlanningCount} affectation(s) future(s)</strong> dans le planning logistique.
+                        </p>
+                        
+                        {/* Checkbox suppression forcée */}
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={forceDelete}
+                            onChange={(e) => setForceDelete(e.target.checked)}
+                            className="w-4 h-4 text-red-600 border-red-300 rounded focus:ring-red-500"
+                          />
+                          <span className="text-xs font-medium">
+                            Supprimer quand même ({futurePlanningCount} affectations seront perdues)
+                          </span>
+                        </label>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-start space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium mb-1">Cette action va supprimer :</p>
+                        <ul className="text-xs space-y-1 list-disc list-inside ml-2">
+                          <li>L'employé et ses informations</li>
+                          <li>Ses compétences véhicules</li>
+                          <li>Ses absences</li>
+                          <li>Son historique de plannings</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -878,8 +945,12 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                 </button>
                 <button
                   onClick={deleteEmployee}
-                  disabled={deleting}
-                  className="px-6 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  disabled={deleting || (futurePlanningCount > 0 && !forceDelete)}
+                  className={`px-6 py-2 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 ${
+                    futurePlanningCount > 0 && !forceDelete
+                      ? 'bg-gray-400 text-white cursor-not-allowed'
+                      : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
                 >
                   {deleting ? (
                     <>
@@ -889,7 +960,14 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      <span>Supprimer définitivement</span>
+                      <span>
+                        {futurePlanningCount > 0 && forceDelete
+                          ? 'Supprimer avec plannings'
+                          : futurePlanningCount > 0
+                          ? 'Cochez pour supprimer'
+                          : 'Supprimer définitivement'
+                        }
+                      </span>
                     </>
                   )}
                 </button>
