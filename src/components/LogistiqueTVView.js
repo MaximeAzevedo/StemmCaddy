@@ -7,7 +7,7 @@ import { supabaseLogistique } from '../lib/supabase-logistique';
 
 const LogistiqueTVView = () => {
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState('vehicles'); // 'vehicles', 'employees'
+  const [currentView, setCurrentView] = useState('vehicles-slide1'); // 'vehicles-slide1', 'vehicles-slide2', 'employees'
   const [currentWeek, setCurrentWeek] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [loading, setLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
@@ -19,6 +19,22 @@ const LogistiqueTVView = () => {
   const [vehicles, setVehicles] = useState([]);
   const [planning, setPlanning] = useState({});
   const [absences, setAbsences] = useState([]);
+
+  // Définition des groupes de véhicules pour les slides
+  const vehicleSlides = {
+    slide1: ['Caddy', 'Crafter 21', 'Crafter 23'],
+    slide2: ['Ducato', 'Jumper', 'Transit']
+  };
+
+  // Filtrer les véhicules selon la slide courante
+  const getVehiclesForCurrentSlide = () => {
+    if (currentView === 'vehicles-slide1') {
+      return vehicles.filter(v => vehicleSlides.slide1.includes(v.nom));
+    } else if (currentView === 'vehicles-slide2') {
+      return vehicles.filter(v => vehicleSlides.slide2.includes(v.nom));
+    }
+    return vehicles; // Pour la vue employés, on pourrait vouloir tous les véhicules
+  };
 
   /**
    * Chargement des données complètes
@@ -68,11 +84,11 @@ const LogistiqueTVView = () => {
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          // Cycle entre les 2 vues : vehicles -> employees -> vehicles
+          // Cycle entre les 3 vues : vehicles-slide1 -> vehicles-slide2 -> employees -> vehicles-slide1
           setCurrentView(prevView => {
-            if (prevView === 'vehicles') return 'employees';
-            if (prevView === 'employees') return 'vehicles';
-            return 'vehicles';
+            if (prevView === 'vehicles-slide1') return 'vehicles-slide2';
+            if (prevView === 'vehicles-slide2') return 'employees';
+            return 'vehicles-slide1';
           });
           return 15;
         }
@@ -92,9 +108,9 @@ const LogistiqueTVView = () => {
 
   const switchView = () => {
     setCurrentView(prev => {
-      if (prev === 'vehicles') return 'employees';
-      if (prev === 'employees') return 'vehicles';
-      return 'vehicles';
+      if (prev === 'vehicles-slide1') return 'vehicles-slide2';
+      if (prev === 'vehicles-slide2') return 'employees';
+      return 'vehicles-slide1';
     });
     setTimeLeft(15); // Reset timer
   };
@@ -229,14 +245,31 @@ const LogistiqueTVView = () => {
    */
   const renderVehicleView = () => {
     const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+    const currentSlideVehicles = getVehiclesForCurrentSlide();
+    
+    // Déterminer le titre de la slide
+    const slideTitle = currentView === 'vehicles-slide1' ? 
+      'Planning Véhicules - Slide 1/2' : 
+      'Planning Véhicules - Slide 2/2';
+    
+    const slideSubtitle = currentView === 'vehicles-slide1' ? 
+      'Caddy • Crafter 21 • Crafter 23' : 
+      'Ducato • Jumper • Transit';
 
     return (
       <div className="h-full p-8">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Planning Véhicules</h1>
-          <p className="text-xl text-gray-600">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">{slideTitle}</h1>
+          <p className="text-xl text-gray-600 mb-2">
             Semaine du {format(currentWeek, 'dd MMMM yyyy', { locale: fr })}
           </p>
+          <p className="text-lg text-blue-600 font-medium">{slideSubtitle}</p>
+          
+          {/* Indicateur de slide */}
+          <div className="flex justify-center space-x-2 mt-4">
+            <div className={`w-3 h-3 rounded-full ${currentView === 'vehicles-slide1' ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+            <div className={`w-3 h-3 rounded-full ${currentView === 'vehicles-slide2' ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+          </div>
         </div>
 
         <div className="grid grid-cols-6 gap-6 h-[calc(100vh-200px)]">
@@ -256,7 +289,7 @@ const LogistiqueTVView = () => {
           ))}
 
           {/* Lignes véhicules */}
-          {vehicles.map(vehicle => (
+          {currentSlideVehicles.map(vehicle => (
             <React.Fragment key={vehicle.id}>
               <div className="flex items-center space-x-4 p-4 border-2 border-gray-200 rounded-lg">
                 <div 
@@ -490,13 +523,13 @@ const LogistiqueTVView = () => {
         <div className="flex items-center space-x-2 text-white">
           <Monitor className="w-4 h-4" />
           <span className="text-sm font-medium">
-            {currentView === 'vehicles' ? 'Véhicules' : 'Employés'}
+            {currentView === 'vehicles-slide1' || currentView === 'vehicles-slide2' ? 'Véhicules' : 'Employés'}
           </span>
         </div>
       </div>
 
       {/* Contenu alternatif avec 2 vues */}
-      {currentView === 'vehicles' ? renderVehicleView() : renderEmployeeView()}
+      {currentView === 'vehicles-slide1' || currentView === 'vehicles-slide2' ? renderVehicleView() : renderEmployeeView()}
     </div>
   );
 };
