@@ -46,6 +46,7 @@ const LogistiqueManagement = ({ user, onLogout }) => {
 
   const profiles = ['Faible', 'Moyen', 'Fort'];
   const jours = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'];
+  const languages = ['Français', 'Arabe', 'Anglais', 'Tigrinya', 'Perse', 'Turc', 'Yougoslave', 'Allemand', 'Créole', 'Luxembourgeois'];
 
   /**
    * Chargement des données
@@ -281,6 +282,23 @@ const LogistiqueManagement = ({ user, onLogout }) => {
     setDeleteConfirmOpen(false);
     setForceDelete(false);
     setFuturePlanningCount(0);
+  };
+
+  /**
+   * Gérer le toggle des langues
+   */
+  const handleLanguageToggle = (langue) => {
+    if (!editedEmployee) return;
+    
+    const currentLanguages = editedEmployee.langues || [];
+    const updatedLanguages = currentLanguages.includes(langue)
+      ? currentLanguages.filter(l => l !== langue)
+      : [...currentLanguages, langue];
+    
+    setEditedEmployee({
+      ...editedEmployee,
+      langues: updatedLanguages
+    });
   };
 
   /**
@@ -716,6 +734,38 @@ const LogistiqueManagement = ({ user, onLogout }) => {
                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Notes supplémentaires..."
                       />
+                    </div>
+
+                    {/* Section Langues */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-3">Langues parlées</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {languages.map(langue => (
+                          <label key={langue} className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={(editedEmployee?.langues || []).includes(langue)}
+                              onChange={() => handleLanguageToggle(langue)}
+                              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-slate-700">{langue}</span>
+                          </label>
+                        ))}
+                      </div>
+                      
+                      {/* Affichage des langues sélectionnées */}
+                      {editedEmployee?.langues && editedEmployee.langues.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-200">
+                          <p className="text-xs text-slate-500 mb-2">Langues sélectionnées:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {editedEmployee.langues.map((langue, index) => (
+                              <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                                {langue}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
