@@ -22,7 +22,7 @@ const Login = ({ onLogin }) => {
         'rachid': { password: 'rachidacaddy', name: 'Rachid', role: 'encadrant' },
         'david': { password: 'lepetitbreton', name: 'David', role: 'encadrant' },
         'brahim': { password: 'babar57', name: 'Brahim', role: 'encadrant' },
-        'william': { password: 'willy', name: 'William', role: 'encadrant' },
+        'william': { password: 'willythekid', name: 'William', role: 'encadrant' },
         'medhanie': { password: 'medhanie123', name: 'Medhanie', role: 'chauffeur' }
       };
 
