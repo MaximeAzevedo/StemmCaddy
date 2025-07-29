@@ -209,8 +209,21 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
     resetForm();
   };
 
-  // Filtrer les absences selon le terme de recherche
+  // Filtrer les absences selon le terme de recherche ET la semaine sélectionnée
   const filteredAbsences = absences.filter(absence => {
+    // Filtre par semaine : absences qui intersectent avec la semaine sélectionnée
+    const weekStart = format(currentWeek, 'yyyy-MM-dd');
+    const weekEnd = format(addDays(currentWeek, 6), 'yyyy-MM-dd');
+    
+    const absenceStart = absence.date_debut;
+    const absenceEnd = absence.date_fin;
+    
+    // Une absence est visible si elle chevauche avec la semaine
+    const isInWeek = (absenceStart <= weekEnd) && (absenceEnd >= weekStart);
+    
+    if (!isInWeek) return false;
+    
+    // Filtre par terme de recherche
     if (!searchTerm) return true;
     
     const employee = employeesLogistique.find(emp => emp.id === absence.employee_id);
@@ -462,15 +475,15 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
             </div>
           </div>
           
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border border-gray-200 rounded-lg">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 bg-white shadow-sm z-10 border-b border-gray-200">
                 <tr>
-                  <th className="text-left p-3 font-medium text-gray-700">Employé Logistique</th>
+                  <th className="text-left p-3 font-medium text-gray-700 bg-white border-r border-gray-200">Employé Logistique</th>
                   {Array.from({ length: 7 }, (_, i) => {
                     const day = addDays(currentWeek, i);
                     return (
-                      <th key={i} className="text-center p-3 font-medium text-gray-700">
+                      <th key={i} className="text-center p-3 font-medium text-gray-700 bg-white border-r border-gray-200 last:border-r-0">
                         <div>{format(day, 'EEE', { locale: fr })}</div>
                         <div className="text-xs text-gray-500">{format(day, 'dd/MM')}</div>
                       </th>
@@ -559,7 +572,9 @@ const AbsenceManagementLogistique = ({ user, onLogout }) => {
         {/* Barre de recherche */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Liste des absences</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              Absences de la semaine ({format(currentWeek, 'dd/MM')} - {format(addDays(currentWeek, 6), 'dd/MM')})
+            </h2>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
