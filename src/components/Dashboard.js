@@ -1,31 +1,25 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Truck, Users, Calendar, UserMinus, Settings, Package } from 'lucide-react';
+import { Truck, Calendar, UserMinus, Settings, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const Dashboard = ({ user, onLogout }) => {
+const Dashboard = () => {
   const navigate = useNavigate();
-  // Statistiques fictives (à remplacer par vos données réelles)
-  const stats = {
-    totalEmployees: 21,
-    vehiclesActive: 5,
-    absencesToday: 1
-  };
 
   const quickActions = [
-    {
-      title: 'Gestion des Employés',
-      description: 'Gérer les profils et compétences logistique',
-      icon: Settings,
-      color: 'from-purple-500 to-purple-600',
-      onClick: () => window.location.assign('/logistique/gestion')
-    },
     {
       title: 'Planning des Équipes',
       description: 'Créer et organiser les plannings avec IA',
       icon: Calendar,
       color: 'from-green-500 to-green-600',
       onClick: () => window.location.assign('/logistique/planning')
+    },
+    {
+      title: 'Gestion des Employés',
+      description: 'Gérer les profils et compétences logistique',
+      icon: Settings,
+      color: 'from-purple-500 to-purple-600',
+      onClick: () => window.location.assign('/logistique/gestion')
     },
     {
       title: 'Gestion des Absences',
@@ -54,31 +48,6 @@ const Dashboard = ({ user, onLogout }) => {
         <p className="text-gray-500 text-lg text-center max-w-2xl mb-2">
           Gérez les équipes logistiques, les véhicules, les plannings et les absences.
         </p>
-      </div>
-
-      {/* Statistiques premium */}
-      <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 px-4">
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-            <Users className="w-7 h-7 text-blue-600" />
-          </div>
-          <p className="text-gray-500 font-medium mb-1">Employés total</p>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalEmployees}</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-2">
-            <Truck className="w-7 h-7 text-green-600" />
-          </div>
-          <p className="text-gray-500 font-medium mb-1">Véhicules actifs</p>
-          <p className="text-2xl font-bold text-gray-900">{stats.vehiclesActive}</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-2">
-            <UserMinus className="w-7 h-7 text-red-600" />
-          </div>
-          <p className="text-gray-500 font-medium mb-1">Absences aujourd'hui</p>
-          <p className="text-2xl font-bold text-gray-900">{stats.absencesToday}</p>
-        </div>
       </div>
 
       {/* Actions Rapides premium */}
