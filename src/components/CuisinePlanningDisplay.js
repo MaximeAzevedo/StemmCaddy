@@ -342,8 +342,8 @@ const CuisinePlanningDisplay = () => {
                 </div>
               </div>
 
-              {/* ✅ Container des employés avec fond elegant - OPTIMISÉ ESPACE */}
-              <div className="flex-1 bg-white/60 backdrop-blur-sm rounded-b-3xl p-3 shadow-xl border border-white/30">
+              {/* ✅ Container des employés avec fond elegant - ULTRA DENSE */}
+              <div className="flex-1 bg-white/60 backdrop-blur-sm rounded-b-3xl p-2 shadow-xl border border-white/30">
                 {allEmployeesForPoste.length === 0 ? (
                   <div className="text-gray-500 text-center py-12 text-lg italic">
                     Aucune assignation
@@ -353,15 +353,15 @@ const CuisinePlanningDisplay = () => {
                     // 🚀 LOGIQUE ADAPTATIVE INTELLIGENTE - Optimise l'espace selon le nombre d'employés
                     const employeeCount = allEmployeesForPoste.length;
                     
-                    // 🚀 CALCUL OPTIMISÉ - Maximise l'espace disponible
+                    // 🔥 ULTRA-OPTIMISÉ - Utilise TOUT l'espace des cartes
                     const getOptimalLayout = (count) => {
-                      if (count === 1) return { cols: 1, photoSize: 'w-56 h-56', photoPx: '224px', textSize: 'text-3xl', gap: 'gap-0' };
-                      if (count === 2) return { cols: 1, photoSize: 'w-48 h-48', photoPx: '192px', textSize: 'text-2xl', gap: 'gap-2' };
-                      if (count === 3) return { cols: 3, photoSize: 'w-32 h-32', photoPx: '128px', textSize: 'text-lg', gap: 'gap-2' };
-                      if (count === 4) return { cols: 2, photoSize: 'w-40 h-40', photoPx: '160px', textSize: 'text-xl', gap: 'gap-2' };
-                      if (count <= 6) return { cols: 3, photoSize: 'w-28 h-28', photoPx: '112px', textSize: 'text-base', gap: 'gap-2' };
-                      if (count <= 9) return { cols: 3, photoSize: 'w-24 h-24', photoPx: '96px', textSize: 'text-sm', gap: 'gap-1' };
-                      return { cols: 4, photoSize: 'w-20 h-20', photoPx: '80px', textSize: 'text-xs', gap: 'gap-1' };
+                      if (count === 1) return { cols: 1, photoSize: 'w-64 h-64', photoPx: '256px', textSize: 'text-4xl', gap: 'gap-0' };
+                      if (count === 2) return { cols: 1, photoSize: 'w-56 h-56', photoPx: '224px', textSize: 'text-3xl', gap: 'gap-1' };
+                      if (count === 3) return { cols: 3, photoSize: 'w-36 h-36', photoPx: '144px', textSize: 'text-xl', gap: 'gap-1' };
+                      if (count === 4) return { cols: 2, photoSize: 'w-44 h-44', photoPx: '176px', textSize: 'text-2xl', gap: 'gap-1' };
+                      if (count <= 6) return { cols: 3, photoSize: 'w-32 h-32', photoPx: '128px', textSize: 'text-lg', gap: 'gap-1' };
+                      if (count <= 9) return { cols: 3, photoSize: 'w-28 h-28', photoPx: '112px', textSize: 'text-base', gap: 'gap-1' };
+                      return { cols: 4, photoSize: 'w-24 h-24', photoPx: '96px', textSize: 'text-sm', gap: 'gap-1' };
                     };
                     
                     const layout = getOptimalLayout(employeeCount);
@@ -385,10 +385,10 @@ const CuisinePlanningDisplay = () => {
                                               return (
                           <div
                             key={`${employee.id}-${employee.creneau}-${idx}`}
-                            className="flex flex-col items-center justify-center text-center p-4 bg-white/40 rounded-2xl backdrop-blur-sm border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 h-full min-h-0"
+                            className="flex flex-col items-center justify-center text-center p-1.5 bg-white/40 rounded-2xl backdrop-blur-sm border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 h-full min-h-0"
                           >
-                          {/* ✅ Photo Premium avec bordure dégradée */}
-                          <div className={`${photoSize} mx-auto mb-3 rounded-full overflow-hidden relative`}>
+                          {/* ✅ Photo Premium avec bordure dégradée - ULTRA COLLÉE */}
+                          <div className={`${photoSize} mx-auto mb-1 rounded-full overflow-hidden relative`}>
                             {/* Bordure dégradée */}
                             <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 p-0.5">
                               <div className="w-full h-full rounded-full overflow-hidden bg-white flex items-center justify-center">
@@ -412,8 +412,8 @@ const CuisinePlanningDisplay = () => {
                             </div>
                           </div>
                           
-                          {/* Prénom Premium */}
-                          <div className={`font-bold text-gray-800 ${textSize} mb-2 leading-tight break-words w-full`}>
+                          {/* Prénom Premium - COLLÉ */}
+                          <div className={`font-bold text-gray-800 ${textSize} mb-0.5 leading-tight break-words w-full`}>
                             {employee.prenom}
                           </div>
                           

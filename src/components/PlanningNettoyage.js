@@ -12,7 +12,8 @@ import {
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { supabaseCuisine } from '../lib/supabase-cuisine'; // Réutiliser la même base
+import { supabaseCuisine } from '../lib/supabase-cuisine'; // Planning nettoyage
+import { supabaseCuisineAdvanced } from '../lib/supabase-cuisine-advanced'; // Absences avancées
 
 const PlanningNettoyage = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -80,8 +81,8 @@ const PlanningNettoyage = ({ user, onLogout }) => {
       
       const dateString = format(selectedDate, 'yyyy-MM-dd');
       const [employeesResult, absencesResult] = await Promise.all([
-        supabaseCuisine.getEmployeesCuisine(),
-        supabaseCuisine.getAbsencesCuisine(dateString, dateString)
+        supabaseCuisineAdvanced.getEmployeesCuisine(),
+        supabaseCuisineAdvanced.getAbsencesCuisineAdvanced(dateString, dateString)
       ]);
 
       if (employeesResult.error) throw employeesResult.error;
