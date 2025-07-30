@@ -20,16 +20,16 @@ const CuisinePlanningDisplay = () => {
   const dateParam = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'); // Date du jour par défaut
   const sessionParam = searchParams.get('session') || 'matin';
 
-  // ✅ POSTES SPÉCIFIQUES MODE TV (8 postes seulement)
+  // ✅ POSTES SPÉCIFIQUES MODE TV (8 postes avec images)
   const POSTES_TV = [
-    { id: 1, nom: 'Cuisine chaude', couleur: '#ef4444', icone: '🔥' },
-    { id: 2, nom: 'Sandwichs', couleur: '#f59e0b', icone: '🥪' },
-    { id: 3, nom: 'Pain', couleur: '#eab308', icone: '🍞' },
-    { id: 4, nom: 'Jus de fruits', couleur: '#22c55e', icone: '🧃' },
-    { id: 5, nom: 'Vaisselle', couleur: '#3b82f6', icone: '🍽️' },
-    { id: 6, nom: 'Légumerie', couleur: '#10b981', icone: '🥬' },
-    { id: 7, nom: 'Self Midi', couleur: '#8b5cf6', icone: '🍽️' },
-    { id: 8, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥' }
+    { id: 1, nom: 'Cuisine chaude', couleur: '#ef4444', icone: '🔥', image: '/images/planning/cuisinechaude.JPG' },
+    { id: 2, nom: 'Sandwichs', couleur: '#f59e0b', icone: '🥪', image: '/images/planning/sandwichs.JPG' },
+    { id: 3, nom: 'Pain', couleur: '#eab308', icone: '🍞', image: '/images/planning/pain.JPG' },
+    { id: 4, nom: 'Jus de fruits', couleur: '#22c55e', icone: '🧃', image: '/images/planning/jus.JPG' },
+    { id: 5, nom: 'Vaisselle', couleur: '#3b82f6', icone: '🍽️', image: '/images/planning/vaisselle.JPG' },
+    { id: 6, nom: 'Légumerie', couleur: '#10b981', icone: '🥬', image: '/images/planning/légumerie.JPG' },
+    { id: 7, nom: 'Self Midi', couleur: '#8b5cf6', icone: '🍽️', image: '/images/planning/self.JPG' },
+    { id: 8, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥', image: '/images/planning/PinaSaskia.JPG' }
   ];
 
   // ✅ ZONES NETTOYAGE MODE TV
@@ -318,14 +318,19 @@ const CuisinePlanningDisplay = () => {
 
           return (
             <div key={poste.id} className="flex flex-col h-full">
-              {/* Header du poste Premium */}
+              {/* Header du poste Premium avec image de fond */}
               <div 
                 className="rounded-t-3xl p-4 text-white text-center mb-6 shadow-lg relative overflow-hidden"
                 style={{ 
-                  background: `linear-gradient(135deg, ${poste.couleur}DD, ${poste.couleur})`
+                  backgroundImage: `url(${poste.image})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat'
                 }}
               >
-                {/* Effet de brillance subtil */}
+                {/* Overlay sombre pour lisibilité du texte */}
+                <div className="absolute top-0 left-0 w-full h-full bg-black/40 pointer-events-none"></div>
+                {/* Effet de brillance subtil par-dessus */}
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/20 to-transparent pointer-events-none"></div>
                 
                 <div className="flex flex-col items-center relative z-10">
