@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { 
   Calendar, 
@@ -9,14 +9,13 @@ import {
   Monitor
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+// Note: navigation gérée par window.location.href pour plus de fiabilité
 import { format } from 'date-fns';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
 import { supabaseCuisineAdvanced } from '../lib/supabase-cuisine-advanced';
-import { businessPlanningEngine } from '../lib/business-planning-engine';
+import { aiPlanningEngine } from '../lib/ai-planning-engine';
 
 const CuisinePlanningSimple = ({ user, onLogout }) => {
-  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [planning, setPlanning] = useState({});
   const [loading, setLoading] = useState(true);
@@ -28,8 +27,68 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   const [absences, setAbsences] = useState([]);
   const [photoZoom, setPhotoZoom] = useState(null); // Modal zoom photo pour accessibilité
   
-  // ✅ SIMPLE : Postes fixes comme les véhicules en logistique
-  const postes = [
+  /**
+   * 🔄 CONVERSION FORMAT IA → UI
+   * Convertit le planning IA vers le format attendu par l'interface
+   */
+  const convertAIPlanningToUI = async (aiResult, dateString) => {
+    const convertedPlanning = {};
+    convertedPlanning[dateString] = {
+      absents: [] // Section absents
+    };
+    
+    // Initialiser tous les postes vides
+    postes.forEach(poste => {
+      convertedPlanning[dateString][poste.id] = [];
+    });
+    
+    // Mapper les assignations IA vers les postes UI
+    for (const assignment of aiResult.planning_optimal) {
+      const posteNom = assignment.poste;
+      
+      // Trouver l'ID du poste correspondant
+      let posteId = null;
+      
+      // Mapping des noms IA vers IDs UI
+      if (posteNom === 'Pain') posteId = 8;
+      else if (posteNom === 'Sandwichs') posteId = 1;
+      else if (posteNom === 'Self Midi 11h-11h45') posteId = 2;
+      else if (posteNom === 'Self Midi 11h45-12h45') posteId = 3;
+      else if (posteNom === 'Self Midi') posteId = 2; // Fallback
+      else if (posteNom === 'Cuisine chaude') posteId = 4;
+      else if (posteNom === 'Vaisselle 8h') posteId = 5;
+      else if (posteNom === 'Vaisselle 10h') posteId = 6;
+      else if (posteNom === 'Vaisselle midi') posteId = 7;
+      else if (posteNom === 'Vaisselle') posteId = 5; // Fallback
+      else if (posteNom === 'Légumerie') posteId = 9;
+      else if (posteNom === 'Jus de fruits') posteId = 10;
+      else if (posteNom === 'Equipe Pina et Saskia') posteId = 11;
+      
+      if (posteId && assignment.employes_assignes) {
+        for (const employeeAI of assignment.employes_assignes) {
+          // Trouver l'employé réel dans la base
+          const employee = employees.find(emp => 
+            emp.prenom && emp.prenom.toLowerCase().includes(employeeAI.prenom.toLowerCase())
+          );
+          
+          if (employee) {
+            convertedPlanning[dateString][posteId].push({
+              ...employee,
+              status: 'assigned',
+              role: employeeAI.role || 'Équipier',
+              ai_score: employeeAI.score_adequation,
+              ai_raison: employeeAI.raison
+            });
+          }
+        }
+      }
+    }
+    
+    return convertedPlanning;
+  };
+  
+  // ✅ SIMPLE : Postes fixes mémorisés pour éviter les re-renders
+  const postes = useMemo(() => [
     { id: 1, nom: 'Sandwichs', couleur: '#f59e0b', icone: '🥪' },
     { id: 2, nom: 'Self Midi 11h-11h45', couleur: '#8b5cf6', icone: '🍽️' },
     { id: 3, nom: 'Self Midi 11h45-12h45', couleur: '#8b5cf6', icone: '🍽️' },
@@ -41,7 +100,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
     { id: 9, nom: 'Légumerie', couleur: '#10b981', icone: '🥬' },
     { id: 10, nom: 'Jus de fruits', couleur: '#22c55e', icone: '🧃' },
     { id: 11, nom: 'Equipe Pina et Saskia', couleur: '#ec4899', icone: '👥' }
-  ];
+  ], []);
 
   /**
    * Chargement des données cuisine
@@ -106,37 +165,44 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   }, [loadCuisineData]);
 
   /**
-   * 🎯 GÉNÉRATION PLANNING MÉTIER - Compatible nouveau format
+   * 🤖 GÉNÉRATION PLANNING IA - Intelligence artificielle optimisée
    */
   const handleGenerateAI = async () => {
     try {
       setAiLoading(true);
-      console.log('🎯 Démarrage génération planning métier...');
+      console.log('🤖 Démarrage génération planning IA...');
       
-      // Génération métier
-      const result = await businessPlanningEngine.generateOptimalPlanning(selectedDate);
+      // Génération IA optimisée
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      const result = await aiPlanningEngine.generateIntelligentPlanning(dateString);
       
-      if (result.success && result.planning) {
-        // ✅ Résultat déjà au bon format planning[dateKey][posteId] = [employees]
-        setPlanning(result.planning);
+      if (result.planning_optimal && result.planning_optimal.length > 0) {
+        // Convertir le format IA vers le format planning UI
+        const convertedPlanning = await convertAIPlanningToUI(result, dateString);
+        setPlanning(convertedPlanning);
         
         const stats = result.statistiques;
         toast.success(
-          `✅ Planning métier généré !\n` +
+          `🤖 Planning IA généré avec succès !\n` +
           `📊 ${stats.employes_utilises} employés assignés\n` +
           `🎯 ${stats.postes_couverts} postes couverts\n` +
-          `⚡ Méthode: ${stats.methode}`,
+          `⚡ Score global: ${stats.score_global}%`,
           { duration: 4000 }
         );
         
-        console.log('✅ Planning métier appliqué:', result.planning);
+        console.log('✅ Planning IA appliqué:', convertedPlanning);
+        
+        // Afficher les recommandations IA si disponibles
+        if (result.recommandations && result.recommandations.length > 0) {
+          console.log('💡 Recommandations IA:', result.recommandations.join(' | '));
+        }
       } else {
-        throw new Error(result.error || 'Erreur génération métier');
+        throw new Error(result.error || 'Erreur génération IA');
       }
       
     } catch (error) {
-      console.error('❌ Erreur génération métier:', error);
-      toast.error(`❌ Erreur génération métier: ${error.message}`);
+      console.error('❌ Erreur génération IA:', error);
+      toast.error(`❌ Erreur génération IA: ${error.message}`);
     } finally {
       setAiLoading(false);
     }
@@ -467,25 +533,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
     !absences.some(absence => absence.employee_id === emp.id)
   );
 
-  /**
-   * ✅ Obtenir les employés assignés
-   */
-  const getAssignedEmployeeIds = () => {
-    const dateKey = format(selectedDate, 'yyyy-MM-dd');
-    const assignedIds = new Set();
-    
-    if (planning[dateKey]) {
-      Object.entries(planning[dateKey]).forEach(([key, employeeList]) => {
-        if (key !== 'absents') {
-          employeeList.forEach(emp => {
-            assignedIds.add(emp.id);
-          });
-        }
-      });
-    }
-    
-    return assignedIds;
-  };
+  // Note: getAssignedEmployeeIds retiré car non utilisé actuellement
 
   /**
    * ✅ COPIE LOGISTIQUE : Rendu employé dans pool
@@ -679,8 +727,8 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
               disabled={aiLoading}
               className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg transition-all duration-200 shadow-lg"
             >
-              <span className="text-lg">{aiLoading ? '⚡' : '🎯'}</span>
-              <span>{aiLoading ? 'Génération Métier...' : 'Générer Planning Métier'}</span>
+              <span className="text-lg">{aiLoading ? '⚡' : '🤖'}</span>
+              <span>{aiLoading ? 'Génération IA...' : 'Générer Planning IA'}</span>
             </button>
             
             <button

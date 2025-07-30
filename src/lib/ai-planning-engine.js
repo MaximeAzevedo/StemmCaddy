@@ -101,8 +101,10 @@ POSTES EXACTS: ${postesRequired.map(p => p.nom).join(', ')}
 🎯 STRATÉGIE OBLIGATOIRE:
 - Assigner dans l'ORDRE EXACT des priorités (Pain → Sandwichs → Self Midi → Vaisselle → etc.)
 - Pour Self Midi et Vaisselle: CRÉER DES POSTES SÉPARÉS pour chaque créneau
-- Mix profils Fort+Moyen+Faible quand possible
+- Vérifier compétences obligatoires pour chaque poste
 - TOUS les ${employeesAvailable.length} employés DOIVENT être assignés
+- Flexibilité: Vaisselle midi peut aussi aller sur autre poste (sauf Self Midi)
+- Flexibilité: Self peut aller Sandwich ou Pain le matin
 
 CONTRAINTES JSON CRITIQUES:
 - Self Midi = DEUX postes distincts: "Self Midi 11h-11h45" et "Self Midi 11h45-12h45"
@@ -288,18 +290,28 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
       cleaned = cleaned.replace(/,\s*(\w+):/g, ', "$1":');
       cleaned = cleaned.replace(/{\s*(\w+):/g, '{ "$1":');
       
-      // ✅ CORRECTION SPÉCIFIQUE : Fusionner "Equipe Pina" et "Saskia" en un seul poste
+      // ✅ CORRECTIONS SPÉCIFIQUES JSON OpenAI
+      // Corriger les champs vides avec guillemets manquants
+      cleaned = cleaned.replace(/"prenom":\s*""\s*,?\s*role:\s*""/g, '"prenom": "Employé", "role": "Aide"');
+      cleaned = cleaned.replace(/role:\s*""/g, '"role": "Aide"');
+      cleaned = cleaned.replace(/score_adequation:\s*""/g, '"score_adequation": 60');
+      cleaned = cleaned.replace(/raison:\s*""/g, '"raison": "Assigné"');
+      
+      // Corriger les commentaires JavaScript dans le JSON
+      cleaned = cleaned.replace(/\/\/.*$/gm, ''); // Supprimer commentaires de fin de ligne
+      cleaned = cleaned.replace(/,\s*\/\/.*$/gm, ','); // Corriger virgules avant commentaires
+      
+      // Fusionner "Equipe Pina" et "Saskia" si séparés
       cleaned = cleaned.replace(/"poste":\s*"Equipe Pina"([\s\S]*?)"poste":\s*"Saskia"/g, (match, middle) => {
-        // Fusionner les deux postes en un seul
         return '"poste": "Equipe Pina et Saskia"' + middle.replace(/][\s,]*},[\s]*{[\s]*"poste"[\s]*:[\s]*"Saskia"[\s]*,[\s]*"employes_assignes"[\s]*:[\s]*\[/, ', ');
       });
       
-      // Correction finale : s'assurer que "Equipe Saskia" devient "Equipe Pina et Saskia"
+      // Correction finale des noms de postes
       cleaned = cleaned.replace(/"poste":\s*"Equipe Saskia"/g, '"poste": "Equipe Pina et Saskia"');
       
       // Étape 4: Tentatives de parsing avec récupération progressive
       try {
-        const parsed = JSON.parse(cleaned);
+        JSON.parse(cleaned); // Valider le JSON
         console.log('✅ JSON parsé avec succès !');
         return cleaned;
       } catch (parseError) {
@@ -309,14 +321,14 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
         let advancedCleaning = cleaned;
         
         // Corriger les chaînes non échappées
-        advancedCleaning = advancedCleaning.replace(/:\s*([^",{\[\]}\s]+)(?=\s*[,}\]])/g, ': "$1"');
+        advancedCleaning = advancedCleaning.replace(/:\s*([^",{}\s]+)(?=\s*[,}\]])/g, ': "$1"');
         
         // Corriger les tableaux malformés
         advancedCleaning = advancedCleaning.replace(/\[\s*,/g, '[');
         advancedCleaning = advancedCleaning.replace(/,\s*\]/g, ']');
         
         try {
-          const parsed = JSON.parse(advancedCleaning);
+          JSON.parse(advancedCleaning); // Valider le JSON corrigé
           console.log('✅ JSON corrigé et parsé !');
           return advancedCleaning;
         } catch (finalError) {
@@ -427,15 +439,15 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
         const creneauxForPoste = getCreneauxForPoste(poste.nom);
         console.log(`🕐 ${poste.nom}: créneaux ${creneauxForPoste.join(', ')}`);
         
-        // ✅ RÈGLES MÉTIER VRAIES - QUOTAS EXACTS
+        // ✅ RÈGLES MÉTIER EXACTES - QUOTAS STRICTS
         let employeesNeededPerCreneau = [];
         
-        if (poste.nom === 'Sandwichs') {
-          // Sandwichs : PRIORITÉ 1 - 5-6 personnes
-          employeesNeededPerCreneau = [6]; // Maximum pour être sûr
-        } else if (poste.nom === 'Pain') {
-          // Pain : PRIORITÉ 2 - 2 personnes exactement
+        if (poste.nom === 'Pain') {
+          // Pain : PRIORITÉ 1 - 2 personnes exactement
           employeesNeededPerCreneau = [2];
+        } else if (poste.nom === 'Sandwichs') {
+          // Sandwichs : PRIORITÉ 2 - 5 personnes exactement
+          employeesNeededPerCreneau = [5]; // EXACTEMENT 5, pas 6
         } else if (poste.nom === 'Self Midi') {
           // Self Midi : 2 personnes à 11h-11h45 + 2 personnes à 11h45-12h45 = 4 total
           employeesNeededPerCreneau = [2, 2];
@@ -446,10 +458,13 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
           // Cuisine chaude : 4-7 personnes (on commence par 4, on complétera après)
           employeesNeededPerCreneau = [4];
         } else if (poste.nom === 'Jus de fruits') {
-          // Jus de fruits : 2 personnes idéal, 1 minimum
+          // Jus de fruits : 2 personnes idéal
+          employeesNeededPerCreneau = [2];
+        } else if (poste.nom === 'Légumerie') {
+          // Légumerie : 2 personnes minimum (recevra les restants après)
           employeesNeededPerCreneau = [2];
         } else if (poste.nom === 'Equipe Pina et Saskia') {
-          // Equipe Pina et Saskia : minimum 1 personne
+          // Equipe Pina et Saskia : PRIORITÉ après légumerie
           employeesNeededPerCreneau = [1];
         } else {
           // Autres postes : utiliser min-max normal
@@ -457,46 +472,59 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
           employeesNeededPerCreneau = [needed];
         }
         
-        // Assigner sur chaque créneau
+        // Assigner sur chaque créneau avec gestion spéciale pour créneaux multiples
         // eslint-disable-next-line no-loop-func
         creneauxForPoste.forEach((creneau, creneauIndex) => {
           const needed = employeesNeededPerCreneau[creneauIndex] || 0;
+          if (needed === 0) return;
           
-          // Créer une copie locale pour éviter les références dangereuses dans les fonctions
-          const initialAvailable = [...availableEmployees];
+          // Créer le nom du poste avec créneau pour Self Midi et Vaisselle
+          let posteComplet = poste.nom;
+          if (poste.nom === 'Self Midi') {
+            posteComplet = creneau === '11h-11h45' ? 'Self Midi 11h-11h45' : 'Self Midi 11h45-12h45';
+          } else if (poste.nom === 'Vaisselle') {
+            posteComplet = `Vaisselle ${creneau}`;
+          }
           
-          for (let i = 0; i < needed && initialAvailable.length > i; i++) {
+          // Collecter tous les employés pour ce créneau
+          const employesPourCeCreneau = [];
+          
+          for (let i = 0; i < needed && availableEmployees.length > 0; i++) {
             let selectedEmployee;
-            const currentAvailable = [...availableEmployees];
             
-            if (i === 0 && profilsFort.some(emp => currentAvailable.includes(emp))) {
+            if (i === 0 && profilsFort.some(emp => availableEmployees.includes(emp))) {
               // Premier assigné = profil Fort si disponible
-              selectedEmployee = profilsFort.find(emp => currentAvailable.includes(emp));
-            } else if (profilsMoyen.some(emp => currentAvailable.includes(emp))) {
+              selectedEmployee = profilsFort.find(emp => availableEmployees.includes(emp));
+            } else if (profilsMoyen.some(emp => availableEmployees.includes(emp))) {
               // Ensuite privilégier Moyens
-              selectedEmployee = profilsMoyen.find(emp => currentAvailable.includes(emp));
+              selectedEmployee = profilsMoyen.find(emp => availableEmployees.includes(emp));
             } else {
               // Sinon prendre ce qui reste
-              selectedEmployee = currentAvailable[0];
+              selectedEmployee = availableEmployees[0];
             }
             
             if (selectedEmployee) {
               // eslint-disable-next-line no-loop-func
               availableEmployees = availableEmployees.filter(emp => emp.id !== selectedEmployee.id);
               
-              assignments.push({
-                poste: poste.nom,
-                creneau: creneau,
-                employes_assignes: [{
-                  prenom: selectedEmployee.prenom,
-                  role: i === 0 ? 'Responsable' : 'Équipier',
-                  score_adequation: 70,
-                  raison: `${selectedEmployee.profil} - ${poste.nom} ${creneau}`
-                }]
+              employesPourCeCreneau.push({
+                prenom: selectedEmployee.prenom,
+                role: i === 0 ? 'Responsable' : 'Équipier',
+                score_adequation: 70,
+                raison: `${selectedEmployee.profil} - ${posteComplet}`
               });
               
-              console.log(`✅ ${selectedEmployee.prenom} → ${poste.nom} (${creneau})`);
+              console.log(`✅ ${selectedEmployee.prenom} → ${posteComplet}`);
             }
+          }
+          
+          // Créer l'assignation pour ce créneau avec tous ses employés
+          if (employesPourCeCreneau.length > 0) {
+            assignments.push({
+              poste: posteComplet,
+              creneau: creneau,
+              employes_assignes: employesPourCeCreneau
+            });
           }
         });
       }
@@ -527,22 +555,59 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
         }
       }
       
-      // Phase 3: SEULEMENT MAINTENANT, assigner le reste en Légumerie
+      // Phase 3: Assigner quelques employés à l'équipe Pina et Saskia d'abord
+      if (availableEmployees.length > 0) {
+        console.log(`👥 Assignation à l'équipe Pina et Saskia (priorité)`);
+        const employesPinaSaskia = [];
+        const maxForPinaSaskia = Math.min(3, availableEmployees.length); // Max 3 pour Pina/Saskia
+        
+        for (let i = 0; i < maxForPinaSaskia; i++) {
+          if (availableEmployees.length > 0) {
+            const selectedEmployee = availableEmployees[0];
+            availableEmployees = availableEmployees.filter(emp => emp.id !== selectedEmployee.id);
+            
+            employesPinaSaskia.push({
+              prenom: selectedEmployee.prenom,
+              role: i === 0 ? 'Responsable' : 'Équipier',
+              score_adequation: 70,
+              raison: `${selectedEmployee.profil} - Équipe Pina et Saskia`
+            });
+            
+            console.log(`✅ ${selectedEmployee.prenom} → Équipe Pina et Saskia`);
+          }
+        }
+        
+        if (employesPinaSaskia.length > 0) {
+          assignments.push({
+            poste: 'Equipe Pina et Saskia',
+            creneau: '8h-16h',
+            employes_assignes: employesPinaSaskia
+          });
+        }
+      }
+      
+      // Phase 4: ENFIN, assigner le reste en Légumerie
       if (availableEmployees.length > 0) {
         console.log(`🥬 Assignation des ${availableEmployees.length} employés restants en Légumerie (dernier recours)`);
         
+        const employesLegumerie = [];
         availableEmployees.forEach(employee => {
+          employesLegumerie.push({
+            prenom: employee.prenom,
+            role: 'Équipier',
+            score_adequation: 70,
+            raison: `${employee.profil} - Légumerie (dernier recours)`
+          });
+          console.log(`✅ ${employee.prenom} → Légumerie (dernier recours)`);
+        });
+        
+        if (employesLegumerie.length > 0) {
           assignments.push({
             poste: 'Légumerie',
             creneau: '8h-16h',
-            employes_assignes: [{
-              prenom: employee.prenom,
-              role: 'Équipier',
-              score_adequation: 70,
-              raison: `${employee.profil} - Légumerie (dernier recours)`
-            }]
+            employes_assignes: employesLegumerie
           });
-        });
+        }
       }
       
       return {
@@ -630,14 +695,14 @@ RÉPONSE JSON PARFAIT (respectez la structure exacte avec créneaux séparés):
         .eq('actif', true);
 
       const postes = [
-        { nom: 'Pain', min: 2, max: 2, priority: 1 },                    // ✅ PRIORITÉ 1
+        { nom: 'Pain', min: 2, max: 2, priority: 1 },                    // ✅ PRIORITÉ 1 
         { nom: 'Sandwichs', min: 5, max: 5, priority: 2 },               // ✅ PRIORITÉ 2  
         { nom: 'Self Midi', min: 4, max: 4, priority: 3 },               // ✅ PRIORITÉ 3
         { nom: 'Vaisselle', min: 7, max: 7, priority: 4 },               // ✅ PRIORITÉ 4
         { nom: 'Cuisine chaude', min: 4, max: 7, priority: 5 },          // ✅ PRIORITÉ 5
         { nom: 'Jus de fruits', min: 2, max: 3, priority: 6 },           // ✅ PRIORITÉ 6
-        { nom: 'Légumerie', min: 2, max: 10, priority: 7 },              // ✅ PRIORITÉ 7
-        { nom: 'Equipe Pina et Saskia', min: 1, max: 5, priority: 8 }    // ✅ PRIORITÉ 8 (DERNIER)
+        { nom: 'Légumerie', min: 2, max: 10, priority: 7 },              // ✅ PRIORITÉ 7 (recevra restants)
+        { nom: 'Equipe Pina et Saskia', min: 1, max: 5, priority: 8 }    // ✅ PRIORITÉ 8 (avant légumerie finale)
       ];
 
       // 2. Appel IA pour optimisation

@@ -1,15 +1,16 @@
-// Configuration Azure OpenAI pour l'assistant IA Caddy
+// Configuration OpenAI pour l'assistant IA Caddy
+// PRIORITÉ : OpenAI direct (plus simple à configurer)
+const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
+
+// Fallback Azure OpenAI si configuré
 const AZURE_OPENAI_ENDPOINT = process.env.REACT_APP_AZURE_OPENAI_ENDPOINT;
 const AZURE_OPENAI_API_KEY = process.env.REACT_APP_AZURE_OPENAI_API_KEY;
 const AZURE_OPENAI_DEPLOYMENT_NAME = process.env.REACT_APP_AZURE_OPENAI_DEPLOYMENT_NAME;
 const AZURE_OPENAI_API_VERSION = process.env.REACT_APP_AZURE_OPENAI_API_VERSION || '2024-02-15-preview';
 
-// Fallback vers OpenAI standard si Azure n'est pas configuré
-const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
-
-if (!AZURE_OPENAI_ENDPOINT || !AZURE_OPENAI_API_KEY || !AZURE_OPENAI_DEPLOYMENT_NAME) {
-  console.warn('Configuration Azure OpenAI incomplète. Tentative avec OpenAI standard...');
-  if (!OPENAI_API_KEY) {
+if (!OPENAI_API_KEY) {
+  console.warn('Configuration OpenAI manquante. Tentative avec Azure OpenAI...');
+  if (!AZURE_OPENAI_ENDPOINT || !AZURE_OPENAI_API_KEY || !AZURE_OPENAI_DEPLOYMENT_NAME) {
     console.warn('Aucune clé IA trouvée. L\'assistant utilisera les réponses simulées.');
   }
 }
@@ -45,22 +46,22 @@ RÉPONDS TOUJOURS EN FRANÇAIS, de manière concise et professionnelle.`;
 
 export const azureOpenaiAPI = {
   async generateResponse(userMessage) {
-    // Essayer Azure OpenAI en priorité
-    if (AZURE_OPENAI_ENDPOINT && AZURE_OPENAI_API_KEY && AZURE_OPENAI_DEPLOYMENT_NAME) {
-      try {
-        return await this.callAzureOpenAI(userMessage);
-      } catch (error) {
-        console.error('Erreur Azure OpenAI:', error);
-        console.log('Tentative avec OpenAI standard...');
-      }
-    }
-
-    // Fallback vers OpenAI standard
+    // Essayer OpenAI standard en priorité (plus simple)
     if (OPENAI_API_KEY) {
       try {
         return await this.callOpenAIStandard(userMessage);
       } catch (error) {
         console.error('Erreur OpenAI standard:', error);
+        console.log('Tentative avec Azure OpenAI...');
+      }
+    }
+
+    // Fallback vers Azure OpenAI
+    if (AZURE_OPENAI_ENDPOINT && AZURE_OPENAI_API_KEY && AZURE_OPENAI_DEPLOYMENT_NAME) {
+      try {
+        return await this.callAzureOpenAI(userMessage);
+      } catch (error) {
+        console.error('Erreur Azure OpenAI:', error);
       }
     }
 

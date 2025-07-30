@@ -5,14 +5,11 @@
  * Vérifie les compétences, respect les priorités, optimise les profils
  */
 
-import { createClient } from '@supabase/supabase-js';
+// Note: createClient non utilisé, utilise supabaseCuisineAdvanced
 import { supabaseCuisine } from './supabase-cuisine.js';
 import { format } from 'date-fns';
 
-// Configuration Supabase
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseServiceKey) : null;
+// Note: Configuration Supabase utilise supabaseCuisineAdvanced depuis imports existants
 
 export class BusinessPlanningEngine {
   constructor() {
@@ -135,6 +132,9 @@ export class BusinessPlanningEngine {
   /**
    * 🎯 LOGIQUE MÉTIER PRINCIPALE - Génération Planning
    * ✅ NOUVEAU FORMAT : Compatible avec CuisinePlanningSimple
+   * ✅ CORRIGÉ : Tous les employés affectés + double affectation flexible
+   * ✅ CORRIGÉ : Ordre priorités + minimums/maximums stricts
+   * ✅ CORRIGÉ : VRAI mapping de l'interface CuisinePlanningDisplay.js
    */
   async generateBusinessLogicPlanning(selectedDate) {
     // ✅ Structure finale comme logistique: planning[dateKey][posteId] = [employees]
@@ -142,43 +142,54 @@ export class BusinessPlanningEngine {
     const planning = {};
     planning[dateKey] = {};
 
+    // 🔥 PHASE 1 - AFFECTATIONS PRIORITAIRES STRICTES (vrai mapping interface)
+    
     // 🔥 PRIORITÉ 1: Pain = 2 personnes exactement (ID 8)
     planning[dateKey][8] = this.assignEmployeesToPosteId('Pain', 2, 2);
 
-    // 🔥 PRIORITÉ 2: Sandwichs = 5 personnes exactement (ID 1)
+    // 🔥 PRIORITÉ 2: Sandwichs = 5 personnes exactement (ID 1)  
     planning[dateKey][1] = this.assignEmployeesToPosteId('Sandwichs', 5, 5);
 
-    // 🔥 PRIORITÉ 3: Self Midi = 4 personnes (2+2 créneaux)
+    // 🔥 PRIORITÉ 3: Self Midi = 4 personnes (2+2 créneaux séparés)
     planning[dateKey][2] = this.assignEmployeesToPosteId('Self Midi', 2, 2); // 11h-11h45
     planning[dateKey][3] = this.assignEmployeesToPosteId('Self Midi', 2, 2); // 11h45-12h45
 
-    // 🔥 PRIORITÉ 4: Vaisselle = 7 personnes (1+3+3 créneaux)
+    // 🔥 PRIORITÉ 4: Vaisselle = 7 personnes (1+3+3 créneaux séparés)
     planning[dateKey][5] = this.assignEmployeesToPosteId('Vaisselle', 1, 1); // 8h
     planning[dateKey][6] = this.assignEmployeesToPosteId('Vaisselle', 3, 3); // 10h
     planning[dateKey][7] = this.assignEmployeesToPosteId('Vaisselle', 3, 3); // midi
 
-    // 🔥 PRIORITÉ 5: Cuisine chaude = 4 à 7 personnes (ID 4)
-    planning[dateKey][4] = this.assignEmployeesToPosteId('Cuisine chaude', 4, 7);
+    // 🔥 PRIORITÉ 5: Cuisine chaude = 4 personnes MINIMUM (ID 4)
+    planning[dateKey][4] = this.assignEmployeesToPosteId('Cuisine chaude', 4, 4);
 
     // 🔥 PRIORITÉ 6: Jus de fruits = 2 à 3 personnes (ID 10)
     planning[dateKey][10] = this.assignEmployeesToPosteId('Jus de fruits', 2, 3);
 
-    // 🔥 PRIORITÉ 7: Légumerie = 2 à 10 personnes (ID 9)
-    planning[dateKey][9] = this.assignEmployeesToPosteId('Légumerie', 2, 10);
+    // 🔥 PRIORITÉ 7: Equipe Pina et Saskia = minimum 1 personne (ID 11)
+    planning[dateKey][11] = this.assignEmployeesToPosteId('Equipe Pina et Saskia', 1, 3);
 
-    // 🔥 PRIORITÉ 8: Equipe Pina et Saskia = minimum 1 personne (ID 11)
-    planning[dateKey][11] = this.assignEmployeesToPosteId('Equipe Pina et Saskia', 1, 5);
+    // 🔥 PRIORITÉ 8 (DERNIER): Légumerie = flexible (ID 9)
+    planning[dateKey][9] = this.assignEmployeesToPosteId('Légumerie', 1, 2);
+
+    // 🎯 PHASE 2 - AFFECTER TOUS LES EMPLOYÉS RESTANTS (double affectation flexible)
+    this.assignRemainingEmployeesWithPriority(planning[dateKey]);
 
     // Ajouter absents (comme logistique)
     planning[dateKey].absents = [];
 
-    console.log('✅ Planning métier généré (nouveau format):', planning);
+    console.log('✅ Planning métier généré (mapping interface CORRECT):', planning);
+    console.log(`📊 Total employés affectés: ${this.assignedEmployees.size}/${this.employees.length}`);
+    
+    // Afficher répartition finale pour debug
+    this.logFinalDistribution(planning[dateKey]);
+    
     return planning;
   }
 
   /**
    * 👥 Assigner employés à un poste (NOUVEAU FORMAT SIMPLE)
    * Retourne directement un array d'employés comme attendu par le planning
+   * ✅ CORRIGÉ : Suppression profils inexistants Fort/Moyen/Faible
    */
   assignEmployeesToPosteId(posteName, minEmployees, maxEmployees) {
     const basePosteName = posteName.includes(' 8h') || posteName.includes(' 10h') || posteName.includes(' midi') || posteName.includes(' 11h') ? 
@@ -190,11 +201,9 @@ export class BusinessPlanningEngine {
       this.isEmployeeCompetentForPoste(emp, basePosteName)
     );
 
-    // Trier par profil (Fort → Moyen → Faible) pour optimiser
-    availableEmployees.sort((a, b) => {
-      const profilOrder = { 'Fort': 0, 'Moyen': 1, 'Faible': 2 };
-      return (profilOrder[a.profil] || 3) - (profilOrder[b.profil] || 3);
-    });
+    // ✅ SUPPRIMÉ : Tri par profil (n'existe pas en cuisine)
+    // Simple tri alphabétique pour cohérence
+    availableEmployees.sort((a, b) => a.prenom.localeCompare(b.prenom));
 
     console.log(`🎯 ${posteName}: ${availableEmployees.length} employés compétents disponibles`);
 
@@ -205,7 +214,7 @@ export class BusinessPlanningEngine {
     // Marquer comme assignés
     selectedEmployees.forEach(emp => {
       this.assignedEmployees.add(emp.id);
-      console.log(`✅ ${emp.prenom} (${emp.profil}) → ${posteName}`);
+      console.log(`✅ ${emp.prenom} → ${posteName}`);
     });
 
     // ✅ NOUVEAU FORMAT : Retourner directement les employés au format interface
@@ -220,38 +229,191 @@ export class BusinessPlanningEngine {
       // Métadonnées génération pour debug
       _generated: true,
       _score: this.calculateAdequationScore(emp, basePosteName),
-      _raison: `${emp.profil} + Compétent`
+      _raison: 'Compétent + Disponible'
     }));
   }
 
+  /**
+   * 🎯 NOUVELLE MÉTHODE - Affecter tous les employés restants avec PRIORITÉ
+   * Ordre de priorité pour la flexibilité : Cuisine chaude → Légumerie → autres
+   * ✅ CORRIGÉ : Utilise les vrais IDs de l'interface
+   */
+  assignRemainingEmployeesWithPriority(dayPlanning) {
+    const remainingEmployees = this.employees.filter(emp => 
+      !this.assignedEmployees.has(emp.id)
+    );
 
+    console.log(`🎯 ${remainingEmployees.length} employés restants à affecter...`);
+
+    for (const employee of remainingEmployees) {
+      let assigned = false;
+
+      // 1. PRIORITÉ ABSOLUE : Cuisine chaude (besoin de plus d'employés)
+      if (!assigned && this.isEmployeeCompetentForPoste(employee, 'Cuisine chaude')) {
+        if (dayPlanning[4]) { // Cuisine chaude ID 4 (interface)
+          dayPlanning[4].push({
+            id: employee.id,
+            prenom: employee.prenom,
+            nom: employee.prenom,
+            photo_url: employee.photo_url,
+            langue_parlee: employee.langue_parlee,
+            role: 'Équipier',
+            status: 'assigned',
+            _generated: true,
+            _priority: true,
+            _raison: 'Cuisine chaude - Priorité flexible'
+          });
+          
+          this.assignedEmployees.add(employee.id);
+          console.log(`✅ ${employee.prenom} → Cuisine chaude (priorité flexible)`);
+          assigned = true;
+        }
+      }
+
+      // 2. Légumerie (très flexible) - EN DERNIER comme demandé
+      if (!assigned && this.isEmployeeCompetentForPoste(employee, 'Légumerie')) {
+        if (dayPlanning[9]) { // Légumerie ID 9 (interface)
+          dayPlanning[9].push({
+            id: employee.id,
+            prenom: employee.prenom,
+            nom: employee.prenom,
+            photo_url: employee.photo_url,
+            langue_parlee: employee.langue_parlee,
+            role: 'Équipier',
+            status: 'assigned',
+            _generated: true,
+            _flexible: true,
+            _raison: 'Légumerie - Affectation flexible'
+          });
+          
+          this.assignedEmployees.add(employee.id);
+          console.log(`✅ ${employee.prenom} → Légumerie (flexible)`);
+          assigned = true;
+        }
+      }
+
+      // 3. Autres postes flexibles si pas encore affecté
+      if (!assigned) {
+        const flexiblePosts = [
+          { id: 10, name: 'Jus de fruits' },      // ID 10 (interface)
+          { id: 11, name: 'Equipe Pina et Saskia' }, // ID 11 (interface)
+          { id: 6, name: 'Vaisselle' },          // Vaisselle 10h ID 6 (interface)
+          { id: 7, name: 'Vaisselle' }           // Vaisselle midi ID 7 (interface)
+        ];
+
+        for (const post of flexiblePosts) {
+          if (assigned) break;
+          
+          if (this.isEmployeeCompetentForPoste(employee, post.name)) {
+            if (dayPlanning[post.id]) {
+              dayPlanning[post.id].push({
+                id: employee.id,
+                prenom: employee.prenom,
+                nom: employee.prenom,
+                photo_url: employee.photo_url,
+                langue_parlee: employee.langue_parlee,
+                role: 'Équipier',
+                status: 'assigned',
+                _generated: true,
+                _flexible: true,
+                _raison: `${post.name} - Affectation flexible`
+              });
+              
+              this.assignedEmployees.add(employee.id);
+              console.log(`✅ ${employee.prenom} → ${post.name} (flexible)`);
+              assigned = true;
+            }
+          }
+        }
+      }
+
+      // 4. En dernier recours, affecter à Légumerie même sans compétence
+      if (!assigned) {
+        if (dayPlanning[9]) { // Légumerie ID 9 (interface)
+          dayPlanning[9].push({
+            id: employee.id,
+            prenom: employee.prenom,
+            nom: employee.prenom,
+            photo_url: employee.photo_url,
+            langue_parlee: employee.langue_parlee,
+            role: 'Aide',
+            status: 'assigned',
+            _generated: true,
+            _emergency: true,
+            _raison: 'Légumerie - Affectation d\'urgence'
+          });
+          
+          this.assignedEmployees.add(employee.id);
+          console.log(`⚠️ ${employee.prenom} → Légumerie (urgence)`);
+        }
+      }
+    }
+  }
 
   /**
-   * 🎖️ Déterminer le rôle selon le profil
+   * 📊 Debug - Afficher la répartition finale
+   * ✅ CORRIGÉ : Noms corrects avec créneaux comme dans l'interface
+   */
+  logFinalDistribution(dayPlanning) {
+    const posteNames = {
+      1: 'Sandwichs',
+      2: 'Self Midi 11h-11h45', 
+      3: 'Self Midi 11h45-12h45',
+      4: 'Cuisine chaude',
+      5: 'Vaisselle 8h',
+      6: 'Vaisselle 10h', 
+      7: 'Vaisselle midi',
+      8: 'Pain',
+      9: 'Légumerie',
+      10: 'Jus de fruits',
+      11: 'Equipe Pina et Saskia'
+    };
+
+    console.log('\n📊 RÉPARTITION FINALE:');
+    Object.entries(dayPlanning).forEach(([posteId, employees]) => {
+      if (posteId !== 'absents' && employees && employees.length > 0) {
+        console.log(`   ${posteNames[posteId]}: ${employees.length} employés`);
+      }
+    });
+  }
+
+  /**
+   * 🎖️ Déterminer le rôle selon la compétence et l'expérience
+   * ✅ CORRIGÉ : Sans profils Fort/Moyen/Faible
    */
   determineRole(employee, posteName) {
-    if (employee.profil === 'Fort') {
-      return posteName.includes('Sandwichs') ? 'Chef' : 'Responsable';
-    } else if (employee.profil === 'Moyen') {
+    // Rôles spéciaux pour certains postes
+    if (posteName.includes('Sandwichs') && employee.chef_sandwichs) {
+      return 'Chef Sandwichs';
+    }
+    
+    // Rôle par défaut selon expérience (si disponible)
+    if (employee.experience_mois && employee.experience_mois > 24) {
       return 'Équipier Senior';
-    } else {
+    } else if (employee.experience_mois && employee.experience_mois > 12) {
       return 'Équipier';
+    } else {
+      return 'Aide';
     }
   }
 
   /**
    * 📊 Calculer score d'adéquation
+   * ✅ CORRIGÉ : Sans profils Fort/Moyen/Faible
    */
   calculateAdequationScore(employee, posteName) {
-    let baseScore = 70; // Score de base si compétent
+    let baseScore = 80; // Score de base si compétent
 
-    // Bonus selon profil
-    if (employee.profil === 'Fort') baseScore += 25;
-    else if (employee.profil === 'Moyen') baseScore += 15;
-    else if (employee.profil === 'Faible') baseScore += 5;
+    // Bonus selon expérience
+    if (employee.experience_mois) {
+      if (employee.experience_mois > 24) baseScore += 15;
+      else if (employee.experience_mois > 12) baseScore += 10;
+      else if (employee.experience_mois > 6) baseScore += 5;
+    }
 
-    // Bonus selon expérience (simulation)
-    if (employee.experience_mois && employee.experience_mois > 12) baseScore += 5;
+    // Bonus spéciaux
+    if (posteName === 'Sandwichs' && employee.chef_sandwichs) baseScore += 10;
+    if (employee.langue_parlee && employee.langue_parlee.includes('Français')) baseScore += 5;
 
     return Math.min(100, baseScore);
   }
