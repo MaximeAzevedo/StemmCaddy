@@ -23,6 +23,7 @@ import {
 import toast from 'react-hot-toast';
 import { azureOpenaiAPI } from '../lib/azure-openai';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
+import { supabaseCuisineAdvanced } from '../lib/supabase-cuisine-advanced';
 
 const CuisineAIAssistant = ({ onDataRefresh }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -107,10 +108,10 @@ const CuisineAIAssistant = ({ onDataRefresh }) => {
       console.log('🔍 DÉBUT getContextData - Récupération contexte...');
       
       const [employeesRes, postesRes, competencesRes, absencesRes, planningRes] = await Promise.all([
-        supabaseCuisine.getEmployeesCuisine(),
+        supabaseCuisineAdvanced.getEmployeesCuisine(),
         supabaseCuisine.getPostes(),
         supabaseCuisine.getCompetencesCuisineSimple(),
-        supabaseCuisine.getAbsencesCuisine(),
+        supabaseCuisineAdvanced.getAbsencesCuisineAdvanced(),
         supabaseCuisine.getPlanningCuisine()
       ]);
 

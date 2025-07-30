@@ -3,7 +3,8 @@ import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 import { getSessionConfig } from '../planning/config';
 import { supabase } from '../lib/supabase'; // ✅ Gardé pour compatibilité
-import { supabaseCuisine } from '../lib/supabase-cuisine'; // ✅ NOUVEAU : Notre API robuste
+import { supabaseCuisine } from '../lib/supabase-cuisine'; // ✅ Planning
+import { supabaseCuisineAdvanced } from '../lib/supabase-cuisine-advanced'; // ✅ Absences avancées
 
 const CuisinePlanningDisplay = () => {
   const [searchParams] = useSearchParams();
