@@ -9,7 +9,7 @@ import {
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import CuisineManagement from './CuisineManagement';
-import AbsenceManagementCuisine from './AbsenceManagementCuisine';
+import AbsenceManagementCuisineAdvanced from './AbsenceManagementCuisineAdvanced';
 
 import CuisinePlanningSimple from './CuisinePlanningSimple';
 
@@ -34,7 +34,7 @@ const DashboardCuisine = ({ user, onLogout }) => {
     },
     {
       title: 'Gestion des Absences',
-      description: 'Gérer les absences et indisponibilités',
+      description: 'Système avancé : 6 types, vue calendrier, statistiques',
       icon: UserMinusIcon,
       color: 'from-violet-500 to-purple-600',
       tab: 'absences'
@@ -66,7 +66,11 @@ const DashboardCuisine = ({ user, onLogout }) => {
   }
   
   if (activeTab === 'absences') {
-    return <AbsenceManagementCuisine user={user} onLogout={onLogout} />;
+    return <AbsenceManagementCuisineAdvanced 
+      user={user} 
+      onLogout={onLogout} 
+      onReturnToDashboard={() => setActiveTab('dashboard')}
+    />;
   }
 
   return (
