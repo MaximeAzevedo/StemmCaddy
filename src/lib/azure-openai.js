@@ -49,24 +49,42 @@ export const azureOpenaiAPI = {
     // Essayer OpenAI standard en priorité (plus simple)
     if (OPENAI_API_KEY) {
       try {
+        console.log('🚀 Tentative OpenAI standard...');
         return await this.callOpenAIStandard(userMessage);
       } catch (error) {
-        console.error('Erreur OpenAI standard:', error);
-        console.log('Tentative avec Azure OpenAI...');
+        console.error('❌ Erreur OpenAI standard:', error.message);
+        
+        // Détection d'erreurs réseau spécifiques
+        if (error.message.includes('net::ERR_NETWORK_CHANGED') || 
+            error.message.includes('Failed to fetch') ||
+            error.message.includes('network')) {
+          console.warn('🌐 Problème de connectivité réseau détecté');
+        }
+        
+        console.log('🔄 Tentative avec Azure OpenAI...');
       }
     }
 
     // Fallback vers Azure OpenAI
     if (AZURE_OPENAI_ENDPOINT && AZURE_OPENAI_API_KEY && AZURE_OPENAI_DEPLOYMENT_NAME) {
       try {
+        console.log('🚀 Tentative Azure OpenAI...');
         return await this.callAzureOpenAI(userMessage);
       } catch (error) {
-        console.error('Erreur Azure OpenAI:', error);
+        console.error('❌ Erreur Azure OpenAI:', error.message);
+        
+        // Détection d'erreurs réseau spécifiques
+        if (error.message.includes('net::ERR_NETWORK_CHANGED') || 
+            error.message.includes('Failed to fetch') ||
+            error.message.includes('network')) {
+          console.warn('🌐 Problème de connectivité réseau détecté pour Azure aussi');
+        }
       }
     }
 
     // Retourner un message par défaut si aucune IA n'est disponible
-    return this.getFallbackResponse();
+    console.warn('⚠️ Aucune IA disponible - mode fallback activé');
+    return this.getFallbackResponse(userMessage);
   },
 
   // ✅ NOUVEAU : Alias pour compatibilité avec le moteur IA
@@ -104,7 +122,7 @@ export const azureOpenaiAPI = {
             content: userMessage
           }
         ],
-        max_tokens: 8000, // 🚀 ULTRA-GÉNÉREUX : Plus jamais de troncature !
+        max_tokens: 16000, // 🚀 MEGA-GÉNÉREUX : JSON complexes garantis !
         temperature: 0.7,
         presence_penalty: 0.1,
         frequency_penalty: 0.1
@@ -128,7 +146,7 @@ export const azureOpenaiAPI = {
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o', // Plus puissant que mini pour JSON complexes
         messages: [
           {
             role: 'system',
@@ -139,7 +157,7 @@ export const azureOpenaiAPI = {
             content: userMessage
           }
         ],
-        max_tokens: 8000, // 🚀 ULTRA-GÉNÉREUX : Plus jamais de troncature !
+        max_tokens: 16000, // 🚀 MEGA-GÉNÉREUX : JSON complexes garantis !
         temperature: 0.7,
         presence_penalty: 0.1,
         frequency_penalty: 0.1
@@ -157,6 +175,25 @@ export const azureOpenaiAPI = {
   async getFallbackResponse(userMessage = '') {
     // Système de réponses simulées intelligent selon le contexte
     const command = String(userMessage || '').toLowerCase();
+    
+    // 🚛 DÉTECTION PLANNING LOGISTIQUE - Retourner JSON valide
+    if (command.includes('logistique') && command.includes('planning')) {
+      console.log('🔄 Mode fallback - Planning logistique JSON structuré');
+      return JSON.stringify({
+        "planning_optimal": [],
+        "statistiques": {
+          "vehicules_utilises": 0,
+          "employes_assignes": 0,
+          "score_global": 0
+        },
+        "recommandations": [
+          "Mode local activé - Configuration IA requise",
+          "Utilisez le fallback manuel automatique",
+          "Vérifiez votre connexion réseau"
+        ],
+        "mode": "FALLBACK_NETWORK_ERROR"
+      });
+    }
     
     if (command.includes('absent') || command.includes('absence')) {
       return `🤖 **Assistant IA Caddy (Mode local)**\n\nJe comprends que vous voulez gérer une absence. En mode local, je ne peux pas accéder aux données temps réel, mais voici la procédure recommandée :\n\n1. **Identifier l'employé** et sa fonction\n2. **Vérifier les règles d'insertion sociale**\n3. **Proposer un remplaçant** avec profil compatible\n\n💡 *Configurez Azure OpenAI pour des réponses intelligentes !*`;

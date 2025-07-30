@@ -3,23 +3,20 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { 
   Calendar, 
   Save, 
-  Zap,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
   User,
   Truck,
   Monitor,
-  X,
-  Play,
-  CheckCircle
+  X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { format, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabaseLogistique } from '../lib/supabase-logistique';
-import { aiPlanningEngine } from '../lib/ai-planning-engine';
+import { aiLogistiqueEngine } from '../lib/ai-logistique-engine';
 
 const PlanningView = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -31,23 +28,109 @@ const PlanningView = ({ user, onLogout }) => {
   // Données logistique
   const [employees, setEmployees] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-  const [competences, setCompetences] = useState([]);
   const [absences, setAbsences] = useState([]); // Nouveau état pour les absences
   
   // État pour le menu contextuel des rôles
   const [contextMenu, setContextMenu] = useState(null);
 
   // État pour le générateur automatique
-  const [generatorOpen, setGeneratorOpen] = useState(false);
   const [generatorLoading, setGeneratorLoading] = useState(false);
-  const [selectedStartDate, setSelectedStartDate] = useState('');
-  const [generatorOptions, setGeneratorOptions] = useState({
-    replaceExisting: false,
-    fillGapsOnly: true
-  });
 
   // État pour la confirmation de reset
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+
+  /**
+   * 🔄 CONVERSION FORMAT IA LOGISTIQUE → UI
+   * Convertit le planning IA logistique vers le format attendu par l'interface
+   */
+  const convertAILogistiquePlanningToUI = async (aiResult, dateString) => {
+    console.log('🔄 Conversion planning IA vers UI:', aiResult);
+    
+    const dayPlanning = {
+      absents: [] // Section absents
+    };
+    
+    // Initialiser tous les véhicules vides avec clés string pour cohérence
+    vehicles.forEach(vehicle => {
+      dayPlanning[vehicle.id.toString()] = [];
+    });
+    
+    // Mapper les assignations IA vers les véhicules UI
+    for (const assignment of aiResult.planning_optimal) {
+      const vehiculeNom = assignment.vehicule;
+      const creneau = assignment.creneau;
+      
+      // ⚠️ VALIDATION: Ignorer les assignations invalides
+      if (!vehiculeNom || !creneau || vehiculeNom === 'undefined' || creneau === 'undefined') {
+        console.warn(`⚠️ Assignation invalide ignorée: véhicule="${vehiculeNom}", créneau="${creneau}"`);
+        continue;
+      }
+      
+      console.log(`🚛 Traitement: ${vehiculeNom} (${creneau}) - ${assignment.employes_assignes?.length || 0} employés`);
+      
+      // Trouver l'ID du véhicule correspondant (avec vérifications de sécurité)
+      const vehicule = vehicles.find(v => 
+        (v.nom && vehiculeNom && (
+          v.nom === vehiculeNom || 
+          v.nom.toLowerCase().includes(vehiculeNom.toLowerCase()) ||
+          vehiculeNom.toLowerCase().includes(v.nom.toLowerCase())
+        ))
+      );
+      
+      if (vehicule && assignment.employes_assignes) {
+        console.log(`✅ Véhicule trouvé: ${vehicule.nom} (ID: ${vehicule.id})`);
+        
+        for (const employeeAI of assignment.employes_assignes) {
+          // ⚠️ VALIDATION: Ignorer les employés invalides ou par défaut
+          if (!employeeAI.nom || employeeAI.nom === 'Employé' || employeeAI.nom === 'undefined' || employeeAI.nom.trim() === '') {
+            console.warn(`⚠️ Employé invalide ignoré: "${employeeAI.nom}"`);
+            continue;
+          }
+          
+          // Trouver l'employé réel dans la base (avec vérifications de sécurité)
+          const employee = employees.find(emp => 
+            (emp.nom && employeeAI.nom && (
+              emp.nom.toLowerCase() === employeeAI.nom.toLowerCase() || 
+              emp.nom.toLowerCase().includes(employeeAI.nom.toLowerCase())
+            )) ||
+            (emp.prenom && employeeAI.nom && (
+              emp.prenom.toLowerCase() === employeeAI.nom.toLowerCase() || 
+              emp.prenom.toLowerCase().includes(employeeAI.nom.toLowerCase())
+            ))
+          );
+          
+          if (employee) {
+            const employeeEntry = {
+              ...employee,
+              status: 'assigned',
+              role: employeeAI.role || 'Équipier',
+              creneau: creneau,
+              ai_score: employeeAI.score_adequation,
+              ai_raison: employeeAI.raison,
+              notes: `IA ${creneau} - ${employeeAI.raison || 'Assignation optimisée'}`
+            };
+            
+            dayPlanning[vehicule.id.toString()].push(employeeEntry);
+            console.log(`👤 ${employee.nom} → ${vehicule.nom} (${creneau})`);
+          } else {
+            console.warn(`⚠️ Employé non trouvé: ${employeeAI.nom}`);
+          }
+        }
+      } else {
+        console.warn(`⚠️ Véhicule non trouvé: ${vehiculeNom}`);
+      }
+    }
+    
+    // Debug: Vérifier le résultat
+    Object.entries(dayPlanning).forEach(([vehicleId, assignments]) => {
+      if (vehicleId !== 'absents' && assignments.length > 0) {
+        const vehicleName = vehicles.find(v => v.id.toString() === vehicleId)?.nom || vehicleId;
+        console.log(`📊 ${vehicleName}: ${assignments.length} employés assignés`);
+      }
+    });
+    
+    return dayPlanning;
+  };
 
   /**
    * Chargement des données logistique
@@ -57,25 +140,31 @@ const PlanningView = ({ user, onLogout }) => {
       console.log('🔄 === CHARGEMENT DONNÉES LOGISTIQUE ===');
       setLoading(true);
       
-      const [employeesResult, vehiculesResult, competencesResult] = await Promise.all([
+      // 🎯 CHARGER LES ABSENCES ÉGALEMENT
+      const weekDates = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+      const dateDebut = format(weekDates[0], 'yyyy-MM-dd');
+      const dateFin = format(weekDates[4], 'yyyy-MM-dd');
+      
+      const [employeesResult, vehiculesResult, absencesResult] = await Promise.all([
         supabaseLogistique.getEmployeesLogistique(),
         supabaseLogistique.getVehicules(),
-        supabaseLogistique.getCompetencesVehicules()
+        supabaseLogistique.getAbsencesLogistique(dateDebut, dateFin)
       ]);
       
       console.log('📊 Résultats chargement:', {
         employees: employeesResult.data?.length || 0,
-        vehicles: vehiculesResult.data?.length || 0,
-        competences: competencesResult.data?.length || 0
+        vehicles: vehiculesResult.data?.length || 0
       });
 
       if (employeesResult.error) throw employeesResult.error;
       if (vehiculesResult.error) throw vehiculesResult.error;
-      if (competencesResult.error) throw competencesResult.error;
+      if (absencesResult.error) throw absencesResult.error;
       
       setEmployees(employeesResult.data || []);
       setVehicles(vehiculesResult.data || []);
-      setCompetences(competencesResult.data || []);
+      setAbsences(absencesResult.data || []);
+      
+      console.log('🎯 Absences chargées:', absencesResult.data?.length || 0);
       
     } catch (error) {
       console.error('❌ Erreur chargement données logistique:', error);
@@ -83,7 +172,7 @@ const PlanningView = ({ user, onLogout }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentWeek]);
 
   useEffect(() => {
     console.log('🔄 === useEffect DÉMARRAGE - Chargement données ===');
@@ -104,7 +193,7 @@ const PlanningView = ({ user, onLogout }) => {
       };
       
       vehicles.forEach(vehicle => {
-        newPlanning[dateKey][vehicle.id] = [];
+        newPlanning[dateKey][vehicle.id.toString()] = [];
       });
     });
     
@@ -141,6 +230,10 @@ const PlanningView = ({ user, onLogout }) => {
       const planningData = planningResult.data || {};
       const absents = absencesResult.data || [];
       
+      // 🎯 METTRE À JOUR LES ABSENCES DANS L'ÉTAT
+      setAbsences(absents);
+      console.log('🎯 Absences rechargées pour planning:', absents.length);
+      
       // 🔍 DEBUG : Vérifier les données reçues
       console.log('🔍 Planning data reçu:', planningData);
       console.log('🔍 Nombre de jours dans planning:', Object.keys(planningData).length);
@@ -174,8 +267,8 @@ const PlanningView = ({ user, onLogout }) => {
         
         // Initialiser toutes les cases véhicules avec les données existantes ou vide
         vehicles.forEach(vehicle => {
-          const vehicleData = planningData[dateKey]?.[vehicle.id] || [];
-          finalPlanning[dateKey][vehicle.id] = vehicleData;
+          const vehicleData = planningData[dateKey]?.[vehicle.id.toString()] || [];
+          finalPlanning[dateKey][vehicle.id.toString()] = vehicleData;
           
           // 🔍 DEBUG : Tracer l'assignation des données
           if (vehicleData.length > 0) {
@@ -261,7 +354,7 @@ const PlanningView = ({ user, onLogout }) => {
   }, [loading, vehicles, currentWeek, initializePlanning]);
 
   /**
-   * Génération IA
+   * 🚛 GÉNÉRATION IA LOGISTIQUE - Intelligence artificielle optimisée
    */
   const generateAIPlanning = async () => {
     if (employees.length === 0 || vehicles.length === 0) {
@@ -269,35 +362,150 @@ const PlanningView = ({ user, onLogout }) => {
       return;
     }
 
-    try {
-      toast.loading('🤖 Génération IA...', { id: 'ai-planning' });
+    // 🔍 CONFIRMATION SEMAINE: Afficher quelle semaine va être générée
+    const displayedWeek = currentWeek;
+    const weekStart = format(displayedWeek, 'dd MMMM yyyy', { locale: fr });
+    const weekEnd = format(addDays(displayedWeek, 4), 'dd MMMM yyyy', { locale: fr });
     
-      const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeek, i));
+    const confirmMessage = `Générer le planning IA pour la semaine :\n📅 Du ${weekStart} au ${weekEnd} ?\n\n⚠️ Cela remplacera le planning existant pour cette semaine.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setGeneratorLoading(true);
+      toast.loading(`🚛 Génération IA pour ${weekStart}...`, { id: 'ai-planning' });
+      console.log('🚛 Démarrage génération planning IA logistique...');
+      console.log('📅 Semaine CONFIRMÉE:', weekStart);
+      
+      const weekDays = Array.from({ length: 5 }, (_, i) => addDays(displayedWeek, i));
+      console.log('📅 Jours IA à générer:', weekDays.map(d => format(d, 'E dd/MM', { locale: fr })));
       const optimizedPlanning = {};
+      let totalAssignments = 0;
+      let successfulDays = 0;
+      
+      // 🛡️ SÉCURITÉ: Limiter à 5 jours maximum pour éviter les boucles infinies
+      let dayCount = 0;
+      const MAX_DAYS = 5;
+      
+      // 🎯 GÉNÉRATION JOUR PAR JOUR OPTIMISÉE AVEC ABSENCES
+      console.log('🎯 Génération IA jour par jour avec gestion des absences...');
       
       for (const day of weekDays) {
-        const dateString = format(day, 'yyyy-MM-dd');
+        dayCount++;
+        if (dayCount > MAX_DAYS) {
+          console.error('🚨 SÉCURITÉ: Arrêt forcé de la boucle après 5 jours');
+          break;
+        }
         
-        const aiResult = await aiPlanningEngine.generateOptimalPlanningLogistique(
-          dateString,
-          employees,
-          vehicles,
-          competences
+        const dateString = format(day, 'yyyy-MM-dd');
+        console.log(`🚛 Génération IA pour ${dateString} avec absences...`);
+        
+        // 🔍 FILTRER LES ABSENTS POUR CE JOUR PRÉCIS (période date_debut → date_fin)
+        const absentsToday = absences.filter(absence => {
+          const dateDebut = new Date(absence.date_debut);
+          const dateFin = new Date(absence.date_fin);
+          const currentDate = new Date(dateString);
+          
+          // Vérifier si la date courante est dans la période d'absence
+          return currentDate >= dateDebut && currentDate <= dateFin;
+        });
+        
+        const absentEmployeeIds = absentsToday.map(a => a.employee_id);
+        
+        // Enrichir avec les noms des employés absents
+        const absentsWithNames = absentsToday.map(absence => {
+          const employee = employees.find(emp => emp.id === absence.employee_id);
+          return {
+            ...absence,
+            employee_nom: employee?.nom || `ID ${absence.employee_id}`
+          };
+        });
+        
+        console.log(`📅 ${dateString}: ${absentEmployeeIds.length} employés absents:`, 
+                    absentsWithNames.map(a => a.employee_nom).join(', '));
+        
+        // 🎯 EMPLOYÉS DISPONIBLES (excluant les absents)
+        const availableEmployees = employees.filter(emp => !absentEmployeeIds.includes(emp.id));
+        console.log(`👥 ${dateString}: ${availableEmployees.length}/${employees.length} employés disponibles`);
+        
+        if (availableEmployees.length === 0) {
+          console.warn(`⚠️ ${dateString}: Aucun employé disponible - jour férié/grève?`);
+          optimizedPlanning[dateString] = { absents: absentsWithNames };
+          vehicles.forEach(vehicle => {
+            optimizedPlanning[dateString][vehicle.id.toString()] = [];
+          });
+          continue;
+        }
+        
+        // 🚀 GÉNÉRATION IA AVEC EMPLOYÉS DISPONIBLES
+        const aiResult = await aiLogistiqueEngine.generateIntelligentLogistiquePlanning(
+          dateString, 
+          availableEmployees, 
+          absentsWithNames
         );
         
-        if (aiResult.success && aiResult.planning) {
-          optimizedPlanning[dateString] = aiResult.planning;
+        if (aiResult.planning_optimal && aiResult.planning_optimal.length > 0) {
+          const dayPlanning = await convertAILogistiquePlanningToUI(aiResult, dateString);
+          
+          // 🔍 AJOUTER LES ABSENTS À LA STRUCTURE
+          dayPlanning.absents = absentsWithNames;
+          
+          optimizedPlanning[dateString] = dayPlanning;
+          totalAssignments += aiResult.planning_optimal.length;
+          successfulDays++;
+          
+          console.log(`✅ ${dateString}: ${aiResult.planning_optimal.length} assignations IA (${availableEmployees.length} dispo, ${absentEmployeeIds.length} absents)`);
         } else {
-          optimizedPlanning[dateString] = getDefaultPlanningForDay();
+          optimizedPlanning[dateString] = { absents: absentsWithNames };
+          vehicles.forEach(vehicle => {
+            optimizedPlanning[dateString][vehicle.id.toString()] = [];
+          });
+          console.warn(`⚠️ ${dateString}: Aucune assignation IA générée`);
         }
       }
       
       setPlanning(optimizedPlanning);
-      toast.success('🎯 Planning IA généré !', { id: 'ai-planning' });
+      
+      console.log('✅ Planning IA logistique appliqué:', optimizedPlanning);
+      
+      // 💾 SAUVEGARDE AUTOMATIQUE après génération IA
+      toast.loading('💾 Sauvegarde automatique en cours...', { id: 'ai-planning' });
+      
+      try {
+        const saveResult = await supabaseLogistique.savePlanningHebdomadaire(optimizedPlanning, displayedWeek);
+        
+        if (saveResult.error) {
+          throw saveResult.error;
+        }
+        
+        const totalSaved = saveResult.data?.length || 0;
+        toast.success(
+          `🚛 Planning IA généré et sauvegardé !\n` +
+          `📊 ${successfulDays}/5 jours traités\n` +
+          `🎯 ${totalAssignments} assignations IA\n` +
+          `💾 ${totalSaved} entrées sauvegardées\n` +
+          `⚡ Encadrants fixes + Rotation conducteurs`,
+          { id: 'ai-planning', duration: 5000 }
+        );
+        
+      } catch (saveError) {
+        console.error('❌ Erreur sauvegarde automatique:', saveError);
+        toast.error(
+          `🚛 Planning IA généré mais erreur sauvegarde !\n` +
+          `📊 ${successfulDays}/5 jours en mémoire\n` +
+          `⚠️ Cliquez sur "Sauvegarder" pour corriger\n` +
+          `❌ ${saveError.message}`,
+          { id: 'ai-planning', duration: 6000 }
+        );
+      }
       
     } catch (error) {
-      console.error('❌ Erreur génération IA:', error);
-      toast.error('❌ Erreur génération IA', { id: 'ai-planning' });
+      console.error('❌ Erreur génération IA logistique:', error);
+      toast.error(`❌ Erreur génération IA: ${error.message}`, { id: 'ai-planning' });
+    } finally {
+      setGeneratorLoading(false);
     }
   };
 
@@ -337,79 +545,11 @@ const PlanningView = ({ user, onLogout }) => {
     }
   };
 
-  /**
-   * Générer automatiquement le planning pour une semaine
-   */
-  const generateWeeklyPlanning = async () => {
-    if (!selectedStartDate) {
-      toast.error('Veuillez sélectionner une date de début');
-      return;
-    }
 
-    try {
-      setGeneratorLoading(true);
-      
-      console.log('🤖 Démarrage génération planning automatique...');
-      toast.loading('Génération du planning en cours...', { id: 'generator' });
 
-      // Utiliser la date de début comme référence pour la semaine
-      const startDateStr = format(new Date(selectedStartDate), 'yyyy-MM-dd');
-      const result = await supabaseLogistique.generateWeeklyPlanning(startDateStr, generatorOptions);
-      
-      if (result.success) {
-        const { data } = result;
-        
-        toast.success(
-          `✅ Planning généré avec succès !\n` +
-          `📅 ${data.daysGenerated} jours • ${data.entriesCreated} assignations\n` +
-          `👥 ${data.summary.employeesAssigned} employés sur ${data.summary.vehiclesUsed} véhicules`,
-          { 
-            id: 'generator',
-            duration: 6000
-          }
-        );
 
-        console.log('✅ PLANNING GÉNÉRÉ:', data);
-        
-        // Recharger le planning pour afficher les nouvelles données
-        await initializePlanning();
-        
-        // Fermer le modal
-        setGeneratorOpen(false);
-        
-        // Réinitialiser la date
-        setSelectedStartDate('');
 
-      } else {
-        throw new Error(result.error || 'Erreur inconnue');
-      }
 
-    } catch (error) {
-      console.error('💥 Erreur génération planning:', error);
-      toast.error(
-        `❌ Erreur génération planning: ${error.message}`,
-        { id: 'generator', duration: 5000 }
-      );
-    } finally {
-      setGeneratorLoading(false);
-    }
-  };
-
-  /**
-   * Obtenir la date du lundi de la semaine courante comme suggestion
-   */
-  const getCurrentMondayDate = () => {
-    // Utiliser la semaine courante affichée dans le planning
-    return format(currentWeek, 'yyyy-MM-dd');
-  };
-
-  /**
-   * Ouvrir le générateur avec une date par défaut
-   */
-  const openPlanningGenerator = () => {
-    setSelectedStartDate(getCurrentMondayDate());
-    setGeneratorOpen(true);
-  };
 
   /**
    * Reset du planning avec confirmation
@@ -442,16 +582,7 @@ const PlanningView = ({ user, onLogout }) => {
     }
   };
 
-  /**
-   * Planning par défaut
-   */
-  const getDefaultPlanningForDay = () => {
-    const dayPlanning = {};
-    vehicles.forEach(vehicle => {
-      dayPlanning[vehicle.id] = [];
-    });
-    return dayPlanning;
-  };
+
 
   /**
    * Section Absents pour un jour donné
@@ -587,14 +718,14 @@ const PlanningView = ({ user, onLogout }) => {
       const [destDate, destVehicleId] = parts;
       const destVehicle = parseInt(destVehicleId);
       
-      if (!planning[destDate] || !planning[destDate][destVehicle]) {
+      if (!planning[destDate] || !planning[destDate][destVehicle.toString()]) {
         console.error('❌ Destination invalide:', { destDate, destVehicle });
         toast.error('Destination invalide');
         return;
       }
       
       const destVehicleInfo = vehicles.find(v => v.id === destVehicle);
-      if (destVehicleInfo && planning[destDate][destVehicle].length >= destVehicleInfo.capacite) {
+      if (destVehicleInfo && planning[destDate][destVehicle.toString()].length >= destVehicleInfo.capacite) {
         toast.error(`Capacité max atteinte pour ${destVehicleInfo.nom}`);
         return;
     }
@@ -608,13 +739,32 @@ const PlanningView = ({ user, onLogout }) => {
         role: 'equipier'  // Rôle par défaut
       };
       
-      newPlanning[destDate][destVehicle] = [
-        ...newPlanning[destDate][destVehicle],
+      newPlanning[destDate][destVehicle.toString()] = [
+        ...newPlanning[destDate][destVehicle.toString()],
         employeeWithRole
       ];
       
       setPlanning(newPlanning);
       toast.success(`${getFirstName(draggedEmployee.nom)} assigné`);
+      
+      // 💾 NOUVEAU : Sauvegarder automatiquement l'assignation
+      try {
+        console.log(`💾 Sauvegarde automatique après assignation: ${getFirstName(draggedEmployee.nom)}`);
+        setTimeout(async () => {
+          const result = await supabaseLogistique.savePlanningHebdomadaire(newPlanning, currentWeek);
+          
+          if (result.error) {
+            console.error('❌ Erreur sauvegarde automatique assignation:', result.error);
+            toast.error(`❌ Erreur sauvegarde: ${result.error.message}`, { 
+              duration: 4000 
+            });
+          } else {
+            console.log(`✅ Assignation de ${getFirstName(draggedEmployee.nom)} sauvegardée automatiquement`);
+          }
+        }, 500); // Délai de 500ms pour éviter les appels trop fréquents
+      } catch (error) {
+        console.error('❌ Erreur sauvegarde automatique:', error);
+      }
       
       return;
     }
@@ -697,15 +847,15 @@ const PlanningView = ({ user, onLogout }) => {
       
       const newPlanning = { ...planning };
       
-      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceVehicle]) {
+      if (!newPlanning[sourceDate] || !newPlanning[sourceDate][sourceVehicle.toString()]) {
         console.error('❌ Source invalide:', { sourceDate, sourceVehicle });
         toast.error('Source invalide');
         return;
       }
       if (!newPlanning[destDate]) newPlanning[destDate] = {};
-      if (!newPlanning[destDate][destVehicle]) newPlanning[destDate][destVehicle] = [];
+      if (!newPlanning[destDate][destVehicle.toString()]) newPlanning[destDate][destVehicle.toString()] = [];
       
-    const draggedEmployee = newPlanning[sourceDate][sourceVehicle][source.index];
+    const draggedEmployee = newPlanning[sourceDate][sourceVehicle.toString()][source.index];
     if (!draggedEmployee) {
       console.error('❌ Employé non trouvé à l\'index:', source.index);
         toast.error('Employé non trouvé');
@@ -713,16 +863,35 @@ const PlanningView = ({ user, onLogout }) => {
       }
       
       const destVehicleInfo = vehicles.find(v => v.id === destVehicle);
-      if (destVehicleInfo && newPlanning[destDate][destVehicle].length >= destVehicleInfo.capacite) {
+      if (destVehicleInfo && newPlanning[destDate][destVehicle.toString()].length >= destVehicleInfo.capacite) {
         toast.error(`Capacité max atteinte`);
         return;
       }
       
-      newPlanning[sourceDate][sourceVehicle].splice(source.index, 1);
-      newPlanning[destDate][destVehicle].splice(destination.index, 0, draggedEmployee);
+      newPlanning[sourceDate][sourceVehicle.toString()].splice(source.index, 1);
+      newPlanning[destDate][destVehicle.toString()].splice(destination.index, 0, draggedEmployee);
       
       setPlanning(newPlanning);
       toast.success(`${getFirstName(draggedEmployee.nom)} déplacé`);
+      
+      // 💾 NOUVEAU : Sauvegarder automatiquement le déplacement
+      try {
+        console.log(`💾 Sauvegarde automatique après déplacement: ${getFirstName(draggedEmployee.nom)}`);
+        setTimeout(async () => {
+          const result = await supabaseLogistique.savePlanningHebdomadaire(newPlanning, currentWeek);
+          
+          if (result.error) {
+            console.error('❌ Erreur sauvegarde automatique déplacement:', result.error);
+            toast.error(`❌ Erreur sauvegarde: ${result.error.message}`, { 
+              duration: 4000 
+            });
+          } else {
+            console.log(`✅ Déplacement de ${getFirstName(draggedEmployee.nom)} sauvegardé automatiquement`);
+          }
+        }, 500); // Délai de 500ms pour éviter les appels trop fréquents
+      } catch (error) {
+        console.error('❌ Erreur sauvegarde automatique:', error);
+      }
       
       return;
     }
@@ -824,7 +993,7 @@ const PlanningView = ({ user, onLogout }) => {
   /**
    * Changer le rôle d'un employé avec validation des règles métier
    */
-  const changeEmployeeRole = (dateKey, vehicleId, employeeIndex, newRole) => {
+  const changeEmployeeRole = async (dateKey, vehicleId, employeeIndex, newRole) => {
     const newPlanning = { ...planning };
     const vehicleTeam = newPlanning[dateKey][vehicleId];
     const employee = vehicleTeam[employeeIndex];
@@ -850,6 +1019,24 @@ const PlanningView = ({ user, onLogout }) => {
     
     // Fermer le menu
     setContextMenu(null);
+    
+    // 💾 NOUVEAU : Sauvegarder automatiquement les modifications
+    try {
+      console.log(`💾 Sauvegarde automatique après changement de rôle: ${employeeName} → ${newRole}`);
+      const result = await supabaseLogistique.savePlanningHebdomadaire(newPlanning, currentWeek);
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      console.log(`✅ Modification de ${employeeName} sauvegardée automatiquement`);
+      
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde automatique:', error);
+      toast.error(`❌ Erreur sauvegarde: ${error.message}`, { 
+        duration: 4000 
+      });
+    }
   };
 
   /**
@@ -878,7 +1065,7 @@ const PlanningView = ({ user, onLogout }) => {
    */
   const getVehicleColumn = (vehicle, day) => {
     const dateKey = format(day, 'yyyy-MM-dd');
-    const employees = planning[dateKey]?.[vehicle.id] || [];
+    const employees = planning[dateKey]?.[vehicle.id.toString()] || [];
     
     // 🔍 DEBUG GÉNÉRAL : Voir si planning contient des données
     if (employees.length === 0 && planning[dateKey] && Object.keys(planning[dateKey]).length > 0) {
@@ -902,7 +1089,7 @@ const PlanningView = ({ user, onLogout }) => {
       
       if (planning[dateKey]) {
         console.log(`🔍 Véhicules disponibles le ${dateKey}:`, Object.keys(planning[dateKey]));
-        console.log(`🔍 Données véhicule ${vehicle.id}:`, planning[dateKey][vehicle.id]);
+        console.log(`🔍 Données véhicule ${vehicle.id}:`, planning[dateKey][vehicle.id.toString()]);
       }
     }
     
@@ -1092,12 +1279,12 @@ const PlanningView = ({ user, onLogout }) => {
                 <span>{saving ? 'Sauvegarde...' : 'Sauvegarder'}</span>
               </button>
               <button
-                onClick={openPlanningGenerator}
-                disabled={employees.length === 0}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                onClick={generateAIPlanning}
+                disabled={employees.length === 0 || generatorLoading}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg transition-all duration-200 shadow-lg flex items-center space-x-2"
               >
-                <Play className="w-4 h-4" />
-                <span>Générer IA</span>
+                <span className="text-sm">{generatorLoading ? '⚡' : '🚛'}</span>
+                <span>{generatorLoading ? 'Génération IA...' : 'Générer Planning IA'}</span>
               </button>
               <button
                 onClick={resetPlanning}
@@ -1335,49 +1522,7 @@ const PlanningView = ({ user, onLogout }) => {
         </div>
       )}
 
-      {/* Modal Générateur IA */}
-      {generatorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Générateur de Planning IA</h3>
-            <p className="text-sm text-gray-700 mb-4">
-              Sélectionnez une date de début pour générer le planning hebdomadaire.
-              Le planning généré remplacera les données existantes.
-            </p>
-            <div className="flex items-center space-x-2 mb-4">
-              <input
-                type="date"
-                value={selectedStartDate}
-                onChange={(e) => setSelectedStartDate(e.target.value)}
-                className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-              />
-              <button
-                onClick={generateWeeklyPlanning}
-                disabled={!selectedStartDate || generatorLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                {generatorLoading ? (
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-                <span>{generatorLoading ? 'Génération...' : 'Générer Planning'}</span>
-              </button>
-            </div>
-            <div className="flex justify-end">
-              <button
-                onClick={() => setGeneratorOpen(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Modal de confirmation de reset */}
       {resetConfirmOpen && (

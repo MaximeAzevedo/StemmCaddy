@@ -4,6 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { generateWeeklyPlanning as generatePlanningSimple } from './logistique/planning-engine/index.js' // ✅ AJOUT : Import statique
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY
@@ -17,16 +18,19 @@ export const supabaseLogistique = {
 
   async getEmployeesLogistique() {
     try {
+      console.log('🔍 Chargement employés logistique...');
       const { data, error } = await supabase
-        .from('employes_logistique_new')
+        .from('employes_logistique_new') // ✅ CORRECTION: 'employees' → 'employes_logistique_new'
         .select('*')
+        .eq('actif', true)
         .order('nom');
 
       if (error) throw error;
-      return { data, error: null };
+      console.log(`✅ ${data?.length || 0} employés chargés`);
+      return { data: data || [], error: null };
     } catch (error) {
-      console.error('Erreur récupération employés:', error);
-      return { data: null, error };
+      console.error('❌ Erreur chargement employés:', error);
+      return { data: [], error };
     }
   },
 
@@ -161,31 +165,55 @@ export const supabaseLogistique = {
 
   async getVehicules() {
     try {
+      console.log('🔍 Chargement véhicules...');
       const { data, error } = await supabase
-        .from('vehicules_logistique')
+        .from('vehicules_logistique') // ✅ CORRECTION: 'vehicles' → 'vehicules_logistique'
         .select('*')
+        .eq('actif', true)
         .order('nom');
 
       if (error) throw error;
+      console.log(`✅ ${data?.length || 0} véhicules chargés`);
+      return { data: data || [], error: null };
+    } catch (error) {
+      console.error('❌ Erreur chargement véhicules:', error);
+      return { data: [], error };
+    }
+  },
+
+  async getVehiclesWithCount() {
+    try {
+      const { data, error } = await supabase
+        .from('vehicules_logistique') // ✅ CORRECTION: 'vehicles' → 'vehicules_logistique'
+        .select('count')
+        .limit(1);
+      
+      if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('Erreur récupération véhicules:', error);
+      console.error('❌ Erreur count véhicules:', error);
       return { data: null, error };
     }
   },
 
+  // ================================
+  // 🛠️ GESTION DES COMPÉTENCES
+  // ================================
+
   async getCompetencesVehicules() {
     try {
+      console.log('🔍 Chargement compétences véhicules...');
       const { data, error } = await supabase
-        .from('competences_vehicules')
+        .from('competences_vehicules') // ✅ DÉJÀ CORRECT
         .select(`
           *,
-          employes_logistique_new!inner(nom),
-          vehicules_logistique!inner(nom)
+          employee:employes_logistique_new!employee_id(nom),
+          vehicule:vehicules_logistique!vehicule_id(nom)
         `);
-
+      
       if (error) throw error;
-      return { data, error: null };
+      console.log(`✅ ${data?.length || 0} compétences chargées`);
+      return { data: data || [], error: null };
     } catch (error) {
       console.error('Erreur récupération compétences:', error);
       return { data: null, error };
@@ -230,10 +258,28 @@ export const supabaseLogistique = {
       console.log('👥 Mapping employés créé:', nameToIdMap.size, 'employés');
       
       // 🔍 DEBUG : Structure simplifiée
-      console.log('🔍 Dates trouvées:', Object.keys(planningData).filter(k => k !== 'absents'));
+      const datesATraiter = Object.keys(planningData).filter(k => k !== 'absents');
+      console.log('🔍 Dates trouvées:', datesATraiter);
+      
+      // 🗑️ ÉTAPE CRUCIALE : Supprimer les anciennes données pour ces dates d'abord
+      console.log('🗑️ Suppression des anciennes données pour les dates:', datesATraiter);
+      for (const date of datesATraiter) {
+        const { error: deleteError } = await supabase
+          .from('planning_logistique_new')
+          .delete()
+          .eq('date', date);
+          
+        if (deleteError) {
+          console.warn(`⚠️ Erreur suppression ${date}:`, deleteError);
+        } else {
+          console.log(`✅ Anciennes données supprimées pour ${date}`);
+        }
+      }
       
       // 1. Transformer la structure complexe en tableau d'entrées
       const planningEntries = [];
+      let employeesNotFound = 0;
+      let employeesProcessed = 0;
       
       Object.entries(planningData).forEach(([dateKey, dayData]) => {
         // Ignorer les propriétés non-véhicules comme 'absents'
@@ -252,6 +298,8 @@ export const supabaseLogistique = {
           console.log(`🔍 Processing vehicle ${vehicleId} with ${employees.length} employees`);
           
           employees.forEach(employee => {
+            employeesProcessed++;
+            
             // ✅ CORRECTION : Convertir nom employé → ID numérique
             const employeeName = employee.nom || employee.name || employee.id;
             let employeeId = employee.employee_id;
@@ -263,57 +311,100 @@ export const supabaseLogistique = {
             }
             
             if (employeeId && employeeName) {
-              // ✅ CORRECTION : Valeurs strictes pour respecter les contraintes CHECK
-              const validCreneaux = ['matin', 'apres-midi'];
-              const validRoles = ['Conducteur', 'Équipier', 'Assistant', 'conducteur', 'équipier', 'assistant'];
               
-              validCreneaux.forEach(creneau => {
-                // Valider et corriger le rôle (mapper minuscules vers majuscules)
-                let role = employee.role || 'Équipier';
-                
-                // Mapping des rôles minuscules vers majuscules pour cohérence interface/DB
-                const roleMapping = {
-                  'conducteur': 'Conducteur',
-                  'équipier': 'Équipier', 
-                  'assistant': 'Assistant'
-                };
-                
-                if (roleMapping[role]) {
-                  role = roleMapping[role];
-                  console.log(`🔄 Mapping rôle: "${employee.role}" → "${role}"`);
-                } else if (!validRoles.includes(role)) {
-                  console.warn(`⚠️ Rôle invalide "${role}", correction vers "Équipier"`);
-                  role = 'Équipier';
+              // ✅ CONTRAINTE DB : Valider et corriger le rôle selon les valeurs autorisées
+              let role = employee.role || 'Équipier';
+              
+              // Rôles autorisés selon la contrainte CHECK de la DB
+              const validRolesDB = ['Conducteur', 'Équipier', 'Assistant', 'Encadrant']; // ✅ Assistant est autorisé !
+              
+              // Mapping des rôles vers les valeurs autorisées par la DB
+              const roleMapping = {
+                'conducteur': 'Conducteur',
+                'équipier': 'Équipier', 
+                'assistant': 'Assistant', // ✅ Assistant → Assistant (correct!)
+                'encadrant': 'Encadrant'
+              };
+              
+              if (roleMapping[role.toLowerCase()]) {
+                const newRole = roleMapping[role.toLowerCase()];
+                if (role !== newRole) {
+                  console.log(`🔄 Mapping rôle: "${role}" → "${newRole}"`);
                 }
-                
-                const entry = {
-                  employee_id: typeof employeeId === 'string' ? parseInt(employeeId) : employeeId,
-                  vehicule_id: parseInt(vehicleId),
-                  date: dateKey,
-                  creneau: creneau, // ✅ Toujours valide ('matin' ou 'apres-midi')
-                  role: role, // ✅ Toujours valide
-                  notes: employee.notes || null,
-                  absent: employee.absent || false
-                };
-                planningEntries.push(entry);
-              });
+                role = newRole;
+              } else if (!validRolesDB.includes(role)) {
+                console.warn(`⚠️ Rôle invalide "${role}", correction vers "Équipier"`);
+                role = 'Équipier';
+              }
+              
+              // 🎯 MAPPER LES CRÉNEAUX VERS LES VALEURS AUTORISÉES PAR LA DB
+              const creneauBrut = employee.creneau || 'matin';
+              
+              // ✅ CONTRAINTE DB : Seules certaines valeurs de créneau sont autorisées
+              const creneauMapping = {
+                'matin': 'matin',
+                'après-midi': 'matin', // Mapper vers matin car c'est le seul autorisé
+                'après_midi': 'matin',
+                'apres-midi': 'matin', 
+                'apres_midi': 'matin',
+                'journée': 'matin',
+                'journee': 'matin',
+                '8h-16h': 'matin',
+                'Service': 'matin',
+                'service': 'matin'
+              };
+              
+              const creneau = creneauMapping[creneauBrut] || 'matin';
+              
+              if (creneauBrut !== creneau) {
+                console.log(`🔄 Mapping créneau: "${creneauBrut}" → "${creneau}"`);
+              }
+              
+              // ✅ VALIDATION : Vérifier que le véhicule existe (IDs 1-6 seulement)
+              const vehiculeIdNum = parseInt(vehicleId);
+              const validVehicleIds = [1, 2, 3, 4, 5, 6]; // Crafter 23, Crafter 21, Jumper, Ducato, Transit, Caddy
+              
+              if (!validVehicleIds.includes(vehiculeIdNum)) {
+                console.error(`❌ Véhicule ID ${vehiculeIdNum} invalide ! IDs valides: ${validVehicleIds.join(', ')}`);
+                return; // Ignorer cette entrée
+              }
+
+              const entry = {
+                employee_id: typeof employeeId === 'string' ? parseInt(employeeId) : employeeId,
+                vehicule_id: vehiculeIdNum,
+                date: dateKey,
+                creneau: creneau, // ✅ Créneau réel de l'IA
+                role: role,
+                notes: employee.notes || `Planning ${dateKey} IA`,
+                absent: employee.absent || false
+              };
+              
+              planningEntries.push(entry);
+              console.log(`✅ Entrée créée: ${employeeName} → Véhicule ${vehicleId} (${creneau}, ${role})`);
             } else {
-              console.log(`❌ Employee manque données:`, { 
-                employeeName,
-                employeeId,
+              employeesNotFound++;
+              console.warn(`❌ Employé non trouvé: "${employeeName}" - ID: ${employeeId} - Ignoré`, { 
                 found_in_map: nameToIdMap.has(employeeName),
-                original_employee: employee 
+                available_employees: Array.from(nameToIdMap.keys()).slice(0, 5) // Afficher 5 premiers pour debug
               });
             }
           });
         });
       });
       
-      console.log('📝 Entrées transformées:', planningEntries.length);
+      // 📊 Résumé du traitement
+      console.log('📊 === RÉSUMÉ TRAITEMENT PLANNING ===');
+      console.log(`✅ Employés traités: ${employeesProcessed}`);
+      console.log(`❌ Employés non trouvés: ${employeesNotFound}`);
+      console.log(`💾 Entrées valides créées: ${planningEntries.length}`);
+      
+      if (employeesNotFound > 0) {
+        console.warn(`⚠️ ${employeesNotFound}/${employeesProcessed} employés ignorés - vérifiez les noms/IDs`);
+      }
       
       if (planningEntries.length === 0) {
         console.warn('⚠️ Aucune entrée à sauvegarder');
-        return { data: [], error: null };
+        return { data: [], error: { message: `Aucune entrée valide (${employeesNotFound} employés non trouvés)` } };
       }
       
       // 2. Sauvegarder les entrées
@@ -616,10 +707,8 @@ export const supabaseLogistique = {
       // 2. Utiliser le nouveau moteur refactorisé avec assistants
       console.log('🚀 Génération avec le moteur refactorisé (assistants inclus)...');
       
-      // Import dynamique du nouveau moteur
-      const { generateWeeklyPlanning } = await import('./logistique/planning-engine/index.js');
-      
-      const result = await generateWeeklyPlanning(
+      // ✅ CORRIGÉ : Utiliser l'import statique au lieu de l'import dynamique
+      const result = await generatePlanningSimple(
         startDate, 
         employees, 
         vehicules, 
@@ -714,8 +803,40 @@ export const supabaseLogistique = {
       return { data: [], error: null };
     }
 
+    // ✅ VALIDATION : Vérifier que toutes les entrées ont les champs requis
+    const validatePlanningEntry = (entry) => {
+      const required = ['employee_id', 'vehicule_id', 'date', 'creneau'];
+      const missing = required.filter(field => !entry[field]);
+      
+      if (missing.length > 0) {
+        console.warn(`⚠️ Entrée invalide - champs manquants: ${missing.join(', ')}`, entry);
+        return false;
+      }
+      
+      // Vérifier que les IDs sont des nombres valides
+      if (!Number.isInteger(entry.employee_id) || !Number.isInteger(entry.vehicule_id)) {
+        console.warn(`⚠️ Entrée invalide - IDs non numériques:`, entry);
+        return false;
+      }
+      
+      return true;
+    };
+
+    // Filtrer les entrées valides
+    const validEntries = planningEntries.filter(validatePlanningEntry);
+    const invalidCount = planningEntries.length - validEntries.length;
+    
+    if (invalidCount > 0) {
+      console.warn(`⚠️ ${invalidCount} entrées invalides ignorées`);
+    }
+    
+    if (validEntries.length === 0) {
+      console.log('❌ Aucune entrée valide à sauvegarder');
+      return { data: [], error: { message: 'Aucune entrée valide trouvée' } };
+    }
+
     // Filtrer les entrées qui existent déjà
-    const newEntries = planningEntries.filter(entry => {
+    const newEntries = validEntries.filter(entry => {
       return !existingPlanning.some(existing => 
         existing.employee_id === entry.employee_id &&
         existing.vehicule_id === entry.vehicule_id &&
@@ -729,14 +850,14 @@ export const supabaseLogistique = {
       return { data: [], error: null };
     }
 
-    console.log(`💾 Sauvegarde de ${newEntries.length} nouvelles entrées`);
+    console.log(`💾 Sauvegarde de ${newEntries.length} nouvelles entrées (${invalidCount} invalides ignorées)`);
 
     const { data, error } = await supabase
       .from('planning_logistique_new')
       .insert(newEntries);
 
     if (error) {
-      console.error('Erreur lors de la sauvegarde:', error);
+      console.error('❌ Erreur lors de la sauvegarde:', error);
       return { data: null, error };
     }
 
@@ -860,19 +981,18 @@ export const supabaseLogistique = {
       neverDrivers
     );
     
-    // 🎯 ÉTAPE 3 : Créer les entrées de planning (matin + après-midi)
+    // 🎯 ÉTAPE 3 : Créer les entrées de planning (UNE SEULE assignation par employé)
     Object.entries(assignments).forEach(([vehicleId, team]) => {
       team.forEach(member => {
-        ['matin', 'apres-midi'].forEach(creneau => {
-          planningEntries.push({
-            employee_id: member.employee_id,
-            vehicule_id: parseInt(vehicleId),
-            date: date,
-            creneau: creneau,
-            role: member.role,
-            notes: member.notes || null,
-            absent: false
-          });
+        // 🎯 UNE SEULE entrée par employé (pas de duplication matin/après-midi)
+        planningEntries.push({
+          employee_id: member.employee_id,
+          vehicule_id: parseInt(vehicleId),
+          date: date,
+          creneau: member.creneau || 'matin', // ✅ Créneau spécifique ou défaut
+          role: member.role,
+          notes: member.notes || `Planning automatique ${date}`,
+          absent: false
         });
       });
     });

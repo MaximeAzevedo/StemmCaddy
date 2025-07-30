@@ -33,7 +33,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Test de connexion au démarrage
-supabase.from('vehicles').select('count').limit(1).then(({ data, error }) => {
+supabase.from('vehicules_logistique').select('count').limit(1).then(({ data, error }) => {
   if (error) {
     console.error('❌ Erreur connexion Supabase:', error);
   } else {
@@ -380,8 +380,8 @@ export const supabaseAPI = {
         .from('planning')
         .select(`
           *,
-          employee:employees(nom, profil, permis),
-          vehicle:vehicles(nom, capacite)
+          employee:employes_logistique_new(nom, profil, permis),
+          vehicle:vehicules_logistique(nom, capacite)
         `)
         .gte('date', startDate)
         .lte('date', endDate)
@@ -436,7 +436,7 @@ export const supabaseAPI = {
   async getVehicles() {
     try {
       const { data, error } = await supabase
-        .from('vehicles')
+        .from('vehicules_logistique')
         .select('*')
         .order('nom')
       return { data, error }
@@ -453,8 +453,8 @@ export const supabaseAPI = {
         .from('competences')
         .select(`
           *,
-          vehicle:vehicles(nom),
-          employee:employees(nom)
+          vehicle:vehicules_logistique(nom),
+          employee:employes_logistique_new(nom)
         `)
         .eq('employee_id', employeeId)
       return { data, error }
@@ -471,8 +471,8 @@ export const supabaseAPI = {
         .from('competences')
         .select(`
           *,
-          vehicle:vehicles(nom),
-          employee:employees(nom)
+          vehicle:vehicules_logistique(nom),
+          employee:employes_logistique_new(nom)
         `)
       return { data, error }
     } catch (err) {

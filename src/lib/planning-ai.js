@@ -14,11 +14,18 @@ const PLANNING_RULES = {
   // Repos minimum entre deux services
   MIN_REST_HOURS: 10,
 
-  // RÈGLES SOPHISTIQUÉES - Préférences par profil
-  PROFILE_PREFERENCES: {
-    'Fort': ['Cuisine chaude', 'Sandwichs', 'Légumerie'],
-    'Moyen': ['Sandwichs', 'Vaisselle', 'Pain', 'Self Midi'],
-    'Faible': ['Jus de fruits', 'Pain', 'Vaisselle']
+  // RÈGLES SOPHISTIQUÉES - Préférences par compétence
+  COMPETENCE_PREFERENCES: {
+    // Pas de profils Fort/Moyen/Faible en cuisine
+    // Utiliser directement les compétences vérifiées
+    'chef_sandwichs': ['Sandwichs'],
+    'cuisine_chaude': ['Cuisine chaude'],
+    'pain': ['Pain'],
+    'self_midi': ['Self Midi'],
+    'vaisselle': ['Vaisselle'],
+    'legumerie': ['Légumerie'],
+    'jus_de_fruits': ['Jus de fruits'],
+    'equipe_pina_saskia': ['Equipe Pina et Saskia']
   },
 
   // RÈGLES SOPHISTIQUÉES - Équilibrage de charge
