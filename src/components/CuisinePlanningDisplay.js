@@ -342,33 +342,51 @@ const CuisinePlanningDisplay = () => {
                 </div>
               </div>
 
-              {/* ✅ Container des employés avec fond elegant */}
-              <div className="flex-1 bg-white/60 backdrop-blur-sm rounded-b-3xl p-4 shadow-xl border border-white/30">
+              {/* ✅ Container des employés avec fond elegant - OPTIMISÉ ESPACE */}
+              <div className="flex-1 bg-white/60 backdrop-blur-sm rounded-b-3xl p-3 shadow-xl border border-white/30">
                 {allEmployeesForPoste.length === 0 ? (
                   <div className="text-gray-500 text-center py-12 text-lg italic">
                     Aucune assignation
                   </div>
                 ) : (
-                  <div className={`h-full ${
-                    allEmployeesForPoste.length <= 2 
-                      ? 'flex flex-col gap-6 justify-center' 
-                      : allEmployeesForPoste.length <= 4
-                      ? 'grid grid-cols-2 gap-4' 
-                      : 'grid grid-cols-2 gap-3'
-                  }`}>
-                    {allEmployeesForPoste.map((employee, idx) => {
-                      const photoSize = allEmployeesForPoste.length <= 2 ? 'w-40 h-40' : 
-                                       allEmployeesForPoste.length <= 4 ? 'w-32 h-32' : 'w-24 h-24';
-                      const photoSizePx = allEmployeesForPoste.length <= 2 ? '160px' : 
-                                         allEmployeesForPoste.length <= 4 ? '128px' : '96px';
-                      const textSize = allEmployeesForPoste.length <= 2 ? 'text-xl' : 
-                                      allEmployeesForPoste.length <= 4 ? 'text-lg' : 'text-base';
+                  (() => {
+                    // 🚀 LOGIQUE ADAPTATIVE INTELLIGENTE - Optimise l'espace selon le nombre d'employés
+                    const employeeCount = allEmployeesForPoste.length;
+                    
+                    // 🚀 CALCUL OPTIMISÉ - Maximise l'espace disponible
+                    const getOptimalLayout = (count) => {
+                      if (count === 1) return { cols: 1, photoSize: 'w-56 h-56', photoPx: '224px', textSize: 'text-3xl', gap: 'gap-0' };
+                      if (count === 2) return { cols: 1, photoSize: 'w-48 h-48', photoPx: '192px', textSize: 'text-2xl', gap: 'gap-2' };
+                      if (count === 3) return { cols: 3, photoSize: 'w-32 h-32', photoPx: '128px', textSize: 'text-lg', gap: 'gap-2' };
+                      if (count === 4) return { cols: 2, photoSize: 'w-40 h-40', photoPx: '160px', textSize: 'text-xl', gap: 'gap-2' };
+                      if (count <= 6) return { cols: 3, photoSize: 'w-28 h-28', photoPx: '112px', textSize: 'text-base', gap: 'gap-2' };
+                      if (count <= 9) return { cols: 3, photoSize: 'w-24 h-24', photoPx: '96px', textSize: 'text-sm', gap: 'gap-1' };
+                      return { cols: 4, photoSize: 'w-20 h-20', photoPx: '80px', textSize: 'text-xs', gap: 'gap-1' };
+                    };
+                    
+                    const layout = getOptimalLayout(employeeCount);
+                    
+                    // 🎯 CALCUL INTELLIGENT DES LIGNES pour maximiser l'espace vertical
+                    const calculateRows = (count, cols) => {
+                      if (cols === 1) return 'auto-rows-fr'; // Pour flex, on veut que ça s'étire
+                      const rows = Math.ceil(count / cols);
+                      return `grid-rows-${rows}`;
+                    };
+                    
+                    const gridClass = layout.cols === 1 
+                      ? 'flex flex-col justify-between' 
+                      : `grid grid-cols-${layout.cols} auto-rows-fr`;
+                    
+                    return (
+                      <div className={`h-full ${gridClass} ${layout.gap}`}>
+                        {allEmployeesForPoste.map((employee, idx) => {
+                          const { photoSize, photoPx, textSize } = layout;
                       
-                      return (
-                        <div
-                          key={`${employee.id}-${employee.creneau}-${idx}`}
-                          className="flex flex-col items-center text-center p-3 bg-white/40 rounded-2xl backdrop-blur-sm border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300"
-                        >
+                                              return (
+                          <div
+                            key={`${employee.id}-${employee.creneau}-${idx}`}
+                            className="flex flex-col items-center justify-center text-center p-4 bg-white/40 rounded-2xl backdrop-blur-sm border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 h-full min-h-0"
+                          >
                           {/* ✅ Photo Premium avec bordure dégradée */}
                           <div className={`${photoSize} mx-auto mb-3 rounded-full overflow-hidden relative`}>
                             {/* Bordure dégradée */}
@@ -380,13 +398,13 @@ const CuisinePlanningDisplay = () => {
                                     alt={employee.prenom}
                                     className="w-full h-full rounded-full object-cover"
                                     style={{ 
-                                      width: `calc(${photoSizePx} - 4px)`, 
-                                      height: `calc(${photoSizePx} - 4px)`,
+                                      width: `calc(${photoPx} - 4px)`, 
+                                      height: `calc(${photoPx} - 4px)`,
                                       objectPosition: 'center 20%'
                                     }}
                                   />
                                 ) : (
-                                  <span className={`${allEmployeesForPoste.length <= 2 ? 'text-4xl' : 'text-2xl'} font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent`}>
+                                  <span className={`${layout.cols === 1 ? 'text-4xl' : 'text-2xl'} font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent`}>
                                     {employee.prenom?.[0]}{employee.prenom?.[1] || ''}
                                   </span>
                                 )}
@@ -395,7 +413,7 @@ const CuisinePlanningDisplay = () => {
                           </div>
                           
                           {/* Prénom Premium */}
-                          <div className={`font-bold text-gray-800 ${textSize} mb-1 leading-tight break-words w-full`}>
+                          <div className={`font-bold text-gray-800 ${textSize} mb-2 leading-tight break-words w-full`}>
                             {employee.prenom}
                           </div>
                           
@@ -416,6 +434,8 @@ const CuisinePlanningDisplay = () => {
                       );
                     })}
                   </div>
+                    );
+                  })()
                 )}
               </div>
             </div>
