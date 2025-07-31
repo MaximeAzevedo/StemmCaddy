@@ -23,8 +23,8 @@ import MainHeader from './components/MainHeader';
 import CollectesApp from './components/CollectesApp';
 // ✅ NOUVEAU : Import de la modération des collectes
 import ModerationCollectes from './components/ModerationCollectes';
-// 🤖 PRODUCTION : Chatbot RH Autonome "Rémy"
-import HRChatbotAutonome from './components/HRChatbotAutonome';
+// 🤖 PRODUCTION : Chatbot RH Autonome "Rémy" - TEMPORAIREMENT DÉSACTIVÉ
+// import HRChatbotAutonome from './components/HRChatbotAutonome';
 import './index.css';
 
 // Composant pour protéger les routes avec authentification obligatoire
