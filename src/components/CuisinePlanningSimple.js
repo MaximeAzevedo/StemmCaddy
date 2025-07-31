@@ -6,11 +6,12 @@ import {
   Zap,
   ArrowLeft,
   User,
-  Monitor
+  Monitor,
+  Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 // Note: navigation gérée par window.location.href pour plus de fiabilité
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
 import { supabaseCuisineAdvanced } from '../lib/supabase-cuisine-advanced';
 import { aiPlanningEngine } from '../lib/ai-planning-engine';
@@ -21,6 +22,7 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
   
   // Données cuisine
   const [employees, setEmployees] = useState([]);
@@ -281,6 +283,105 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
       initializePlanning();
     }
   }, [loading, selectedDate, initializePlanning]);
+
+  /**
+   * 📅 IMPORT PLANNING VEILLE
+   * Importe automatiquement le planning de la veille pour faciliter la création
+   */
+  const importPlanningFromPreviousDay = async () => {
+    try {
+      setImportLoading(true);
+      toast.loading('📅 Import du planning de la veille...', { id: 'import-previous' });
+      
+      // Calculer la date de la veille
+      const previousDay = subDays(selectedDate, 1);
+      const previousDayStr = format(previousDay, 'dd/MM/yyyy');
+      
+      console.log('📅 Import planning de la veille:', format(previousDay, 'yyyy-MM-dd'));
+      
+      // Charger le planning de la veille
+      const result = await supabaseCuisine.loadPlanningCuisine(previousDay);
+      
+      if (result.error) {
+        throw new Error(result.error.message || 'Erreur lors du chargement');
+      }
+      
+      const previousPlanning = result.data || {};
+      
+      // Vérifier s'il y a des données
+      const hasData = Object.keys(previousPlanning).some(posteId => 
+        previousPlanning[posteId] && previousPlanning[posteId].length > 0
+      );
+      
+      if (!hasData) {
+        toast.error(`❌ Aucun planning trouvé pour le ${previousDayStr}`, { 
+          id: 'import-previous',
+          duration: 4000 
+        });
+        return;
+      }
+      
+      // Créer le nouveau planning basé sur celui de la veille
+      const dateKey = format(selectedDate, 'yyyy-MM-dd');
+      const newPlanning = {};
+      
+      newPlanning[dateKey] = {
+        absents: [] // Garder la section absents vide (elle sera rechargée avec les vraies absences du jour)
+      };
+      
+      // Copier les assignations de la veille
+      postes.forEach(poste => {
+        const previousEmployees = previousPlanning[poste.id] || [];
+        newPlanning[dateKey][poste.id] = [...previousEmployees]; // Copie des employés assignés
+      });
+      
+      // Ajouter les employés absents du jour actuel (pas ceux de la veille)
+      absences.forEach(absence => {
+        if (absence.employee) {
+          newPlanning[dateKey].absents.push({
+            ...absence.employee,
+            status: 'absent',
+            type_absence: absence.type_absence,
+            motif: absence.motif,
+            isReadOnly: true
+          });
+        }
+      });
+      
+      // Appliquer le nouveau planning
+      setPlanning(newPlanning);
+      
+      // Calculer les statistiques
+      const totalAssigned = Object.values(previousPlanning).reduce((total, employees) => 
+        total + (employees?.length || 0), 0
+      );
+      const postesUtilises = Object.keys(previousPlanning).filter(posteId => 
+        previousPlanning[posteId] && previousPlanning[posteId].length > 0
+      ).length;
+      
+      toast.success(
+        `✅ Planning du ${previousDayStr} importé !\n` +
+        `👥 ${totalAssigned} employés assignés\n` +
+        `📋 ${postesUtilises} postes couverts\n` +
+        `✏️ Vous pouvez maintenant ajuster manuellement`,
+        { 
+          id: 'import-previous',
+          duration: 5000 
+        }
+      );
+      
+      console.log('✅ Planning de la veille importé avec succès');
+      
+    } catch (error) {
+      console.error('❌ Erreur import planning veille:', error);
+      toast.error(`❌ Erreur import: ${error.message}`, { 
+        id: 'import-previous',
+        duration: 4000 
+      });
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   /**
    * ✅ COPIE EXACTE LOGISTIQUE : Drag & Drop
@@ -739,6 +840,15 @@ const CuisinePlanningSimple = ({ user, onLogout }) => {
               <span>Reset</span>
             </button>
             
+            <button
+              onClick={importPlanningFromPreviousDay}
+              disabled={importLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span>{importLoading ? 'Importation...' : 'Importer planning veille'}</span>
+            </button>
+
             <button
               onClick={() => {
                 const dateStr = format(selectedDate, 'yyyy-MM-dd');

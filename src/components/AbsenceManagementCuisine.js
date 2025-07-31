@@ -16,7 +16,7 @@ import toast from 'react-hot-toast';
 import { format, parseISO, addDays, startOfWeek } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabaseCuisine } from '../lib/supabase-cuisine';
-import CuisineAIAssistant from './CuisineAIAssistant';
+// import CuisineAIAssistant from './CuisineAIAssistant'; // ❌ SUPPRIMÉ - Remplacé par Rémy global
 
 const AbsenceManagementCuisine = ({ user, onLogout }) => {
   const [absences, setAbsences] = useState([]);
@@ -636,7 +636,8 @@ const AbsenceManagementCuisine = ({ user, onLogout }) => {
       </AnimatePresence>
 
       {/* Assistant IA spécialisé Cuisine */}
-      <CuisineAIAssistant onDataRefresh={loadData} />
+              {/* <CuisineAIAssistant onDataRefresh={loadData} /> */}
+        {/* ❌ SUPPRIMÉ - Rémy (HRChatbotAutonome) est maintenant global dans App.js */}
     </div>
   );
 };
