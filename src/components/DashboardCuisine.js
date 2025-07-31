@@ -6,7 +6,8 @@ import {
   CalendarDaysIcon, 
   UserMinusIcon,
   ClockIcon,
-  SparklesIcon
+  SparklesIcon,
+  ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 import CuisineManagement from './CuisineManagement';
 import AbsenceManagementCuisineAdvanced from './AbsenceManagementCuisineAdvanced';
@@ -31,6 +32,13 @@ const DashboardCuisine = ({ user, onLogout }) => {
       icon: UserGroupIcon,
       color: 'from-indigo-500 to-violet-600',
       tab: 'employees'
+    },
+    {
+      title: 'Gestion des Stocks',
+      description: 'Inventaire & distribution vers les sites 🆕',
+      icon: ArchiveBoxIcon,
+      color: 'from-amber-500 to-orange-600',
+      action: () => navigate('/cuisine/stocks')
     },
     {
       title: 'Gestion des Absences',

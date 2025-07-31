@@ -51,7 +51,8 @@
     "test-ai-planning": "node scripts/test-ai-planning-engine.js",
     "validate-rules": "node -e \"import('./src/planning/config/rulesValidator.js').then(v => v.printValidationReport())\"",
     "test-corrections": "node scripts/test-corrections.js",
-    "test-azure-response": "node scripts/test-azure-response.js"
+    "test-azure-response": "node scripts/test-azure-response.js",
+    "init-stock-cuisine": "node scripts/init-stock-cuisine.js"
   },
   "eslintConfig": {
     "extends": [

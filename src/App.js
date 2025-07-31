@@ -23,6 +23,8 @@ import MainHeader from './components/MainHeader';
 import CollectesApp from './components/CollectesApp';
 // ✅ NOUVEAU : Import de la modération des collectes
 import ModerationCollectes from './components/ModerationCollectes';
+// ✅ NOUVEAU : Import de la gestion des stocks cuisine
+import StockCuisineManagement from './components/StockCuisineManagement';
 // 🤖 PRODUCTION : Chatbot RH Autonome "Rémy" - TEMPORAIREMENT DÉSACTIVÉ
 // import HRChatbotAutonome from './components/HRChatbotAutonome';
 import './index.css';
@@ -186,6 +188,16 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
             element={
               <ProtectedRoute user={user}>
                 <AbsenceManagementCuisine user={user} onLogout={handleLogout} />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* 🔒 SÉCURISÉ : Gestion des stocks cuisine */}
+          <Route 
+            path="/cuisine/stocks" 
+            element={
+              <ProtectedRoute user={user}>
+                <StockCuisineManagement user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             } 
           />
