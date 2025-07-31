@@ -23,6 +23,8 @@ import MainHeader from './components/MainHeader';
 import CollectesApp from './components/CollectesApp';
 // ✅ NOUVEAU : Import de la modération des collectes
 import ModerationCollectes from './components/ModerationCollectes';
+// 🤖 PRODUCTION : Chatbot RH Autonome "Rémy"
+import HRChatbotAutonome from './components/HRChatbotAutonome';
 import './index.css';
 
 // Composant pour protéger les routes avec authentification obligatoire
@@ -224,6 +226,10 @@ const AppContent = ({ user, handleLogin, handleLogout }) => {
             element={<Navigate to="/login" replace />}
           />
         </Routes>
+        
+        {/* 🤖 RÉMY : Assistant RH Autonome - Affiché sur toutes les pages sauf login et modes TV */}
+        {/* TEMPORAIREMENT CACHÉ - En attente d'optimisations */}
+        {/* {user && !isTVMode && !isCollectesApp && <HRChatbotAutonome />} */}
       </div>
     </>
   );
