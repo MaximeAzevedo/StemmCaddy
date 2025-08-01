@@ -39,9 +39,24 @@ export const supabaseStockCuisine = {
    */
   async createAliment(alimentData) {
     try {
+      // Vérifier si l'aliment existe déjà (SEULEMENT parmi les actifs)
+      const { data: existing } = await supabase
+        .from('stock_cuisine')
+        .select('nom')
+        .eq('nom', alimentData.nom.trim())
+        .eq('actif', true)
+        .single();
+
+      if (existing) {
+        throw new Error(`L'aliment "${alimentData.nom}" existe déjà`);
+      }
+
       const { data, error } = await supabase
         .from('stock_cuisine')
-        .insert([alimentData])
+        .insert([{
+          ...alimentData,
+          actif: true // S'assurer que l'aliment est actif
+        }])
         .select()
         .single();
 
@@ -255,6 +270,10 @@ export const supabaseStockCuisine = {
       const { data, error } = await query.order('date_envoi').order('site_nom');
 
       if (error) throw error;
+      
+      // Les couleurs et emojis sont maintenant calculés directement dans la vue
+      // Plus besoin de mapping côté frontend
+      
       return { data: data || [], error: null };
     } catch (error) {
       console.error('❌ Erreur récupération planning:', error);

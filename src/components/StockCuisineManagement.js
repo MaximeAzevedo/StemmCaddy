@@ -7,16 +7,15 @@ import {
   Send,
   Calendar,
   Package,
-  Settings,
   CheckCircle,
   X,
-  Edit3,
   Trash2,
-  AlertTriangle,
-  Search
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { format, addDays } from 'date-fns';
+import { format, addDays, startOfWeek, endOfWeek, addWeeks, subWeeks } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabaseStockCuisine } from '../lib/supabase-stock-cuisine';
 
@@ -32,8 +31,6 @@ const StockCuisineManagement = ({ user, onLogout }) => {
   
   // États pour les modals
   const [showAddAliment, setShowAddAliment] = useState(false);
-  const [showAddSite, setShowAddSite] = useState(false);
-  const [editingAliment, setEditingAliment] = useState(null);
   
   // États pour l'envoi direct
   const [envoiData, setEnvoiData] = useState({});
@@ -45,10 +42,22 @@ const StockCuisineManagement = ({ user, onLogout }) => {
   const [showZeroStock, setShowZeroStock] = useState(true);
   const [editingStockId, setEditingStockId] = useState(null);
   const [newStockValue, setNewStockValue] = useState('');
+  
+  // État pour le formulaire d'ajout d'aliment
+  const [formAliment, setFormAliment] = useState({
+    nom: '',
+    categorie: '',
+    unite: 'kg',
+    stockInitial: '',
+    zoneStockage: 'congelateur'
+  });
+  
+  // État pour la navigation semaine
+  const [semaineActuelle, setSemaineActuelle] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   // Configuration des zones de stockage
   const zonesStockage = supabaseStockCuisine.getZonesStockage();
-  const statutsEnvoi = supabaseStockCuisine.getStatutsEnvoi();
+  // const statutsEnvoi = supabaseStockCuisine.getStatutsEnvoi(); // Simplifié - plus de statuts
 
   // ==================== CHARGEMENT DES DONNÉES ====================
 
@@ -87,23 +96,9 @@ const StockCuisineManagement = ({ user, onLogout }) => {
 
   // ==================== GESTION DES STOCKS ====================
 
-  const handleAjusterStock = async (alimentId, nouvelleQuantite) => {
-    try {
-      const result = await supabaseStockCuisine.ajusterStock(alimentId, nouvelleQuantite);
-      
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
+  // Fonction handleAjusterStock supprimée - remplacée par saisie directe
 
-      toast.success('Stock mis à jour');
-      loadData();
-    } catch (error) {
-      toast.error('Erreur ajustement stock');
-    }
-  };
-
-    const handleSupprimerAliment = async (alimentId) => {
+  const handleSupprimerAliment = async (alimentId) => {
     const aliment = aliments.find(a => a.id === alimentId);
     
     if (!window.confirm(`Supprimer "${aliment?.nom}" ? Cette action est irréversible.`)) return;
@@ -130,16 +125,17 @@ const StockCuisineManagement = ({ user, onLogout }) => {
     setNewStockValue(currentStock.toString());
   };
 
-  const handleSaveStock = async (alimentId) => {
-    const newValue = parseFloat(newStockValue);
+  const handleSaveStock = async (alimentId, newValue = null) => {
+    // Si newValue n'est pas fourni, utiliser newStockValue du state (pour l'édition inline)
+    const stockValue = newValue !== null ? newValue : parseFloat(newStockValue);
     
-    if (isNaN(newValue) || newValue < 0) {
+    if (isNaN(stockValue) || stockValue < 0) {
       toast.error('Veuillez saisir une quantité valide');
       return;
     }
 
     try {
-      const result = await supabaseStockCuisine.ajusterStock(alimentId, newValue, 'Ajustement manuel');
+      const result = await supabaseStockCuisine.ajusterStock(alimentId, stockValue, 'Ajustement manuel');
       
       if (result.error) {
         toast.error(result.error);
@@ -182,8 +178,77 @@ const StockCuisineManagement = ({ user, onLogout }) => {
     return acc;
   }, {});
 
-  // Obtenir les catégories disponibles
-  const categories = [...new Set(aliments.map(a => a.categorie))].sort();
+  // Ordre prioritaire des catégories (Viande en premier)
+  const ordreCategories = ['Viande', 'Plat', 'Sauce', 'Légume'];
+  
+  // Obtenir les catégories disponibles dans l'ordre prioritaire
+  const categories = [...new Set(aliments.map(a => a.categorie))]
+    .sort((a, b) => {
+      const indexA = ordreCategories.indexOf(a);
+      const indexB = ordreCategories.indexOf(b);
+      // Si catégorie non trouvée dans ordre prioritaire, mettre à la fin
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+
+  // ==================== GESTION AJOUT ALIMENT ====================
+
+  const handleAjouterAliment = async (e) => {
+    e.preventDefault();
+    
+    if (!formAliment.nom.trim()) {
+      toast.error('Veuillez saisir un nom d\'aliment');
+      return;
+    }
+    
+    if (!formAliment.categorie) {
+      toast.error('Veuillez sélectionner une catégorie');
+      return;
+    }
+    
+    const stockInitial = parseFloat(formAliment.stockInitial);
+    if (isNaN(stockInitial) || stockInitial < 0) {
+      toast.error('Veuillez saisir un stock initial valide');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const result = await supabaseStockCuisine.createAliment({
+        nom: formAliment.nom.trim(),
+        categorie: formAliment.categorie,
+        unite: formAliment.unite,
+        stock_actuel: stockInitial,
+        zone_stockage: formAliment.zoneStockage
+      });
+      
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success(`"${formAliment.nom}" ajouté avec succès`);
+      
+      // Réinitialiser le formulaire
+      setFormAliment({
+        nom: '',
+        categorie: '',
+        unite: 'kg',
+        stockInitial: '',
+        zoneStockage: 'congelateur'
+      });
+      
+      setShowAddAliment(false);
+      loadData(); // Recharger les données
+    } catch (error) {
+      console.error('Erreur ajout aliment:', error);
+      toast.error('Erreur technique lors de l\'ajout');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ==================== ENVOI DIRECT ====================
 
@@ -242,21 +307,7 @@ const StockCuisineManagement = ({ user, onLogout }) => {
 
   // ==================== GESTION DU PLANNING ====================
 
-  const handleValiderEnvoi = async (envoiId) => {
-    try {
-      const result = await supabaseStockCuisine.validerEnvoi(envoiId);
-      
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-
-      toast.success('Envoi validé');
-      loadData();
-    } catch (error) {
-      toast.error('Erreur validation envoi');
-    }
-  };
+  // Fonction handleValiderEnvoi supprimée - plus de validation manuelle
 
   const handleSupprimerEnvoi = async (envoiId) => {
     if (!window.confirm('Supprimer cet envoi ? Le stock sera restauré.')) return;
@@ -341,7 +392,11 @@ const StockCuisineManagement = ({ user, onLogout }) => {
 
       {/* Contenu par catégorie */}
       <div className="divide-y divide-gray-200">
-        {Object.entries(alimentsParCategorie).map(([categorie, alimentsCategorie]) => (
+        {ordreCategories
+          .filter(categorie => alimentsParCategorie[categorie]?.length > 0)
+          .map(categorie => {
+            const alimentsCategorie = alimentsParCategorie[categorie];
+            return (
           <div key={categorie} className="p-6">
             {/* Header de catégorie */}
             <div className="flex items-center justify-between mb-4">
@@ -366,7 +421,7 @@ const StockCuisineManagement = ({ user, onLogout }) => {
                       Stock Actuel
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Envoi Direct
+                      Envoi Direct (Qté, Site, Zone, Date)
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -435,7 +490,7 @@ const StockCuisineManagement = ({ user, onLogout }) => {
 
                       {/* Envoi direct amélioré */}
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <input
                             type="number"
                             placeholder="Qté"
@@ -467,6 +522,14 @@ const StockCuisineManagement = ({ user, onLogout }) => {
                             <option value="frigo">🔴 Frigo</option>
                             <option value="ambiant">⚫ Ambiant</option>
                           </select>
+                          <input
+                            type="date"
+                            value={envoiData[aliment.id]?.dateEnvoi || format(addDays(new Date(), 1), 'yyyy-MM-dd')}
+                            onChange={(e) => updateEnvoiData(aliment.id, 'dateEnvoi', e.target.value)}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm"
+                            disabled={aliment.stock_actuel === 0}
+                            min={format(new Date(), 'yyyy-MM-dd')}
+                          />
                           <button
                             onClick={() => handleEnvoyerStock(aliment.id)}
                             disabled={sending[aliment.id] || !envoiData[aliment.id]?.quantite || !envoiData[aliment.id]?.siteId || aliment.stock_actuel === 0}
@@ -482,13 +545,6 @@ const StockCuisineManagement = ({ user, onLogout }) => {
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => setEditingAliment(aliment)}
-                            className="p-1 text-gray-600 hover:text-gray-900"
-                            title="Modifier"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          <button
                             onClick={() => handleSupprimerAliment(aliment.id)}
                             className="p-1 text-red-600 hover:text-red-900"
                             title="Supprimer"
@@ -503,7 +559,8 @@ const StockCuisineManagement = ({ user, onLogout }) => {
               </table>
             </div>
           </div>
-        ))}
+        );
+        })}
         
         {/* Message si aucun résultat */}
         {Object.keys(alimentsParCategorie).length === 0 && (
@@ -527,101 +584,152 @@ const StockCuisineManagement = ({ user, onLogout }) => {
 
   // ==================== RENDU PLANNING ====================
 
-  const renderPlanning = () => {
-    // Grouper les envois par date puis par site
-    const planningGroupe = planning.reduce((acc, envoi) => {
-      const date = envoi.date_envoi;
-      if (!acc[date]) acc[date] = {};
-      if (!acc[date][envoi.site_nom]) acc[date][envoi.site_nom] = [];
-      acc[date][envoi.site_nom].push(envoi);
-      return acc;
-    }, {});
+  // ==================== NAVIGATION SEMAINES ====================
+  
+  const naviguerSemaine = (direction) => {
+    setSemaineActuelle(prev => 
+      direction === 'precedente' 
+        ? subWeeks(prev, 1) 
+        : addWeeks(prev, 1)
+    );
+  };
 
-    const dates = Object.keys(planningGroupe).sort();
+  const renderPlanning = () => {
+    // Calculer les dates de la semaine courante (lundi à vendredi seulement)
+    const debutSemaine = startOfWeek(semaineActuelle, { weekStartsOn: 1 });
+    const finSemaine = endOfWeek(semaineActuelle, { weekStartsOn: 1 });
+    
+    // Générer les dates de la semaine de travail (lundi à vendredi)
+    const datesSemaine = [];
+    for (let i = 0; i < 5; i++) { // 0-4 = Lun-Ven
+      datesSemaine.push(format(addDays(debutSemaine, i), 'yyyy-MM-dd'));
+    }
+    
+    // Filtrer les envois de la semaine courante
+    const planningGroupe = planning
+      .filter(envoi => {
+        const dateEnvoi = envoi.date_envoi;
+        return dateEnvoi >= format(debutSemaine, 'yyyy-MM-dd') && 
+               dateEnvoi <= format(finSemaine, 'yyyy-MM-dd');
+      })
+      .reduce((acc, envoi) => {
+        const date = envoi.date_envoi;
+        if (!acc[date]) acc[date] = {};
+        if (!acc[date][envoi.site_nom]) acc[date][envoi.site_nom] = [];
+        acc[date][envoi.site_nom].push(envoi);
+        return acc;
+      }, {});
+
     const sitesUniques = [...new Set(planning.map(p => p.site_nom))];
 
     return (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* Header */}
+        {/* Header avec navigation */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h3 className="text-lg font-medium text-gray-900">Planning Distribution</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900">Planning Distribution</h3>
+            
+            {/* Navigation semaines */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => naviguerSemaine('precedente')}
+                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft size={16} />
+                Semaine précédente
+              </button>
+              
+              <div className="text-center">
+                <div className="font-medium text-gray-900">
+                  {format(startOfWeek(semaineActuelle, { weekStartsOn: 1 }), 'dd/MM', { locale: fr })} - {format(endOfWeek(semaineActuelle, { weekStartsOn: 1 }), 'dd/MM/yyyy', { locale: fr })}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Semaine {format(semaineActuelle, 'w', { locale: fr })}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => naviguerSemaine('suivante')}
+                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Semaine suivante
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Tableau style Excel */}
+        {/* Tableau style amélioré */}
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="w-full border-collapse bg-white">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="border border-gray-200 px-4 py-3 text-left font-medium text-gray-900">
-                  Sites
+              <tr className="bg-gradient-to-r from-blue-50 to-indigo-50">
+                <th className="border border-gray-300 px-6 py-4 text-left font-semibold text-gray-800 bg-white shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Package size={16} className="text-blue-600" />
+                    Sites
+                  </div>
                 </th>
-                {dates.map(date => (
-                  <th key={date} className="border border-gray-200 px-4 py-3 text-center font-medium text-gray-900 min-w-[200px]">
-                    {format(new Date(date), 'EEE dd/MM', { locale: fr })}
+                {datesSemaine.map(date => (
+                  <th key={date} className="border border-gray-300 px-4 py-4 text-center font-semibold text-gray-800 min-w-[220px] bg-gradient-to-b from-gray-50 to-white">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-gray-900">
+                        {format(new Date(date), 'EEEE', { locale: fr })}
+                      </span>
+                      <span className="text-xs text-gray-600 mt-1">
+                        {format(new Date(date), 'dd/MM', { locale: fr })}
+                      </span>
+                    </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sitesUniques.map(site => (
-                <tr key={site}>
-                  <td className="border border-gray-200 px-4 py-3 font-medium text-gray-900 bg-gray-50">
-                    {site}
+              {sitesUniques.map((site, index) => (
+                <tr key={site} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                  <td className="border border-gray-300 px-6 py-4 font-semibold text-gray-900 bg-gradient-to-r from-gray-100 to-gray-50 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      {site}
+                    </div>
                   </td>
-                  {dates.map(date => (
-                    <td key={`${site}-${date}`} className="border border-gray-200 px-2 py-2 align-top">
-                      <div className="space-y-1">
+                  {datesSemaine.map(date => (
+                    <td key={`${site}-${date}`} className="border border-gray-300 px-3 py-3 align-top">
+                      <div className="space-y-2">
                         {(planningGroupe[date]?.[site] || []).map(envoi => (
                           <div
                             key={envoi.id}
-                            className="flex items-center justify-between p-2 rounded border-l-4 text-sm"
+                            className="flex items-center justify-between p-3 rounded-lg border-l-4 text-sm shadow-sm hover:shadow-md transition-shadow"
                             style={{ 
                               borderLeftColor: envoi.couleur_affichage,
-                              backgroundColor: envoi.couleur_affichage + '10'
+                              backgroundColor: envoi.couleur_affichage + '15'
                             }}
                           >
                             <div className="flex-1">
-                              <div className="font-medium">
-                                {envoi.emoji_zone} {envoi.quantite}{envoi.unite} {envoi.aliment_nom}
+                              <div className="font-semibold text-gray-800 flex items-center gap-2">
+                                <span className="text-lg">{envoi.emoji_zone}</span>
+                                <span>{envoi.quantite}{envoi.unite}</span>
+                                <span className="text-gray-700">{envoi.aliment_nom}</span>
                               </div>
-                              {envoi.notes && (
-                                <div className="text-xs text-gray-500 mt-1">{envoi.notes}</div>
-                              )}
                             </div>
                             <div className="flex items-center gap-1 ml-2">
-                              {/* Statut */}
-                              <span
-                                className="px-2 py-1 text-xs rounded-full"
-                                style={{
-                                  backgroundColor: statutsEnvoi[envoi.statut]?.couleur + '20',
-                                  color: statutsEnvoi[envoi.statut]?.couleur
-                                }}
+                              {/* Bouton supprimer stylé */}
+                              <button
+                                onClick={() => handleSupprimerEnvoi(envoi.id)}
+                                className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-colors"
+                                title="Supprimer"
                               >
-                                {statutsEnvoi[envoi.statut]?.icon}
-                              </span>
-                              
-                              {/* Actions */}
-                              {envoi.statut === 'planifie' && (
-                                <>
-                                  <button
-                                    onClick={() => handleValiderEnvoi(envoi.id)}
-                                    className="p-1 text-green-600 hover:text-green-800"
-                                    title="Valider"
-                                  >
-                                    <CheckCircle size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleSupprimerEnvoi(envoi.id)}
-                                    className="p-1 text-red-600 hover:text-red-800"
-                                    title="Supprimer"
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                </>
-                              )}
+                                <X size={14} />
+                              </button>
                             </div>
                           </div>
                         ))}
+                        {/* Message si aucun envoi */}
+                        {(planningGroupe[date]?.[site] || []).length === 0 && (
+                          <div className="text-center py-4 text-gray-400 text-xs">
+                            Aucun envoi
+                          </div>
+                        )}
                       </div>
                     </td>
                   ))}
@@ -631,27 +739,16 @@ const StockCuisineManagement = ({ user, onLogout }) => {
           </table>
         </div>
 
-        {/* Légende */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-6 text-sm">
-            <div className="flex items-center gap-4">
-              <span className="font-medium text-gray-900">Zones:</span>
-              {Object.entries(zonesStockage).map(([key, zone]) => (
-                <div key={key} className="flex items-center gap-1">
-                  <span>{zone.emoji}</span>
-                  <span className="text-gray-600">{zone.nom}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="font-medium text-gray-900">Statuts:</span>
-              {Object.entries(statutsEnvoi).map(([key, statut]) => (
-                <div key={key} className="flex items-center gap-1">
-                  <span>{statut.icon}</span>
-                  <span className="text-gray-600">{statut.nom}</span>
-                </div>
-              ))}
-            </div>
+        {/* Légende améliorée */}
+        <div className="px-6 py-4 border-t border-gray-300 bg-gradient-to-r from-gray-50 to-blue-50">
+          <div className="flex items-center justify-center gap-8 text-sm">
+            <span className="font-semibold text-gray-800">Zones de stockage :</span>
+            {Object.entries(zonesStockage).map(([key, zone]) => (
+              <div key={key} className="flex items-center gap-2 px-3 py-1 bg-white rounded-full shadow-sm border">
+                <span className="text-lg">{zone.emoji}</span>
+                <span className="font-medium text-gray-700">{zone.nom}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -729,13 +826,145 @@ const StockCuisineManagement = ({ user, onLogout }) => {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === 'stocks' && renderTableauStocks()}
-            {activeTab === 'planning' && renderPlanning()}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
-  );
+                  {activeTab === 'stocks' && renderTableauStocks()}
+      {activeTab === 'planning' && renderPlanning()}
+    </motion.div>
+  </AnimatePresence>
+</div>
+
+{/* ==================== MODAL AJOUT ALIMENT ==================== */}
+<AnimatePresence>
+  {showAddAliment && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={() => setShowAddAliment(false)}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md"
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Nouvel Aliment</h3>
+        </div>
+
+        {/* Formulaire */}
+        <form onSubmit={handleAjouterAliment} className="p-6 space-y-4">
+          {/* Nom */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nom de l'aliment *
+            </label>
+            <input
+              type="text"
+              value={formAliment.nom}
+              onChange={(e) => setFormAliment(prev => ({ ...prev, nom: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Ex: Bœuf 1ère qualité"
+              required
+            />
+          </div>
+
+          {/* Catégorie */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Catégorie *
+            </label>
+            <select
+              value={formAliment.categorie}
+              onChange={(e) => setFormAliment(prev => ({ ...prev, categorie: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Sélectionner...</option>
+              {ordreCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Unité et Stock initial */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unité *
+              </label>
+              <select
+                value={formAliment.unite}
+                onChange={(e) => setFormAliment(prev => ({ ...prev, unite: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="kg">kg</option>
+                <option value="litres">litres</option>
+                <option value="caisses">caisses</option>
+                <option value="pièces">pièces</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Stock initial *
+              </label>
+              <input
+                type="number"
+                value={formAliment.stockInitial}
+                onChange={(e) => setFormAliment(prev => ({ ...prev, stockInitial: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="0"
+                min="0"
+                step="0.1"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Zone de stockage */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Zone de stockage *
+            </label>
+            <select
+              value={formAliment.zoneStockage}
+              onChange={(e) => setFormAliment(prev => ({ ...prev, zoneStockage: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="congelateur">🔵 Congélateur</option>
+              <option value="frigo">🔴 Frigo</option>
+              <option value="ambiant">⚫ Ambiant</option>
+            </select>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowAddAliment(false)}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Ajout...' : 'Ajouter'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+</div>
+);
 };
 
 export default StockCuisineManagement; 
